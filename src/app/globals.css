@@ -97,3 +97,10 @@ body {
 .advisor-md th { @apply border-b border-border px-2 py-1 text-left font-medium text-muted; }
 .advisor-md td { @apply border-b border-border/60 px-2 py-1; }
 .advisor-md strong { @apply font-semibold; }
+
+/* Print only the calculation detail when printing from the drawer / stock page. */
+@media print {
+  body * { visibility: hidden; }
+  .calc-detail, .calc-detail * { visibility: visible; }
+  .calc-detail { position: absolute; inset: 0 auto auto 0; width: 100%; }
+}

@@ -9,6 +9,8 @@ import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuat
 import { NumField, SelectField, Toggle } from "./fields";
 import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
 import type { HistoryAssumptions } from "@/lib/financials";
+import { explainValuation, type Explanation } from "@/lib/valuation-explain";
+import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
@@ -123,14 +125,18 @@ export function ValuationEditor({
     () =>
       METHODS.map((m) => {
         try {
-          return { method: m.value, label: m.label, result: evaluate(input(m.value)).value };
+          const ex = explainValuation(input(m.value));
+          return { method: m.value, label: m.label, result: evaluate(input(m.value)).value, explanation: ex };
         } catch {
-          return { method: m.value, label: m.label, result: null };
+          return { method: m.value, label: m.label, result: null, explanation: null };
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dcfA, ddm, ri, mult],
   );
+
+  const [drawer, setDrawer] = useState<Explanation | null>(null);
+  const activeExplanation = allResults.find((r) => r.method === method)?.explanation ?? null;
 
   const setD = (k: keyof DcfAssumptions) => (v: number | null) => setDcfA((a) => ({ ...a, [k]: v ?? 0 }));
   const setShared = (k: "riskFree" | "beta" | "equityRiskPremium" | "extraPremium" | "currentPrice", v: number) => {
@@ -179,8 +185,8 @@ export function ValuationEditor({
       const r = await saveValuationAction({ id, symbol, title, note, valuation: input(method) });
       if (!r.ok) return setMsg({ ok: false, text: r.error });
       setMsg({ ok: true, text: "บันทึกแล้ว" });
-      if (!id) router.push(`/valuation/${r.id}`);
-      else router.refresh();
+      // Show the new valuation alongside the stock's other valuations.
+      router.push(`/valuation/stock/${encodeURIComponent(symbol)}`);
     });
   }
 
@@ -355,6 +361,14 @@ export function ValuationEditor({
                   <div className="text-xs text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
                 )}
                 <Details method={method} details={result.details} />
+                {activeExplanation && (
+                  <details className="mt-4">
+                    <summary className="cursor-pointer text-sm font-medium text-accent">วิธีคำนวณโดยละเอียด ›</summary>
+                    <div className="mt-3">
+                      <CalculationDetail e={activeExplanation} compact />
+                    </div>
+                  </details>
+                )}
               </>
             ) : (
               <p className="text-sm text-neg">คำนวณไม่ได้ — ตรวจสอบว่าอัตราคิดลด &gt; growth และข้อมูลครบ</p>
@@ -363,13 +377,14 @@ export function ValuationEditor({
 
           <section className="card">
             <h2 className="mb-3 font-semibold">เทียบทุกวิธี</h2>
-            <FootballField rows={allResults} price={dcfA.currentPrice} active={method} />
-            <p className="mt-2 text-xs text-muted">แต่ละวิธีใช้สมมติฐานในแท็บของตัวเอง — สลับวิธีด้านบนเพื่อแก้ไข</p>
+            <FootballField rows={allResults} price={dcfA.currentPrice} active={method} onOpen={(r) => r.explanation && setDrawer(r.explanation)} />
+            <p className="mt-2 text-xs text-muted">กดที่แต่ละวิธีเพื่อดูสมมติฐานและวิธีคำนวณ · แต่ละวิธีใช้สมมติฐานในแท็บของตัวเอง — สลับวิธีด้านบนเพื่อแก้ไข</p>
           </section>
         </div>
       </div>
 
       {(method === "dcf_fcff" || method === "dcf_fcfe") && <DcfTables a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} />}
+      <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
   );
 }
@@ -439,25 +454,41 @@ function Details({ method, details }: { method: Method; details: Record<string, 
   );
 }
 
-function FootballField({ rows, price, active }: { rows: { method: Method; label: string; result: number | null }[]; price: number; active: Method }) {
+type FieldRow = { method: Method; label: string; result: number | null; explanation: Explanation | null };
+
+function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; price: number; active: Method; onOpen: (r: FieldRow) => void }) {
   const vals = rows.map((r) => r.result).filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
   const max = Math.max(price, ...vals) * 1.1 || 1;
   return (
-    <div className="space-y-2">
-      {rows.map((r) => (
-        <div key={r.method} className="text-xs">
-          <div className="mb-0.5 flex justify-between">
-            <span className={clsx(r.method === active && "font-semibold")}>{r.label}</span>
-            <span className="tabular-nums">{r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "–"}</span>
-          </div>
-          <div className="relative h-2.5 rounded-full bg-border/50">
-            {r.result != null && r.result > 0 && (
-              <div className="h-2.5 rounded-full" style={{ width: `${Math.min(100, (r.result / max) * 100)}%`, background: "var(--series-1)" }} />
-            )}
-            <div className="absolute -top-[3px] h-4 w-0.5 bg-text" style={{ left: `${(price / max) * 100}%` }} title={`ราคา ${price}`} />
-          </div>
-        </div>
-      ))}
+    <div className="space-y-1">
+      {rows.map((r) => {
+        const warn = (r.explanation?.warnings.length ?? 0) > 0;
+        return (
+          <button
+            key={r.method}
+            type="button"
+            onClick={() => onOpen(r)}
+            disabled={!r.explanation}
+            className="block w-full rounded-md px-1.5 py-1 text-left text-xs hover:bg-border/40 disabled:cursor-default"
+            title="ดูวิธีคำนวณ"
+          >
+            <div className="mb-0.5 flex justify-between gap-2">
+              <span className={clsx(r.method === active && "font-semibold")}>
+                {r.label} {warn && <span title={r.explanation!.warnings.join("\n")}>⚠️</span>}
+              </span>
+              <span className="tabular-nums">
+                {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "–"} <span className="text-accent">›</span>
+              </span>
+            </div>
+            <div className="relative h-2.5 rounded-full bg-border/50">
+              {r.result != null && r.result > 0 && (
+                <div className="h-2.5 rounded-full" style={{ width: `${Math.min(100, (r.result / max) * 100)}%`, background: "var(--series-1)" }} />
+              )}
+              <div className="absolute -top-[3px] h-4 w-0.5 bg-text" style={{ left: `${(price / max) * 100}%` }} />
+            </div>
+          </button>
+        );
+      })}
       <div className="text-right text-[11px] text-muted">เส้นตั้ง = ราคาปัจจุบัน {fmtNum(price)}</div>
     </div>
   );
