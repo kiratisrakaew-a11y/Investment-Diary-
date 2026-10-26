@@ -41,6 +41,11 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 | `get_allocation` | สัดส่วนจริง vs เป้า และยอดที่ต้องปรับ |
 | `get_performance_metrics` | TWR, XIRR, σ, MDD, VaR, Sharpe, Sortino, Beta, Jensen's α, Treynor |
 | `get_portfolio_optimization` | Markowitz: min-variance, max-Sharpe, correlation, CML |
+| `value_security` | ประเมินมูลค่า: `dcf_fcff`, `dcf_fcfe`, `ddm`, `residual_income`, `multiples`, `bond` พร้อม sensitivity |
+| `save_valuation`, `list_valuations` | บันทึก / ดู valuation ในแอป |
+| `analyze_bond`, `get_bond_holdings` | ราคา ↔ YTM, duration, convexity / พันธบัตรในพอร์ต |
+| `get_investment_universe` | ผลตอบแทนอดีต, σ, β, ผลตอบแทนตาม CAPM ของแต่ละสินทรัพย์ |
+| `optimize_portfolio` | แนะนำน้ำหนักตาม MPT (max Sharpe, min variance, utility, target return/risk) พร้อมรายการซื้อขาย |
 
 บันทึกที่มาจาก Claude จะติดป้าย **via Claude** ใน timeline
 
@@ -54,9 +59,18 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 5. ตั้ง visibility เป็น **Only me** แล้ว Save
 
 Actions: `addNote`, `searchNotes`, `recordTransaction`, `listTransactions`, `addAsset`, `listAssets`,
-`updatePrice`, `getPortfolioSummary`, `getAllocation`, `getPerformanceMetrics`, `getPortfolioOptimization`
+`updatePrice`, `getPortfolioSummary`, `getAllocation`, `getPerformanceMetrics`, `getPortfolioOptimization`,
+`valueSecurity`, `saveValuation`, `listValuations`, `analyzeBond`, `getBondHoldings`, `optimizePortfolio`
 
-## 3. REST ด้วย curl (ทดสอบ / ใช้กับเครื่องมืออื่น)
+## 3. AI ที่ปรึกษาในแอป (หน้า “AI ที่ปรึกษา”)
+ใช้ Claude ผ่าน Claude API โดยตรง ไม่ต้องตั้ง connector — ใส่ `ANTHROPIC_API_KEY` ใน environment variables แล้วใช้งานได้ทันที
+ที่ปรึกษาจะเรียกเครื่องมือของแอปเอง (พอร์ต, ผลการดำเนินงาน, optimizer, DCF/DDM, bond, ข้อมูลพื้นฐานจาก Yahoo) ก่อนตอบ
+และบันทึกโน้ต / valuation ให้เมื่อคุณสั่ง ตัวอย่างคำถาม:
+- "แนะนำน้ำหนักการลงทุนตาม MPT ถ้าฉันรับความเสี่ยงได้ปานกลาง จำกัดไม่เกิน 35% ต่อตัว"
+- "ประเมินมูลค่า PTT ด้วย DCF แบบ FCFF และ DDM แล้วเทียบกัน พร้อม sensitivity"
+- "ถ้าดอกเบี้ยขึ้น 0.5% พันธบัตรในพอร์ตจะขาดทุนประมาณเท่าไร"
+
+## 4. REST ด้วย curl (ทดสอบ / ใช้กับเครื่องมืออื่น)
 ```bash
 API=https://<your-app>.vercel.app
 KEY=<API_KEY>
