@@ -5,7 +5,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import ExcelJS from "exceljs";
+import { workbookToCsv } from "@/lib/spreadsheet";
 import { and, asc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import {
@@ -37,37 +37,9 @@ export function detectKind(filename: string, mime: string): UploadKind | null {
   return null;
 }
 
-function cellText(v: ExcelJS.CellValue): string {
-  if (v == null) return "";
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  if (typeof v === "string") return v;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "object") {
-    if ("result" in v && v.result != null) return cellText(v.result as ExcelJS.CellValue);
-    if ("richText" in v) return v.richText.map((t) => t.text).join("");
-    if ("text" in v) return String(v.text);
-    if ("error" in v) return "";
-  }
-  return String(v);
-}
-
-const csvEscape = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-
 /** Every worksheet as CSV text, truncated so the request stays reasonable. */
 export async function xlsxToText(bytes: ArrayBuffer): Promise<{ text: string; truncated: boolean }> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(bytes);
-  const parts: string[] = [];
-  wb.eachSheet((ws) => {
-    const rows: string[] = [];
-    ws.eachRow({ includeEmpty: false }, (row) => {
-      const values = (row.values as ExcelJS.CellValue[]).slice(1).map((c) => csvEscape(cellText(c).trim()));
-      while (values.length && values[values.length - 1] === "") values.pop();
-      if (values.length) rows.push(values.join(","));
-    });
-    if (rows.length) parts.push(`### Sheet: ${ws.name}\n${rows.join("\n")}`);
-  });
-  const text = parts.join("\n\n");
+  const text = (await workbookToCsv(bytes)).map((w) => `### Sheet: ${w.name}\n${w.csv}`).join("\n\n");
   return { text: text.slice(0, MAX_SHEET_CHARS), truncated: text.length > MAX_SHEET_CHARS };
 }
 

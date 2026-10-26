@@ -6,6 +6,7 @@ import { AddAssetForm, AddPriceForm } from "@/components/AssetForms";
 import { ActionForm } from "@/components/ActionForm";
 import { syncHistoryAction } from "../actions";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
+import { PriceImport } from "@/components/PriceImport";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { DataQualityPanel } from "@/components/DataQuality";
 import type { Position } from "@/lib/finance/portfolio";
@@ -133,6 +134,14 @@ export default async function HoldingsPage() {
           {assets.length ? <AddPriceForm assets={assets} /> : <Empty>เพิ่มสินทรัพย์ก่อน</Empty>}
         </Section>
       </div>
+
+      <Section title="นำเข้าราคาจากไฟล์ (CSV / Excel)">
+        <PriceImport />
+        <p className="mt-2 text-xs text-muted">
+          รองรับ 3 แบบ: (1) symbol, date, close[, adj close] (2) date แล้วคอลัมน์ละหุ้น เช่น date, PTT, BBL (3) ไฟล์ราคาหุ้นตัวเดียวจาก Yahoo / Investing / SETSMART (ใส่สัญลักษณ์) ·
+          วันที่แบบ 2026-01-05, 05/01/2026 (วัน/เดือน), ปี พ.ศ. หรือวันที่ของ Excel · สูงสุด 50,000 แถว · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ import_prices ได้
+        </p>
+      </Section>
 
       <Section title="ดึงราคาย้อนหลัง (Historical sync)">
         <ActionForm action={syncHistoryAction} className="grid gap-3 sm:grid-cols-6" resetOnSuccess={false} submitLabel="ดึงราคา">

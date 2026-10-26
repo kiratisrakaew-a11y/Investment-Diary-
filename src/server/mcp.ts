@@ -16,7 +16,7 @@ import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/l
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
-import { syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
+import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
@@ -167,6 +167,19 @@ export function createMcpServer() {
       inputSchema: syncHistoricalPricesInput.shape,
     },
     safe(async (x) => syncHistoricalPrices(x)),
+  );
+
+  server.registerTool(
+    "import_prices",
+    {
+      title: "Import many prices",
+      description:
+        "Store many prices at once for assets already in the app: rows [{symbol, date, close, adjClose?}] (≤ 50,000) or csv text " +
+        "(symbol,date,close · or date,SYM1,SYM2,… · or a one-symbol export with `symbol`). Day-first and Buddhist-era dates are understood. " +
+        "Keeps stored prices unless overwriteExisting; dryRun validates only. Unknown symbols are reported, not created.",
+      inputSchema: importPricesInput.shape,
+    },
+    safe(async (x) => importPrices(x)),
   );
 
   server.registerTool(

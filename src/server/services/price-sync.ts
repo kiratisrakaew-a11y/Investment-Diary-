@@ -115,7 +115,7 @@ async function applySeries(deps: SyncDeps, key: string, label: string, history: 
   if (!o.dryRun && (plan.inserts.length || plan.updates.length)) await deps.write(key, plan.inserts, plan.updates);
   const dates = new Set([...existing.keys(), ...plan.inserts.map((r) => r.date)]);
   const warnings = corporateActionWarnings(label, history.splits, history.dividends, held);
-  if (plan.changedButKept) warnings.push(`${label}: ${plan.changedButKept} วันที่ราคาจากผู้ให้ข้อมูลต่างจากที่เก็บไว้ — เก็บของเดิมไว้ (ใช้ overwriteExisting เพื่ออัปเดต)`);
+  if (plan.changedButKept) warnings.push(`${label}: ${plan.changedButKept} วันที่ราคา${base.source === "import" ? "ในไฟล์" : "จากผู้ให้ข้อมูล"}ต่างจากที่เก็บไว้ — เก็บของเดิมไว้ (ใช้ overwriteExisting เพื่ออัปเดต)`);
   if (plan.invalid) warnings.push(`${label}: ข้ามราคา ${plan.invalid} แถวที่ไม่ถูกต้อง (≤ 0 หรือไม่ใช่ตัวเลข)`);
   return {
     symbol: label,
@@ -257,6 +257,118 @@ export async function syncHistoricalPrices(input: SyncHistoricalPricesInput, dep
       unsupported: results.filter((r) => r.status === "unsupported").length,
       inserted: results.reduce((a, r) => a + r.inserted, 0),
       updated: results.reduce((a, r) => a + r.updated, 0),
+    },
+  };
+}
+
+// ------------------------------------------------------------------ bulk import (user-supplied prices)
+
+export const MAX_IMPORT_ROWS = 50_000;
+
+export const importPricesInput = z.object({
+  rows: z
+    .array(z.object({ symbol: z.string().min(1), date: z.string(), close: z.number(), adjClose: z.number().nullable().optional() }))
+    .max(MAX_IMPORT_ROWS)
+    .optional()
+    .describe("Prices to store: [{ symbol, date YYYY-MM-DD, close, adjClose? }]"),
+  csv: z.string().max(5_000_000).optional().describe("Alternative to rows: CSV text (symbol,date,close | date,SYM1,SYM2,… | one-symbol export with `symbol`)"),
+  symbol: z.string().optional().describe("Symbol for a one-symbol CSV export (Date, Open, High, Low, Close, …)"),
+  overwriteExisting: z.boolean().default(false).describe("false = keep stored prices, only add missing dates"),
+  dryRun: z.boolean().default(false).describe("true = validate and report what would change, write nothing"),
+});
+export type ImportPricesInput = z.input<typeof importPricesInput>;
+
+/**
+ * Store many prices supplied by the user (file, pasted table or AI tool) with the same rules as the
+ * provider sync: existing prices are kept unless overwriteExisting, dry run writes nothing, unknown
+ * symbols are reported. Any price source is accepted (manual assets included).
+ */
+export async function importPrices(input: ImportPricesInput, deps: SyncDeps = dbDeps) {
+  const x = importPricesInput.parse(input);
+  const parseErrors: { line: number; reason: string }[] = [];
+  let rows = (x.rows ?? []).map((r) => ({ ...r, symbol: r.symbol.trim().toUpperCase(), adjClose: r.adjClose ?? null }));
+  let format: string | null = x.rows ? "rows" : null;
+  if (x.csv) {
+    const { parsePriceTable } = await import("@/lib/prices/price-import");
+    const p = parsePriceTable(x.csv, { symbol: x.symbol });
+    rows = rows.concat(p.rows);
+    parseErrors.push(...p.errors);
+    format = p.format;
+  }
+  if (rows.length > MAX_IMPORT_ROWS) throw new PriceSyncError("INVALID_INPUT", `มี ${rows.length} แถว เกินสูงสุด ${MAX_IMPORT_ROWS} — แบ่งไฟล์`);
+  const today = deps.today();
+  const bySymbol = new Map<string, PricePoint[]>();
+  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), { date: r.date, close: r.close, adjClose: r.adjClose }]);
+
+  const held = await deps.heldAssetIds();
+  const results: SeriesResult[] = [];
+  for (const [symbol, list] of bySymbol) {
+    const asset = await deps.findAsset(symbol);
+    if (!asset) {
+      results.push({ ...empty(symbol, "unknown_asset", `ไม่พบ ${symbol} ในรายการสินทรัพย์ — เพิ่มสินทรัพย์ก่อนแล้วนำเข้าใหม่`), fetched: list.length });
+      continue;
+    }
+    const warnings: string[] = [];
+    // Last value wins for a date that appears more than once in the input.
+    const byDate = new Map<string, PricePoint>();
+    let dups = 0;
+    let future = 0;
+    let badDate = 0;
+    for (const r of list) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || Number.isNaN(Date.parse(r.date))) {
+        badDate++;
+        continue;
+      }
+      if (r.date > today) {
+        future++;
+        continue;
+      }
+      if (byDate.has(r.date)) dups++;
+      byDate.set(r.date, r);
+    }
+    if (dups) warnings.push(`${symbol}: วันที่ซ้ำในข้อมูล ${dups} แถว — ใช้แถวหลังสุด`);
+    if (future) warnings.push(`${symbol}: ข้าม ${future} แถวที่เป็นวันในอนาคต`);
+    if (badDate) warnings.push(`${symbol}: ข้าม ${badDate} แถวที่วันที่ไม่ใช่รูปแบบ YYYY-MM-DD`);
+    const points = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (!points.length) {
+      results.push({ ...empty(symbol, "no_data", "ไม่มีแถวที่ใช้ได้"), warnings, fetched: list.length });
+      continue;
+    }
+    const range = { from: points[0].date, to: points[points.length - 1].date };
+    const priceType: PriceType = points.some((p) => p.adjClose != null) ? "adjusted_close" : "close";
+    const r = await applySeries(deps, `asset:${asset.id}`, asset.symbol, { rows: points, splits: [], dividends: [] }, { range, priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun }, held.has(asset.id), {
+      source: "import",
+    });
+    r.fetched = list.length;
+    r.warnings.unshift(...warnings);
+    results.push(r);
+  }
+
+  const known = results.filter((r) => r.status === "ok").map((r) => r.symbol);
+  let eligibility: Awaited<ReturnType<SyncDeps["eligibility"]>> | null = null;
+  if (known.length && !x.dryRun) {
+    try {
+      eligibility = await deps.eligibility(known, 365);
+    } catch {
+      eligibility = null;
+    }
+  }
+  return {
+    format,
+    dryRun: x.dryRun,
+    overwriteExisting: x.overwriteExisting,
+    parseErrors: parseErrors.slice(0, 200),
+    parseErrorCount: parseErrors.length,
+    results,
+    eligibility,
+    summary: {
+      rows: rows.length,
+      symbols: bySymbol.size,
+      ok: results.filter((r) => r.status === "ok").length,
+      unknown: results.filter((r) => r.status === "unknown_asset").length,
+      inserted: results.reduce((a, r) => a + r.inserted, 0),
+      updated: results.reduce((a, r) => a + r.updated, 0),
+      skippedExisting: results.reduce((a, r) => a + r.skippedExisting, 0),
     },
   };
 }

@@ -4,7 +4,7 @@ import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/valid
 import { bondSchema, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { financialYearSchema } from "@/lib/financials";
-import { syncHistoricalPricesInput } from "./services/price-sync";
+import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -110,6 +110,15 @@ export function buildOpenApi(origin: string) {
             "Default last 365 days, keeps stored prices (overwriteExisting false). dryRun reports without writing. Unknown symbols are reported, not created — add the asset first.",
           requestBody: body("SyncHistoricalPrices"),
           responses: { "200": ok("Per-asset inserted/updated counts, coverage, corporate-action warnings and optimizer eligibility") },
+        },
+      },
+      "/api/v1/prices/import": {
+        post: {
+          operationId: "importPrices",
+          summary: "Store many prices at once (rows or CSV text) for existing assets",
+          description: "rows [{symbol,date,close,adjClose?}] or csv. Keeps stored prices unless overwriteExisting; dryRun validates only. Unknown symbols are reported.",
+          requestBody: body("ImportPrices"),
+          responses: { "200": ok("Per-symbol inserted/updated/kept counts, parse errors and warnings") },
         },
       },
       "/api/v1/portfolio/summary": {
@@ -218,6 +227,7 @@ export function buildOpenApi(origin: string) {
         PriceInput: schema(priceInput),
         ValuationInput: schema(valuationInput),
         SyncHistoricalPrices: schema(syncHistoricalPricesInput),
+        ImportPrices: schema(importPricesInput),
         MultiStageResidualIncome: schema(multiStageRiToolInput),
         SaveValuation: schema(
           z.object({

@@ -24,6 +24,11 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
   - Unknown symbols are reported, not created. Manual assets are unsupported. SEC fund NAVs are fetched one day per request, so ranges are limited to 400 days or fewer.
   - Splits and dividends in the range are reported as warnings. Holdings are not adjusted for splits (no split transaction type yet).
   - After a sync it reports coverage (observations, largest gap, staleness) and optimizer eligibility from `loadUniverse` (the whole universe, filtered to the requested symbols).
+- Bulk import `importPrices` (MCP `import_prices`, `POST /api/v1/prices/import` with a .csv/.xlsx file or JSON, holdings page) stores user-supplied prices through the same write path (source `import`), for any asset including manual ones.
+  - Formats (`src/lib/prices/price-import.ts`, detected from the header; Thai or English): long `symbol,date,close[,adj close]`; wide `date,SYM1,SYM2,…`; a one-symbol export (Yahoo / Investing / SETSMART) with the symbol given separately.
+  - Dates: ISO, day-first `DD/MM/YYYY`, Buddhist-era years (> 2400 → −543), Excel serials, month names. Thousands separators are accepted.
+  - At most 50,000 rows. Lines that cannot be read are reported with their line number; future dates are skipped; for a date given twice the last row wins (with a warning). Unknown symbols are reported, not created.
+  - Same keep/overwrite and dry-run rules as the sync. The web page always previews (dry run) before saving.
 - The daily updater `updateAllPrices` uses the same functions incrementally (it re-fetches the last 5 days with overwrite).
 
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`

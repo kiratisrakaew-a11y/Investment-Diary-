@@ -13,7 +13,7 @@ import { fetchFundamentals } from "@/lib/prices/yahoo";
 import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
-import { syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
+import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
@@ -62,6 +62,12 @@ function tools() {
         "Backfill daily prices for existing assets over a date range (default 365 days) plus benchmark and USDTHB. Use dryRun first; never creates assets — ask the user to add unknown symbols.",
       inputSchema: syncHistoricalPricesInput,
       run: async (x) => json(await syncHistoricalPrices(x)),
+    }),
+    betaZodTool({
+      name: "import_prices",
+      description: "Store many user-supplied prices at once (rows or CSV text) for existing assets. Use dryRun first and only write when the user asks.",
+      inputSchema: importPricesInput,
+      run: async (x) => json(await importPrices(x)),
     }),
     betaZodTool({
       name: "get_data_quality",

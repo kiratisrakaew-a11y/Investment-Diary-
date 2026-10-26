@@ -125,3 +125,51 @@ describe("syncHistoricalPrices", () => {
     await expect(syncHistoricalPrices({ symbols: Array.from({ length: 51 }, (_, i) => `S${i}`) }, deps)).rejects.toThrow();
   });
 });
+
+describe("importPrices", () => {
+  it("writes new prices per asset, keeps existing ones, reports unknown symbols, accepts manual assets", async () => {
+    const { importPrices } = await import("./price-sync");
+    const { deps, store } = fakeDeps();
+    const r = await importPrices(
+      {
+        rows: [
+          { symbol: "BBL", date: "2026-01-05", close: 999, adjClose: null }, // already stored (150) → kept
+          { symbol: "BBL", date: "2026-01-06", close: 151, adjClose: null },
+          { symbol: "LB29DA", date: "2026-01-06", close: 1007.5, adjClose: null },
+          { symbol: "KBANK", date: "2026-01-06", close: 140, adjClose: null },
+        ],
+      },
+      deps,
+    );
+    const by = Object.fromEntries(r.results.map((x) => [x.symbol, x]));
+    expect(by.BBL).toMatchObject({ status: "ok", inserted: 1, skippedExisting: 1 });
+    expect(store.get("asset:1")!.get("2026-01-05")!.close).toBe(150);
+    expect(by.LB29DA).toMatchObject({ status: "ok", inserted: 1 });
+    expect(by.KBANK.status).toBe("unknown_asset");
+    expect(r.summary.inserted).toBe(2);
+  });
+
+  it("dry run writes nothing; duplicate dates in the file are flagged (last one wins); rerun is idempotent", async () => {
+    const { importPrices } = await import("./price-sync");
+    const { deps, store } = fakeDeps();
+    const rows = [
+      { symbol: "AP", date: "2026-01-06", close: 10, adjClose: null },
+      { symbol: "AP", date: "2026-01-06", close: 10.5, adjClose: null },
+    ];
+    const dry = await importPrices({ rows, dryRun: true }, deps);
+    expect(store.get("asset:2")).toBeUndefined();
+    expect(dry.results[0].warnings.some((w) => w.includes("ซ้ำ"))).toBe(true);
+    await importPrices({ rows }, deps);
+    expect(store.get("asset:2")!.get("2026-01-06")!.close).toBe(10.5);
+    const again = await importPrices({ rows }, deps);
+    expect(again.summary.inserted).toBe(0);
+  });
+
+  it("rejects future dates", async () => {
+    const { importPrices } = await import("./price-sync");
+    const { deps } = fakeDeps();
+    const r = await importPrices({ rows: [{ symbol: "AP", date: "2027-01-01", close: 10, adjClose: null }] }, deps);
+    expect(r.results[0].inserted).toBe(0);
+    expect(r.results[0].warnings.some((w) => w.includes("อนาคต"))).toBe(true);
+  });
+});
