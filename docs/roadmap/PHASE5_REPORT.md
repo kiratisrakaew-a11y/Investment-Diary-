@@ -15,7 +15,7 @@
 No database changes. Read-only: the transaction count was unchanged (17).
 
 ## Verification
-- Tests: 280 pass (10 backtest tests, 2 end-to-end workflow tests). tsc, lint and build are clean.
+- Tests: 270 pass (10 backtest tests, 2 end-to-end workflow tests). tsc, lint and build are clean.
 - Local data, 6 assets from 2024-10-29 to 2026-10-26, quarterly:
   - Buy and hold +25.5%; equal weight +25.1% (Sharpe 1.08).
   - Minimum variance and max Sharpe (one-year window, trading from 2025-10-17): +3.2% and +4.3%.

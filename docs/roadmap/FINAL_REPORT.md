@@ -8,7 +8,7 @@
 | 2 SOTP | fb65334 | `method: "sotp"` in value/save valuation, SOTP editor | 0007 (enum value) |
 | 3 Optimization | 493a1ba | Black–Litterman `returnMethod`; one QP engine (projected-gradient solver removed) | — |
 | 4 Rebalancing & risk | 0718057, 235da44 | `rebalance_portfolio`, `stress_test_portfolio`, risk contribution, robust diagnostics, trading-cost settings | 0008 (additive) |
-| 5 Backtesting | this commit | `backtest_portfolio`, `/backtest` page | — |
+| 5 Backtesting | 8bc48a2 | `backtest_portfolio`, `/backtest` page | — |
 
 ## MCP tools
 - Extended: `value_security` / `save_valuation` (SOTP), `optimize_portfolio` (Black–Litterman, robust, risk).
@@ -16,7 +16,7 @@
 - All of them are in the MCP contract test.
 
 ## Release gates (each phase)
-- Unit and financial reference tests: 280 pass.
+- Unit and financial reference tests: 270 pass.
 - End-to-end workflow: `src/lib/e2e-roadmap.test.ts` covers import → BL → optimizer → rebalance → risk/stress → backtest, plus SOTP.
 - TypeScript, lint and `next build` are clean.
 - Migrations 0006–0008 are additive and applied locally. Existing transactions and saved valuations are unchanged; read-only tools were verified not to write transactions.
