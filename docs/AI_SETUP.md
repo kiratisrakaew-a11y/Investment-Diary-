@@ -45,6 +45,7 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 | `save_valuation`, `list_valuations` | บันทึก / ดู valuation ในแอป |
 | `analyze_bond`, `get_bond_holdings` | ราคา ↔ YTM, duration, convexity / พันธบัตรในพอร์ต |
 | `get_investment_universe` | ผลตอบแทนอดีต, σ, β, ผลตอบแทนตาม CAPM ของแต่ละสินทรัพย์ |
+| `get_financial_statements`, `save_financial_statements` | งบการเงินย้อนหลัง + อัตราส่วน / บันทึกงบที่อ่านจากไฟล์ที่คุณแนบในแชต |
 | `optimize_portfolio` | แนะนำน้ำหนักตาม MPT (max Sharpe, min variance, utility, target return/risk) พร้อมรายการซื้อขาย |
 
 บันทึกที่มาจาก Claude จะติดป้าย **via Claude** ใน timeline
@@ -60,7 +61,8 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 
 Actions: `addNote`, `searchNotes`, `recordTransaction`, `listTransactions`, `addAsset`, `listAssets`,
 `updatePrice`, `getPortfolioSummary`, `getAllocation`, `getPerformanceMetrics`, `getPortfolioOptimization`,
-`valueSecurity`, `saveValuation`, `listValuations`, `analyzeBond`, `getBondHoldings`, `optimizePortfolio`
+`valueSecurity`, `saveValuation`, `listValuations`, `analyzeBond`, `getBondHoldings`, `optimizePortfolio`,
+`getFinancialStatements`, `saveFinancialStatements` (แนบไฟล์งบใน ChatGPT แล้วสั่ง “อ่านงบนี้แล้วบันทึกลงแอป”)
 
 ## 3. AI ที่ปรึกษาในแอป (หน้า “AI ที่ปรึกษา”)
 ใช้ Claude ผ่าน Claude API โดยตรง ไม่ต้องตั้ง connector — ใส่ `ANTHROPIC_API_KEY` ใน environment variables แล้วใช้งานได้ทันที
@@ -69,6 +71,11 @@ Actions: `addNote`, `searchNotes`, `recordTransaction`, `listTransactions`, `add
 - "แนะนำน้ำหนักการลงทุนตาม MPT ถ้าฉันรับความเสี่ยงได้ปานกลาง จำกัดไม่เกิน 35% ต่อตัว"
 - "ประเมินมูลค่า PTT ด้วย DCF แบบ FCFF และ DDM แล้วเทียบกัน พร้อม sensitivity"
 - "ถ้าดอกเบี้ยขึ้น 0.5% พันธบัตรในพอร์ตจะขาดทุนประมาณเท่าไร"
+
+### อัปโหลดงบการเงินให้ AI กรอก
+หน้า “ประเมินมูลค่า” → ส่วน “งบการเงินย้อนหลัง” → ลากไฟล์ PDF / .xlsx / .csv มาวาง (หลายไฟล์ได้ เช่นไฟล์ละปี)
+AI จะอ่านงบการเงินรวม แปลงปี พ.ศ. → ค.ศ. และหน่วย (บาท/พันบาท/ล้านบาท) เป็นล้าน แล้วรวมเป็นตาราง 5 ปี ปีที่ซ้ำกันใช้ไฟล์ล่าสุด
+ตรวจ/แก้ตัวเลขในตาราง แล้วกด “เติมสมมติฐานจากงบการเงิน” — AI ที่ปรึกษาก็ใช้งบชุดนี้ได้ผ่านเครื่องมือ `get_financial_statements`
 
 ## 4. REST ด้วย curl (ทดสอบ / ใช้กับเครื่องมืออื่น)
 ```bash

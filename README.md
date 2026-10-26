@@ -18,6 +18,9 @@
   - ตารางกระแสเงินสด, sensitivity (WACC × g), reverse DCF (growth ที่ราคาตลาดสะท้อน), implied exit multiple, คำเตือนเมื่อ TV สูงหรือ r ≤ g
   - **DDM** (Gordon / two-stage / H-model), **Residual income** + justified P/BV, P/E, **Relative multiples** (P/E, P/BV, EV/EBITDA)
   - เทียบผลทุกวิธีแบบ football field, บันทึกหลาย scenario, ดึงข้อมูลพื้นฐานจาก Yahoo ได้
+  - **อัปโหลดงบการเงิน (PDF / Excel .xlsx / CSV)** แยกไฟล์ได้หลายไฟล์ — AI (Claude) อ่านและกรอกงบย้อนหลัง 5 ปีให้
+    (รายได้, EBIT, ค่าเสื่อม, capex, หนี้, เงินสด, จำนวนหุ้น, EPS, DPS ฯลฯ แปลงเป็นหน่วยล้าน), ตารางแก้ไขได้, อัตราส่วนย้อนหลัง,
+    และปุ่ม “เติมสมมติฐานจากงบการเงิน” (CAGR, margin เฉลี่ย, capex %, NWC %, ภาษี, ต้นทุนหนี้) — ไฟล์ไม่ถูกเก็บ, จำกัด 4.5MB ต่อไฟล์
 - **พันธบัตร / หุ้นกู้** — ราคา ↔ YTM, accrued interest, clean/dirty, current yield, Macaulay/modified duration, convexity, DV01, yield to call,
   price–yield curve, ตั๋วเงินคลังแบบส่วนลด และ YTM/duration ของพันธบัตรในพอร์ต
 - **แนะนำน้ำหนักการลงทุน (Modern Portfolio Theory)** — minimum-variance frontier รูป “หัวกระสุน” ทั้งกรณีขายชอร์ตได้ (สูตรปิด) และกรณีมีข้อจำกัด
@@ -65,7 +68,7 @@ npm run dev                   # http://localhost:3000
    | `API_KEY` | คีย์สำหรับ Claude / ChatGPT (`openssl rand -hex 32`) |
    | `CRON_SECRET` | สตริงสุ่ม — Vercel Cron ส่งเป็น Bearer ให้ `/api/cron/prices` |
    | `SEC_API_KEY` | (ไม่บังคับ) subscription key จาก https://api-portal.sec.or.th สำหรับ NAV กองทุน |
-   | `ANTHROPIC_API_KEY` | (สำหรับ AI ที่ปรึกษาในแอป) สร้างที่ https://console.anthropic.com — คิดค่าใช้จ่ายตามการใช้งาน |
+   | `ANTHROPIC_API_KEY` | (สำหรับ AI ที่ปรึกษา และการอ่านงบการเงินจากไฟล์) สร้างที่ https://console.anthropic.com — คิดค่าใช้จ่ายตามการใช้งาน |
    | `ADVISOR_EFFORT` | (ไม่บังคับ) `low` / `medium` (ค่าเริ่มต้น) / `high` — คุณภาพการวิเคราะห์ vs ค่าใช้จ่าย |
 
 4. รัน migration ครั้งแรกจากเครื่องตัวเอง: `DATABASE_URL=<neon url> npm run db:migrate`
@@ -79,6 +82,8 @@ npm run dev                   # http://localhost:3000
 - MPT ใช้ข้อมูลในอดีตซึ่งมี estimation error สูง ใช้ประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน — แนะนำให้ใช้ผลตอบแทนแบบผสม (อดีต + CAPM) และจำกัดน้ำหนักต่อตัว
 - DCF: ทุกช่องตัวเงินต้องใช้หน่วยเดียวกัน (เช่น ล้านบาท และล้านหุ้น); ราคาพันธบัตรในแอปเก็บต่อหน่วย ระบบแปลงเป็นต่อ 100 ของ face value ให้อัตโนมัติ
 - คำนวณพันธบัตรใช้ Actual/Actual (ICMA) และ street convention ซึ่งอาจต่างจากราคาประกาศ ThaiBMA เล็กน้อยในบางกรณี
+- อัปโหลดงบ: Vercel รับไฟล์ได้ไม่เกิน ~4.5MB ต่อครั้ง — รายงานประจำปี/56-1 ฉบับเต็มให้ตัดเฉพาะหน้างบการเงิน (เช่นด้วย “Print → Save as PDF” เลือกหน้า);
+  .xls ให้บันทึกเป็น .xlsx; ตัวเลขที่ AI อ่านต้องตรวจทานก่อนใช้ (PDF ที่เป็นภาพสแกนอ่านได้แต่แม่นยำน้อยกว่า)
 - AI ที่ปรึกษาบน Vercel: คำถามที่ต้องคำนวณหลายขั้นอาจใช้เวลา 30–90 วินาที (route ตั้ง maxDuration 300 วินาที — แผน Hobby อาจถูกจำกัดต่ำกว่า)
 
 ## ข้อจำกัด
