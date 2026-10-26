@@ -19,6 +19,7 @@ import {
   type DcfAssumptions,
 } from "./finance/valuation";
 import { analyticsFromPrice, analyticsFromYield, yieldToCall } from "./finance/bonds";
+import { explainValuation, formatValue } from "./valuation-explain";
 
 const rate = (d: string) => z.number().min(-1).max(5).describe(`${d} (decimal, 0.05 = 5%)`);
 const money = (d: string) => z.number().describe(d);
@@ -121,8 +122,18 @@ export interface EvaluationSummary {
 const upsideOf = (v: number, p: number) => (p > 0 && Number.isFinite(v) ? v / p - 1 : null);
 const finite = (v: number) => (Number.isFinite(v) ? v : null);
 
-/** Run any valuation method and return a compact, JSON-friendly summary. */
+/** Run any valuation method and return a compact, JSON-friendly summary (with calculation steps for AI tools). */
 export function evaluate(input: ValuationInput): EvaluationSummary {
+  const summary = evaluateCore(input);
+  const e = explainValuation(input);
+  if (e) {
+    summary.details.calculationSteps = e.steps.map((s) => ({ step: s.label, formula: s.formula, substitution: s.substitution, result: formatValue(s.result, s.unit) }));
+    summary.details.sanityWarnings = e.warnings;
+  }
+  return summary;
+}
+
+function evaluateCore(input: ValuationInput): EvaluationSummary {
   switch (input.method) {
     case "dcf_fcff":
     case "dcf_fcfe": {
