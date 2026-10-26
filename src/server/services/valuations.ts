@@ -61,10 +61,64 @@ export async function deleteValuation(id: number) {
   await getDb().delete(schema.valuations).where(eq(schema.valuations.id, id));
 }
 
-/** Latest saved valuation per symbol, for the holdings / dashboard views. */
+type Row = Awaited<ReturnType<typeof listValuations>>[number];
+
+export interface StockValuationGroup {
+  symbol: string;
+  assetId: number | null;
+  count: number;
+  lastDate: string;
+  /** Most recent valuation for each method (the "current view" of the stock). */
+  latestByMethod: Row[];
+  methods: string[];
+  low: number | null;
+  high: number | null;
+  average: number | null;
+  /** Median of the latest valuation per method — robust to one outlier method. */
+  median: number | null;
+  all: Row[];
+}
+
+function median(xs: number[]) {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function summarize(symbol: string, rows: Row[]): StockValuationGroup {
+  const latest = new Map<string, Row>();
+  for (const r of rows) if (!latest.has(r.method)) latest.set(r.method, r); // rows are newest first
+  const latestByMethod = [...latest.values()];
+  const vals = latestByMethod.map((r) => r.intrinsicValue).filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+  return {
+    symbol,
+    assetId: rows.find((r) => r.assetId != null)?.assetId ?? null,
+    count: rows.length,
+    lastDate: rows[0]?.date ?? "",
+    latestByMethod,
+    methods: latestByMethod.map((r) => r.method),
+    low: vals.length ? Math.min(...vals) : null,
+    high: vals.length ? Math.max(...vals) : null,
+    average: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+    median: vals.length ? median(vals) : null,
+    all: rows,
+  };
+}
+
+/** Saved stock valuations grouped by symbol (one entry per company), most recently valued first. */
+export async function listValuationsGrouped(): Promise<StockValuationGroup[]> {
+  const rows = (await listValuations({ limit: 2000 })).filter((r) => r.method !== "bond");
+  const bySymbol = new Map<string, Row[]>();
+  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), r]);
+  return [...bySymbol.entries()].map(([sym, rs]) => summarize(sym, rs)).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+}
+
+export async function valuationsForSymbol(symbol: string): Promise<StockValuationGroup | null> {
+  const rows = (await listValuations({ symbol, limit: 500 })).filter((r) => r.method !== "bond");
+  return rows.length ? summarize(symbol.toUpperCase(), rows) : null;
+}
+
+/** Per-symbol summary (average of the latest valuation per method), for the holdings view. */
 export async function latestValuationBySymbol() {
-  const rows = await listValuations({ limit: 1000 });
-  const map = new Map<string, (typeof rows)[number]>();
-  for (const r of rows) if (r.method !== "bond" && !map.has(r.symbol)) map.set(r.symbol, r);
-  return map;
+  return new Map((await listValuationsGrouped()).map((g) => [g.symbol, g]));
 }

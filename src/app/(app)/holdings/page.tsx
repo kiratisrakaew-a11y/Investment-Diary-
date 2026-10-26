@@ -111,12 +111,12 @@ export default async function HoldingsPage() {
   );
 }
 
-function ValuationCell({ v, price, symbol, cls }: { v?: { id: number; intrinsicValue: number | null }; price: number | null; symbol: string; cls: string }) {
-  if (v?.intrinsicValue != null) {
-    const up = price ? v.intrinsicValue / price - 1 : null;
+function ValuationCell({ v, price, symbol, cls }: { v?: { average: number | null; count: number }; price: number | null; symbol: string; cls: string }) {
+  if (v?.average != null) {
+    const up = price ? v.average / price - 1 : null;
     return (
-      <Link href={`/valuation/${v.id}`} className="hover:underline">
-        {fmtNum(v.intrinsicValue)}
+      <Link href={`/valuation/stock/${symbol}`} className="hover:underline" title={`เฉลี่ยจาก ${v.count} valuation`}>
+        {fmtNum(v.average)}
         <div className={`text-[11px] ${signClass(up)}`}>{up != null ? `${up >= 0 ? "+" : ""}${(up * 100).toFixed(1)}%` : ""}</div>
       </Link>
     );
