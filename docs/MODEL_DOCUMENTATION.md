@@ -145,6 +145,33 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
   - plus the worst historical day and 21-day window of the current weights
   - Sector shocks need a user-given group (no sector data). Preset sizes are illustrative and returned with the assumptions.
 
+### 4e. Walk-forward backtest — `backtest.ts`, `backtest_portfolio`, `/backtest`
+
+- Strategies: buy and hold, equal weight, minimum variance, max Sharpe, Black–Litterman, custom weights.
+- Data:
+  - Stored closes × USDTHB on a common calendar (dates where every chosen asset has a print; no forward fill).
+  - The start is when all chosen assets have prices, or a given date (assets that start later are excluded and listed).
+- At rebalance index t (every round(N/k) observations; k = 12, 4, 2 or 1 per year):
+  - μ and Σ are estimated from the `window` returns that end at price t − 1 — no data from day t or later.
+  - μ is historical, CAPM-β or blend; Σ is sample or Ledoit–Wolf; Black–Litterman is applied on top when chosen.
+  - The weights come from the same `recommend` QP. When no portfolio beats Rf, minimum variance is used (disclosed).
+  - Trades go through `rebalance` (fractional units, or lots) at the close of day t, with the Settings cost model.
+- Between rebalances quantities are fixed; idle cash accrues Rf.
+- Performance: `computeMetrics` on the value path. Capital is funded at the previous close, so first-day costs count.
+  - TWR / CAGR, volatility, Sharpe, Sortino, max drawdown, VaR/ES
+  - β, α, tracking error and IR vs the benchmark prints in the same window
+- Added: turnover (total, per year, per rebalance) and cost attribution (commission, VAT, slippage, tax).
+- Limitations (returned with every result):
+  - Survivorship bias: only assets in the app today.
+  - Closes exclude dividends.
+  - Execution at the close; no dividend tax.
+- Tested:
+  - Buy-and-hold and daily equal-weight reference values.
+  - Rf accrual and cost attribution.
+  - Decisions unchanged when only future prices change.
+  - The first trade after the window; bounds; Black–Litterman with no views equals the market weights.
+  - Reproducibility.
+
 ## 5. Bonds — `src/lib/finance/bonds.ts`
 
 - The schedule is built back from maturity (or from the penultimate date) with an end-of-month rule. An issue date plus first coupon date gives a short or long first period. A date off the coupon cycle is `MALFORMED_SCHEDULE`.

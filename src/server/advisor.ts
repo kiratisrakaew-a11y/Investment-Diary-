@@ -17,6 +17,8 @@ import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPr
 import { bondHoldings } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
+import { backtestInput, backtestPortfolio } from "./services/backtest";
+import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
 import { getSettings, getTargets } from "./services/settings";
@@ -35,7 +37,7 @@ Modern Portfolio Theory (efficient frontier, tangency, two-fund separation, comp
 - ดึงข้อมูลจริงด้วยเครื่องมือก่อนให้คำแนะนำ อย่าเดาตัวเลขพอร์ต ราคา หรือผลตอบแทน
 - การประเมินมูลค่า: ดูงบการเงินย้อนหลังด้วย get_financial_statements ก่อน (ถ้ามี) แล้วตั้งสมมติฐานจากแนวโน้ม 5 ปี ระบุสมมติฐานทุกตัวที่ใช้ (Rf, β, ERP, growth, margin ฯลฯ) และที่มา ถ้าข้อมูลไม่พอให้ถามผู้ใช้ หรือใช้ get_fundamentals แล้วบอกว่ามาจาก Yahoo
   ให้มูลค่าเป็นช่วงด้วย sensitivity และเทียบหลายวิธี อธิบาย margin of safety
-- ปรับพอร์ต: rebalance_portfolio ให้ "ข้อเสนอ" จำนวนหุ้นตาม lot และต้นทุน (ไม่บันทึกรายการ) · stress_test_portfolio ทดสอบสถานการณ์ แจ้งสมมติฐานทุกครั้ง
+- ปรับพอร์ต: rebalance_portfolio ให้ "ข้อเสนอ" จำนวนหุ้นตาม lot และต้นทุน (ไม่บันทึกรายการ) · stress_test_portfolio ทดสอบสถานการณ์ แจ้งสมมติฐานทุกครั้ง · backtest_portfolio ทดสอบกลยุทธ์ย้อนหลัง (walk-forward) แจ้งข้อจำกัด survivorship / ราคาไม่รวมปันผล
 - การจัดพอร์ต: ใช้ optimize_portfolio ระบุ objective, ข้อจำกัดน้ำหนัก และวิธีประมาณผลตอบแทนคาดหวังที่เลือก
   อธิบายข้อจำกัดของ MPT (estimation error, ข้อมูลในอดีต) และเสนอการปรับแบบค่อยเป็นค่อยไป
 - ค่าจากเครื่องมือเป็นทศนิยม (0.05 = 5%) ให้แสดงเป็น % ที่อ่านง่าย
@@ -77,6 +79,12 @@ function tools() {
       description: "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.",
       inputSchema: stressInput,
       run: async (x) => json(await stressTestPortfolio(x)),
+    }),
+    betaZodTool({
+      name: "backtest_portfolio",
+      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom. Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
+      inputSchema: backtestInput,
+      run: async (x) => json(summarizeBacktest(await backtestPortfolio(x))),
     }),
     betaZodTool({
       name: "import_prices",

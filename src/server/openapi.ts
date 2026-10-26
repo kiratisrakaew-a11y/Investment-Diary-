@@ -7,6 +7,7 @@ import { financialYearSchema } from "@/lib/financials";
 import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
 import { rebalanceInput } from "./services/rebalance";
 import { stressInput } from "./services/stress";
+import { backtestInput } from "./services/backtest";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -222,6 +223,14 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Trades, costs, remaining cash, final weights, tracking error, violations") },
         },
       },
+      "/api/v1/portfolio/backtest": {
+        post: {
+          operationId: "backtestPortfolio",
+          summary: "Walk-forward backtest (no look-ahead) with trading costs and existing performance metrics",
+          requestBody: body("BacktestInput"),
+          responses: { "200": ok("Equity curve, drawdown, weights, trades, costs, metrics, limitations") },
+        },
+      },
       "/api/v1/portfolio/stress": {
         post: {
           operationId: "stressTestPortfolio",
@@ -268,6 +277,7 @@ export function buildOpenApi(origin: string) {
         OptimizeInput: schema(optimizeInput),
         RebalanceInput: schema(rebalanceInput),
         StressInput: schema(stressInput),
+        BacktestInput: schema(backtestInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
     },

@@ -228,3 +228,38 @@ export function BulletChart({
     </ResponsiveContainer>
   );
 }
+
+export function DrawdownChart({ data }: { data: { date: string; drawdown: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} tickFormatter={pct} width={44} />
+        <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v) * 100).toFixed(2)}%`, "Drawdown"]} />
+        <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--neg)" fill="var(--neg)" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+const SERIES = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)", "var(--series-6)"];
+
+/** Stacked weights at each rebalance (after trading), cash on top. Colors repeat beyond six series. */
+export function WeightsChart({ data, symbols }: { data: Record<string, number | string>[]; symbols: string[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} stackOffset="expand">
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} tickFormatter={pct} width={44} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(1)}%`, n]} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {symbols.map((s, i) => (
+          <Area key={s} type="stepAfter" dataKey={s} stackId="w" stroke={SERIES[i % SERIES.length]} fill={SERIES[i % SERIES.length]} fillOpacity={0.55} isAnimationActive={false} />
+        ))}
+        <Area type="stepAfter" dataKey="เงินสด" stackId="w" stroke="var(--muted)" fill="var(--muted)" fillOpacity={0.25} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}

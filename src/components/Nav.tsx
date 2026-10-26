@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/valuation", label: "ประเมินมูลค่า" },
   { href: "/bonds", label: "พันธบัตร" },
   { href: "/optimizer", label: "จัดพอร์ต" },
+  { href: "/backtest", label: "Backtest" },
   { href: "/advisor", label: "AI ที่ปรึกษา" },
   { href: "/settings", label: "ตั้งค่า" },
 ];

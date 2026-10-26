@@ -20,6 +20,8 @@ import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPr
 import { bondHoldings } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
+import { backtestInput, backtestPortfolio } from "./services/backtest";
+import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
@@ -194,6 +196,12 @@ export function createMcpServer() {
     "stress_test_portfolio",
     { title: "Stress test", description: "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.", inputSchema: stressInput.shape, annotations: { readOnlyHint: true } },
     safe(async (x) => stressTestPortfolio(x)),
+  );
+
+  server.registerTool(
+    "backtest_portfolio",
+    { title: "Walk-forward backtest", description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom. Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).", inputSchema: backtestInput.shape, annotations: { readOnlyHint: true } },
+    safe(async (x) => summarizeBacktest(await backtestPortfolio(x))),
   );
 
   server.registerTool(
