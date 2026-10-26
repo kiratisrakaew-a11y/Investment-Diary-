@@ -10,11 +10,13 @@ import {
   dcfSensitivity,
   gordonGrowth,
   hModel,
-  impliedGrowth,
+  impliedGrowthDetailed,
   justifiedPBV,
   justifiedPE,
   multiplesValuation,
   residualIncome,
+  scenarioAnalysis,
+  SCENARIO_FIELDS,
   twoStageDdm,
   type DcfAssumptions,
 } from "./finance/valuation";
@@ -23,6 +25,22 @@ import { explainValuation, formatValue } from "./valuation-explain";
 
 const rate = (d: string) => z.number().min(-1).max(5).describe(`${d} (decimal, 0.05 = 5%)`);
 const money = (d: string) => z.number().describe(d);
+
+/** Where the key market inputs came from (shown next to the result; defaults are illustrative). */
+export const inputMetaSchema = z
+  .object({
+    asOf: z.string().optional().describe("Date the market inputs refer to (YYYY-MM-DD)"),
+    rfSource: z.string().optional().describe("Source of the risk-free rate, e.g. ThaiBMA 10Y 2026-10-24"),
+    erpSource: z.string().optional().describe("Source of the equity risk premium, e.g. Damodaran Jan 2026 Thailand"),
+    betaSource: z.string().optional().describe("Source / window of beta, e.g. 2Y weekly vs SET"),
+  })
+  .optional();
+
+const scenarioSchema = z.object({
+  name: z.string().min(1),
+  probability: z.number().min(0).max(1).describe("Probability (decimal); all scenarios must sum to 1"),
+  overrides: z.object(Object.fromEntries(SCENARIO_FIELDS.map((f) => [f, z.number().optional()])) as Record<(typeof SCENARIO_FIELDS)[number], z.ZodOptional<z.ZodNumber>>).default({}),
+});
 
 export const dcfSchema = z.object({
   revenue0: money("Last fiscal-year revenue (e.g. THB million)"),
@@ -47,10 +65,19 @@ export const dcfSchema = z.object({
   extraPremium: rate("Additional country / size / specific premium").default(0),
   costOfDebt: rate("Pre-tax cost of debt"),
   targetDebtWeight: z.number().min(0).max(0.95).nullable().default(null).describe("Target D/(D+E); null = market-value weights"),
-  debtFinancingRatio: rate("FCFE: share of net reinvestment financed by new debt").default(0),
-  terminalMethod: z.enum(["gordon", "exit_multiple"]).default("gordon"),
+  debtFinancingRatio: rate("FCFE: share of net reinvestment financed by new debt (fixed_borrowing_ratio policy)").default(0),
+  debtPolicy: z.enum(["fixed_borrowing_ratio", "explicit_schedule"]).default("fixed_borrowing_ratio").describe("FCFE borrowing policy"),
+  netBorrowingSchedule: z.array(z.number()).max(20).optional().describe("FCFE explicit net borrowing per forecast year (new debt − repayments)"),
+  terminalMethod: z
+    .enum(["gordon", "stable_roic", "exit_multiple"])
+    .default("gordon")
+    .describe("gordon = last cash flow × (1+g)/(r−g); stable_roic = reinvestment g/ROIC (FCFF) or g/ROE (FCFE); exit_multiple"),
+  terminalRoic: rate("Steady-state return on new invested capital (FCFF, stable_roic)").default(0.12),
+  terminalRoe: rate("Steady-state return on equity (FCFE, stable_roic)").default(0.12),
   exitMultiple: z.number().default(8).describe("Terminal EV/EBITDA (FCFF) or P/E (FCFE) when terminalMethod = exit_multiple"),
   midYear: z.boolean().default(false),
+  scenarios: z.array(scenarioSchema).max(5).optional().describe("Bear/base/bull overrides with probabilities summing to 1"),
+  inputMeta: inputMetaSchema,
 });
 
 export const ddmSchema = z.object({
@@ -64,6 +91,7 @@ export const ddmSchema = z.object({
   highGrowth: rate("Growth during the high-growth stage").default(0.05),
   highGrowthYears: z.number().int().min(1).max(30).default(5),
   terminalGrowth: rate("Long-run growth"),
+  inputMeta: inputMetaSchema,
 });
 
 export const residualIncomeSchema = z.object({
@@ -76,6 +104,7 @@ export const residualIncomeSchema = z.object({
   equityRiskPremium: rate("Equity risk premium"),
   extraPremium: rate("Additional premium").default(0),
   terminalGrowth: rate("Long-run growth (often ROE × retention)"),
+  inputMeta: inputMetaSchema,
 });
 
 export const multiplesSchema = z.object({
@@ -88,6 +117,7 @@ export const multiplesSchema = z.object({
   targetPE: z.number().describe("Peer / historical P/E"),
   targetPBV: z.number().describe("Peer / historical P/BV"),
   targetEvEbitda: z.number().describe("Peer / historical EV/EBITDA"),
+  earningsBasis: z.enum(["trailing", "forward"]).optional().describe("Whether EPS / EBITDA and the target multiples are trailing (default) or forward — both sides must use the same basis"),
 });
 
 export const bondSchema = z.object({
@@ -141,8 +171,10 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
       const a = input.assumptions as DcfAssumptions;
       const r = dcf(a, model);
       const s = dcfSensitivity(a, model);
+      const reverse = impliedGrowthDetailed(a, model);
+      const scen = a.scenarios?.length ? scenarioAnalysis(a, model, a.scenarios) : null;
       return {
-        value: finite(r.valuePerShare),
+        value: r.valuePerShare,
         price: a.currentPrice,
         upside: r.upside,
         details: {
@@ -153,17 +185,22 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
           equityValue: r.equityValue,
           terminalValue: r.terminalValue,
           terminalShareOfValue: r.terminalShareOfValue,
+          terminal: r.terminal,
           impliedExitMultiple: r.impliedExitMultiple,
-          impliedRevenueGrowthAtCurrentPrice: impliedGrowth(a, model),
+          impliedRevenueGrowthAtCurrentPrice: reverse.rate,
+          reverseDcf: reverse,
+          scenarios: scen,
           forecast: r.years.map((y) => ({
             year: y.year,
             revenue: y.revenue,
             ebit: y.ebit,
             fcff: y.fcff,
             fcfe: y.fcfe,
+            ...(model === "fcfe" ? { openingDebt: y.openingDebt, netBorrowing: y.netBorrowing, closingDebt: y.closingDebt, interest: y.interest } : {}),
             pv: y.pv,
           })),
           sensitivity: s,
+          errors: r.errors,
           warnings: r.warnings,
         },
       };

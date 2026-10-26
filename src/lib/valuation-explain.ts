@@ -12,8 +12,10 @@ import {
   justifiedPE,
   multiplesValuation,
   residualIncome,
+  scenarioAnalysis,
   twoStageDdm,
   type DcfAssumptions,
+  type InputMeta,
 } from "./finance/valuation";
 import type { ValuationInput } from "./valuation-schemas";
 
@@ -89,7 +91,13 @@ export function formatValue(v: number | string | null, unit: Unit): string {
 
 // ------------------------------------------------------------------ shared pieces
 
-function keSteps(a: { riskFree: number; beta: number; equityRiskPremium: number; extraPremium?: number }) {
+/** Provenance note for a market input; unsourced inputs are labelled as such. */
+function source(src: string | undefined, asOf: string | undefined) {
+  if (!src) return "ไม่ได้ระบุแหล่งที่มา — ค่าเริ่มต้นเป็นตัวอย่าง";
+  return asOf ? `${src} (ณ ${asOf})` : src;
+}
+
+function keSteps(a: { riskFree: number; beta: number; equityRiskPremium: number; extraPremium?: number; inputMeta?: InputMeta }) {
   const ke = costOfEquity(a.riskFree, a.beta, a.equityRiskPremium, a.extraPremium ?? 0);
   const step: Step = {
     label: "ต้นทุนส่วนของผู้ถือหุ้น (CAPM)",
@@ -99,9 +107,9 @@ function keSteps(a: { riskFree: number; beta: number; equityRiskPremium: number;
     unit: "%",
   };
   const assumptions: Assumption[] = [
-    { group: "อัตราคิดลด", label: "Risk-free rate (Rf)", value: a.riskFree, unit: "%" },
-    { group: "อัตราคิดลด", label: "Beta (β)", value: a.beta, unit: "factor" },
-    { group: "อัตราคิดลด", label: "Equity risk premium (ERP)", value: a.equityRiskPremium, unit: "%" },
+    { group: "อัตราคิดลด", label: "Risk-free rate (Rf)", value: a.riskFree, unit: "%", note: source(a.inputMeta?.rfSource, a.inputMeta?.asOf) },
+    { group: "อัตราคิดลด", label: "Beta (β)", value: a.beta, unit: "factor", note: source(a.inputMeta?.betaSource, a.inputMeta?.asOf) },
+    { group: "อัตราคิดลด", label: "Equity risk premium (ERP)", value: a.equityRiskPremium, unit: "%", note: source(a.inputMeta?.erpSource, a.inputMeta?.asOf) },
     { group: "อัตราคิดลด", label: "Premium เพิ่ม (size/country)", value: a.extraPremium ?? 0, unit: "%" },
   ];
   return { ke, step, assumptions };
@@ -129,7 +137,10 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
   const r = dcf(a, model);
   const { step: keStep, assumptions: keAssumptions } = keSteps(a);
   const steps: Step[] = [keStep];
-  const warnings = [...r.warnings];
+  const warnings = [...r.errors.map((e) => `❌ ${e.message}`), ...r.warnings];
+  const isFcfe = model === "fcfe";
+  const explicitDebt = isFcfe && a.debtPolicy === "explicit_schedule";
+  const termRet = isFcfe ? a.terminalRoe : a.terminalRoic;
   const last = r.years[r.years.length - 1];
   const rate = r.discountRate;
 
@@ -155,13 +166,21 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
       value: a.targetDebtWeight ?? "ใช้ market value",
       unit: a.targetDebtWeight != null ? "%" : "text",
     },
-    ...(model === "fcfe" ? [{ group: "โครงสร้างทุน", label: "สัดส่วนกู้เพื่อลงทุนสุทธิ (δ)", value: a.debtFinancingRatio, unit: "%" as Unit }] : []),
+    ...(isFcfe
+      ? explicitDebt
+        ? [{ group: "โครงสร้างทุน", label: "นโยบายการกู้", value: `ตารางกู้สุทธิ: ${(a.netBorrowingSchedule ?? []).map((x) => fmtM(x)).join(", ") || "–"}`, unit: "text" as Unit }]
+        : [{ group: "โครงสร้างทุน", label: "สัดส่วนกู้เพื่อลงทุนสุทธิ (δ)", value: a.debtFinancingRatio, unit: "%" as Unit, note: "กู้สุทธิ = δ × (Capex − D&A + ΔNWC)" }]
+      : []),
     {
       group: "Terminal value",
-      label: a.terminalMethod === "gordon" ? "Terminal growth (g)" : model === "fcff" ? "Exit EV/EBITDA" : "Exit P/E",
-      value: a.terminalMethod === "gordon" ? a.terminalGrowth : a.exitMultiple,
-      unit: a.terminalMethod === "gordon" ? "%" : "x",
+      label: "วิธี",
+      value: a.terminalMethod === "gordon" ? "Gordon (CF ปีสุดท้าย × (1+g))" : a.terminalMethod === "stable_roic" ? `Stable ${isFcfe ? "ROE" : "ROIC"} (reinvestment = g ÷ ${isFcfe ? "ROE" : "ROIC"})` : isFcfe ? "Exit P/E" : "Exit EV/EBITDA",
+      unit: "text",
     },
+    ...(a.terminalMethod === "exit_multiple"
+      ? [{ group: "Terminal value", label: isFcfe ? "Exit P/E" : "Exit EV/EBITDA", value: a.exitMultiple, unit: "x" as Unit }]
+      : [{ group: "Terminal value", label: "Terminal growth (g)", value: a.terminalGrowth, unit: "%" as Unit }]),
+    ...(a.terminalMethod === "stable_roic" ? [{ group: "Terminal value", label: `Terminal ${isFcfe ? "ROE" : "ROIC"}`, value: termRet ?? null, unit: "%" as Unit }] : []),
     { group: "Terminal value", label: "Mid-year convention", value: a.midYear ? "ใช้" : "ไม่ใช้", unit: "text" },
   ];
 
@@ -208,16 +227,10 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
     unit: "money",
   });
   const cfLast = model === "fcff" ? last.fcff : last.fcfe;
-  if (a.terminalMethod === "gordon") {
-    steps.push({
-      label: "Terminal value (ณ สิ้นปีที่ " + a.years + ")",
-      formula: `TV = CFₙ × (1 + g) ÷ (${name} − g)`,
-      substitution: `${fmtM(cfLast)} × (1 + ${fmtP(a.terminalGrowth)}) ÷ (${fmtP(rate)} − ${fmtP(a.terminalGrowth)})`,
-      result: r.terminalValue,
-      unit: "money",
-    });
-    spreadWarning(rate, a.terminalGrowth, name, warnings);
-  } else {
+  const t = r.terminal;
+  const earnName = isFcfe ? "กำไรสุทธิ" : "NOPAT";
+  const retName = isFcfe ? "ROE" : "ROIC";
+  if (a.terminalMethod === "exit_multiple") {
     const base = model === "fcff" ? last.ebit + last.da : last.netIncome;
     steps.push({
       label: "Terminal value (ณ สิ้นปีที่ " + a.years + ")",
@@ -226,11 +239,65 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
       result: r.terminalValue,
       unit: "money",
     });
+  } else {
+    steps.push({
+      label: `${earnName} ปีที่ ${a.years + 1} (normalized)`,
+      formula: `${earnName}ₙ₊₁ = ${earnName}ₙ × (1 + g)`,
+      substitution: `${fmtM(isFcfe ? last.netIncome : last.nopat)} × (1 + ${fmtP(a.terminalGrowth)})`,
+      result: t.earningsNext,
+      unit: "money",
+    });
+    if (a.terminalMethod === "stable_roic") {
+      steps.push({
+        label: "Reinvestment rate ใน steady state",
+        formula: `RR = g ÷ ${retName}`,
+        substitution: `${fmtP(a.terminalGrowth)} ÷ ${fmtP(termRet)}`,
+        result: t.reinvestmentRate,
+        unit: "%",
+      });
+      steps.push({
+        label: `${isFcfe ? "FCFE" : "FCFF"} ปีที่ ${a.years + 1}`,
+        formula: `CFₙ₊₁ = ${earnName}ₙ₊₁ × (1 − RR)`,
+        substitution: `${fmtM(t.earningsNext)} × (1 − ${fmtP(t.reinvestmentRate)})`,
+        result: t.cashFlowNext,
+        unit: "money",
+      });
+    } else {
+      steps.push({
+        label: `${isFcfe ? "FCFE" : "FCFF"} ปีที่ ${a.years + 1}`,
+        formula: "CFₙ₊₁ = CFₙ × (1 + g)",
+        substitution: `${fmtM(cfLast)} × (1 + ${fmtP(a.terminalGrowth)})`,
+        result: t.cashFlowNext,
+        unit: "money",
+      });
+      steps.push({
+        label: `Reinvestment rate และ ${retName} ที่แฝงอยู่ (ตรวจสอบ)`,
+        formula: `RR = 1 − CFₙ₊₁ ÷ ${earnName}ₙ₊₁ ; ${retName} = g ÷ RR`,
+        substitution: `RR ${fmtP(t.reinvestmentRate)} → ${retName} ${fmtP(t.impliedReturnOnCapital)}`,
+        result: t.impliedReturnOnCapital,
+        unit: "%",
+      });
+    }
+    steps.push({
+      label: "Terminal value (ณ สิ้นปีที่ " + a.years + ")",
+      formula: `TV = CFₙ₊₁ ÷ (${name} − g)`,
+      substitution: `${fmtM(t.cashFlowNext)} ÷ (${fmtP(rate)} − ${fmtP(a.terminalGrowth)})`,
+      result: r.terminalValue,
+      unit: "money",
+    });
+    spreadWarning(rate, a.terminalGrowth, name, warnings);
   }
   steps.push({
+    label: `Terminal multiple ที่แฝงอยู่ (${t.multipleLabel})`,
+    formula: model === "fcff" ? "TV ÷ EBITDAₙ" : "TV ÷ กำไรสุทธิₙ",
+    substitution: `${fmtM(r.terminalValue)} ÷ ${fmtM(model === "fcff" ? last.ebit + last.da : last.netIncome)}`,
+    result: t.impliedMultiple,
+    unit: "x",
+  });
+  steps.push({
     label: "มูลค่าปัจจุบันของ Terminal value",
-    formula: `PV(TV) = TV ÷ (1 + ${name})^${a.years}`,
-    substitution: `${fmtM(r.terminalValue)} ÷ (1 + ${fmtP(rate)})^${a.years}`,
+    formula: `PV(TV) = TV ÷ (1 + ${name})^${t.discountYears}${a.midYear && a.terminalMethod !== "exit_multiple" ? " (mid-year: กระแสเงินสดปลายงวดก็เกิดกลางปี)" : ""}`,
+    substitution: `${fmtM(r.terminalValue)} ÷ (1 + ${fmtP(rate)})^${t.discountYears}`,
     result: r.pvTerminalValue,
     unit: "money",
   });
@@ -275,10 +342,22 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
   steps.push({
     label: "สัดส่วน Terminal value ต่อมูลค่ารวม",
     formula: "PV(TV) ÷ (ΣPV + PV(TV))",
-    substitution: `${fmtM(r.pvTerminalValue)} ÷ ${fmtM(r.sumPvCashFlows + r.pvTerminalValue)}`,
+    substitution: `${fmtM(r.pvTerminalValue)} ÷ ${fmtM(r.pvTerminalValue != null ? r.sumPvCashFlows + r.pvTerminalValue : null)}`,
     result: r.terminalShareOfValue,
     unit: "%",
   });
+
+  if (a.scenarios?.length) {
+    const sc = scenarioAnalysis(a, model, a.scenarios);
+    steps.push({
+      label: "มูลค่าคาดหวังจาก scenario",
+      formula: "E[V] = Σ pᵢ × Vᵢ",
+      substitution: sc.rows.map((x) => `${fmtP(x.probability, 0)} × ${fmtM(x.value, 2)} (${x.name})`).join(" + "),
+      result: sc.expectedValue,
+      unit: "perShare",
+    });
+    sc.errors.forEach((e) => warnings.push(`Scenario: ${e}`));
+  }
 
   const cols = r.years.map((y) => `ปี ${y.year}`);
   const row = (label: string, f: (y: (typeof r.years)[number]) => number, unit: Unit, strong = false) => ({
@@ -300,14 +379,20 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
       row("+ D&A", (y) => y.da, "money"),
       row("− Capex", (y) => y.capex, "money"),
       row("− ΔNWC", (y) => y.deltaNwc, "money"),
-      ...(model === "fcfe" ? [row("+ กู้สุทธิ", (y) => y.netBorrowing, "money")] : []),
+      ...(isFcfe
+        ? [
+            row("หนี้ต้นงวด", (y) => y.openingDebt, "money"),
+            row("+ กู้สุทธิ", (y) => y.netBorrowing, "money"),
+            row("หนี้ปลายงวด", (y) => y.closingDebt, "money"),
+          ]
+        : []),
       row(model === "fcff" ? "FCFF" : "FCFE", (y) => (model === "fcff" ? y.fcff : y.fcfe), "money", true),
       row("Discount factor", (y) => y.discountFactor, "factor"),
       row("Present value", (y) => y.pv, "money", true),
     ],
   };
 
-  const value = Number.isFinite(r.valuePerShare) ? r.valuePerShare : null;
+  const value = r.valuePerShare;
   sanity(value, a.currentPrice, warnings);
   return {
     method: model === "fcff" ? "dcf_fcff" : "dcf_fcfe",
@@ -469,6 +554,7 @@ function explainMultiples(a: Mult): Explanation {
     upside: upsideOf(v, a.currentPrice),
     assumptions: [
       { group: "ราคา", label: "ราคาปัจจุบัน", value: a.currentPrice, unit: "perShare" },
+      { group: "ข้อมูลบริษัท", label: "ฐานกำไร", value: a.earningsBasis === "forward" ? "Forward (ประมาณการปีหน้า)" : "Trailing (12 เดือนล่าสุด)", unit: "text", note: "EPS/EBITDA และ multiple อ้างอิงต้องเป็นฐานเดียวกัน" },
       { group: "ข้อมูลบริษัท", label: "EPS", value: a.eps, unit: "perShare" },
       { group: "ข้อมูลบริษัท", label: "Book value ต่อหุ้น", value: a.bookValuePerShare, unit: "perShare" },
       { group: "ข้อมูลบริษัท", label: "EBITDA", value: a.ebitda, unit: "money" },

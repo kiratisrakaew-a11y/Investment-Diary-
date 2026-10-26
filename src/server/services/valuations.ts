@@ -33,6 +33,10 @@ export interface SaveValuationInput {
 export async function saveValuation(input: SaveValuationInput) {
   const parsed = valuationInput.parse(input.valuation);
   const summary = evaluate(parsed);
+  if (summary.value == null) {
+    const errs = (summary.details.errors as { message: string }[] | undefined)?.map((e) => e.message);
+    throw new Error(`บันทึกไม่ได้: คำนวณมูลค่าไม่ได้ — ${errs?.join("; ") || "ตรวจสอบว่าอัตราคิดลด > growth และข้อมูลครบ"}`);
+  }
   const symbol = input.symbol.trim().toUpperCase();
   const asset = await getAssetBySymbol(symbol);
   const values = {

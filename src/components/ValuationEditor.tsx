@@ -3,7 +3,19 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { DEFAULT_DCF, dcf, dcfSensitivity, type DcfAssumptions } from "@/lib/finance/valuation";
+import {
+  DEFAULT_DCF,
+  SENSITIVITY_AXES,
+  dcf,
+  dcfSensitivity,
+  defaultScenarios,
+  scenarioAnalysis,
+  type DcfAssumptions,
+  type DcfScenario,
+  type InputMeta,
+  type ScenarioField,
+  type SensitivityAxis,
+} from "@/lib/finance/valuation";
 import { evaluate, type ValuationInput } from "@/lib/valuation-schemas";
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
@@ -139,6 +151,12 @@ export function ValuationEditor({
   const activeExplanation = allResults.find((r) => r.method === method)?.explanation ?? null;
 
   const setD = (k: keyof DcfAssumptions) => (v: number | null) => setDcfA((a) => ({ ...a, [k]: v ?? 0 }));
+  const setMeta = (k: keyof InputMeta, v: string) => {
+    const patch = <T extends { inputMeta?: InputMeta }>(a: T): T => ({ ...a, inputMeta: { ...a.inputMeta, [k]: v || undefined } });
+    setDcfA(patch);
+    setDdm(patch);
+    setRi(patch);
+  };
   const setShared = (k: "riskFree" | "beta" | "equityRiskPremium" | "extraPremium" | "currentPrice", v: number) => {
     setDcfA((a) => ({ ...a, [k]: v }));
     setDdm((a) => ({ ...a, [k]: v }));
@@ -236,8 +254,15 @@ export function ValuationEditor({
             <NumField label="Risk-free" pct value={dcfA.riskFree} onChange={(v) => setShared("riskFree", v ?? 0)} />
             <NumField label="Beta" value={dcfA.beta} onChange={(v) => setShared("beta", v ?? 0)} />
             <NumField label="Equity risk premium" pct value={dcfA.equityRiskPremium} onChange={(v) => setShared("equityRiskPremium", v ?? 0)} />
-            <NumField label="Premium เพิ่ม (size/country)" pct value={dcfA.extraPremium} onChange={(v) => setShared("extraPremium", v ?? 0)} />
+            <NumField label="Premium เพิ่ม (size/country)" pct value={dcfA.extraPremium} onChange={(v) => setShared("extraPremium", v ?? 0)} hint="อย่าบวก country premium ซ้ำ ถ้า ERP หรือ Rf สะท้อนความเสี่ยงประเทศแล้ว" />
+            <TextField label="ข้อมูล ณ วันที่" type="date" value={dcfA.inputMeta?.asOf} onChange={(v) => setMeta("asOf", v)} />
+            <TextField label="ที่มา Rf" value={dcfA.inputMeta?.rfSource} placeholder="เช่น ThaiBMA 10Y" onChange={(v) => setMeta("rfSource", v)} />
+            <TextField label="ที่มา ERP" value={dcfA.inputMeta?.erpSource} placeholder="เช่น Damodaran ม.ค. 2026" onChange={(v) => setMeta("erpSource", v)} />
+            <TextField label="ที่มา Beta" value={dcfA.inputMeta?.betaSource} placeholder="เช่น 2 ปีรายสัปดาห์ vs SET" onChange={(v) => setMeta("betaSource", v)} />
           </Group>
+          {!(dcfA.inputMeta?.rfSource && dcfA.inputMeta?.erpSource) && method !== "multiples" && (
+            <p className="-mt-2 text-xs text-muted">Rf / ERP ที่ไม่ได้ระบุที่มาถือเป็นค่าตัวอย่าง — ควรใช้อัตราสกุลเงินและอายุเดียวกับกระแสเงินสด (เช่น พันธบัตรไทยระยะยาวสำหรับ DCF เงินบาท) และ ERP แบบคาดการณ์ ไม่ใช่ผลตอบแทนในอดีต</p>
+          )}
 
           {(method === "dcf_fcff" || method === "dcf_fcfe") && (
             <>
@@ -270,28 +295,65 @@ export function ValuationEditor({
                   hint="เว้นว่าง = ใช้ market value (ราคา × หุ้น และหนี้)"
                 />
                 {method === "dcf_fcfe" && (
+                  <SelectField
+                    label="นโยบายการกู้ (FCFE)"
+                    value={dcfA.debtPolicy}
+                    options={[
+                      { value: "fixed_borrowing_ratio", label: "สัดส่วนคงที่ของการลงทุนสุทธิ (δ)" },
+                      { value: "explicit_schedule", label: "ระบุกู้สุทธิรายปี" },
+                    ]}
+                    onChange={(v) => setDcfA((a) => ({ ...a, debtPolicy: v, netBorrowingSchedule: a.netBorrowingSchedule ?? Array(a.years).fill(0) }))}
+                  />
+                )}
+                {method === "dcf_fcfe" && dcfA.debtPolicy !== "explicit_schedule" && (
                   <NumField label="สัดส่วนกู้เพื่อลงทุนสุทธิ (δ)" pct value={dcfA.debtFinancingRatio} onChange={setD("debtFinancingRatio")} />
                 )}
               </Group>
+              {method === "dcf_fcfe" && dcfA.debtPolicy === "explicit_schedule" && (
+                <Group title="กู้สุทธิรายปี (กู้ใหม่ − ชำระคืน)">
+                  {Array.from({ length: dcfA.years }, (_, i) => (
+                    <NumField
+                      key={i}
+                      label={`ปี ${i + 1}`}
+                      value={dcfA.netBorrowingSchedule?.[i] ?? 0}
+                      onChange={(v) =>
+                        setDcfA((a) => {
+                          const sched = Array.from({ length: a.years }, (_, j) => a.netBorrowingSchedule?.[j] ?? 0);
+                          sched[i] = v ?? 0;
+                          return { ...a, netBorrowingSchedule: sched };
+                        })
+                      }
+                    />
+                  ))}
+                </Group>
+              )}
               <Group title="Terminal value">
                 <SelectField
                   label="วิธี"
                   value={dcfA.terminalMethod}
                   options={[
-                    { value: "gordon", label: "Gordon growth" },
+                    { value: "stable_roic", label: method === "dcf_fcff" ? "Stable ROIC (แนะนำ)" : "Stable ROE (แนะนำ)" },
+                    { value: "gordon", label: "Gordon (CF ปีสุดท้าย × (1+g))" },
                     { value: "exit_multiple", label: method === "dcf_fcff" ? "Exit EV/EBITDA" : "Exit P/E" },
                   ]}
                   onChange={(v) => setDcfA((a) => ({ ...a, terminalMethod: v }))}
                 />
-                {dcfA.terminalMethod === "gordon" ? (
+                {dcfA.terminalMethod !== "exit_multiple" ? (
                   <NumField label="Terminal growth (g)" pct value={dcfA.terminalGrowth} onChange={setD("terminalGrowth")} />
                 ) : (
-                  <NumField label="Exit multiple" value={dcfA.exitMultiple} onChange={setD("exitMultiple")} />
+                  <NumField label={method === "dcf_fcff" ? "Exit EV/EBITDA" : "Exit P/E"} value={dcfA.exitMultiple} onChange={setD("exitMultiple")} />
                 )}
+                {dcfA.terminalMethod === "stable_roic" &&
+                  (method === "dcf_fcff" ? (
+                    <NumField label="Terminal ROIC" pct value={dcfA.terminalRoic} onChange={setD("terminalRoic")} hint="Reinvestment rate = g ÷ ROIC" />
+                  ) : (
+                    <NumField label="Terminal ROE" pct value={dcfA.terminalRoe} onChange={setD("terminalRoe")} hint="Equity reinvestment rate = g ÷ ROE" />
+                  ))}
                 <div className="flex items-end pb-2">
                   <Toggle label="Mid-year convention" checked={dcfA.midYear} onChange={(v) => setDcfA((a) => ({ ...a, midYear: v }))} />
                 </div>
               </Group>
+              <p className="text-xs text-muted">DCF แบบ FCFF ไม่เหมาะกับธนาคาร/สถาบันการเงิน (หนี้เป็นวัตถุดิบในการดำเนินงาน) — ใช้ DDM หรือ Residual income แทน</p>
             </>
           )}
 
@@ -330,6 +392,15 @@ export function ValuationEditor({
 
           {method === "multiples" && (
             <Group title="ตัวเลขบริษัท vs multiple อ้างอิง (peer / ค่าเฉลี่ยในอดีต)">
+              <SelectField
+                label="ฐานกำไร"
+                value={mult.earningsBasis ?? "trailing"}
+                options={[
+                  { value: "trailing", label: "Trailing (12 เดือนล่าสุด)" },
+                  { value: "forward", label: "Forward (ปีหน้า)" },
+                ]}
+                onChange={(v) => setMult((a) => ({ ...a, earningsBasis: v }))}
+              />
               <NumField label="EPS" value={mult.eps} onChange={(v) => setMult((a) => ({ ...a, eps: v ?? 0 }))} />
               <NumField label="Book value ต่อหุ้น" value={mult.bookValuePerShare} onChange={(v) => setMult((a) => ({ ...a, bookValuePerShare: v ?? 0 }))} />
               <NumField label="EBITDA" value={mult.ebitda} onChange={(v) => setMult((a) => ({ ...a, ebitda: v ?? 0 }))} />
@@ -371,7 +442,12 @@ export function ValuationEditor({
                 )}
               </>
             ) : (
-              <p className="text-sm text-neg">คำนวณไม่ได้ — ตรวจสอบว่าอัตราคิดลด &gt; growth และข้อมูลครบ</p>
+              <div className="space-y-1 text-sm text-neg">
+                <p>คำนวณไม่ได้</p>
+                {((result?.details.errors as { message: string }[] | undefined) ?? [{ message: "ตรวจสอบว่าอัตราคิดลด > growth และข้อมูลครบ" }]).map((e) => (
+                  <p key={e.message} className="text-xs">• {e.message}</p>
+                ))}
+              </div>
             )}
           </section>
 
@@ -383,7 +459,12 @@ export function ValuationEditor({
         </div>
       </div>
 
-      {(method === "dcf_fcff" || method === "dcf_fcfe") && <DcfTables a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} />}
+      {(method === "dcf_fcff" || method === "dcf_fcfe") && (
+        <>
+          <DcfTables a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} />
+          <ScenarioPanel a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} onChange={(scenarios) => setDcfA((a) => ({ ...a, scenarios }))} />
+        </>
+      )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
   );
@@ -419,8 +500,14 @@ function Details({ method, details }: { method: Method; details: Record<string, 
           {n("enterpriseValue") != null && <KV k="Enterprise value" v={fmtNum(n("enterpriseValue"), 0)} />}
           <KV k="Equity value" v={fmtNum(n("equityValue"), 0)} />
           <KV k="Terminal value / มูลค่ารวม" v={fmtPct(n("terminalShareOfValue"), 1)} />
-          <KV k="Implied exit multiple" v={fmtNum(n("impliedExitMultiple"), 1) + "x"} />
-          <KV k="Growth ที่ราคาตลาดสะท้อน (reverse DCF)" v={fmtPct(n("impliedRevenueGrowthAtCurrentPrice"), 1)} />
+          <KV k="Implied terminal multiple" v={`${fmtNum((details.terminal as { impliedMultiple: number | null }).impliedMultiple, 1)}x ${(details.terminal as { multipleLabel: string }).multipleLabel}`} />
+          <ReverseDcf r={details.reverseDcf as { rate: number | null; status: string; candidates: number[] } | undefined} />
+          {(details.scenarios as { expectedValue: number | null; expectedUpside: number | null } | null) && (
+            <KV
+              k="มูลค่าคาดหวังจาก scenario"
+              v={`${fmtNum((details.scenarios as { expectedValue: number | null }).expectedValue)} (${fmtPct((details.scenarios as { expectedUpside: number | null }).expectedUpside, 1)})`}
+            />
+          )}
           {(d.warnings as string[]).map((w) => (
             <p key={w} className="mt-2 text-xs text-neg">⚠️ {w}</p>
           ))}
@@ -494,11 +581,35 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
   );
 }
 
+function TextField({ label, value, onChange, placeholder, type = "text" }: { label: string; value?: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <label className="block">
+      <span className="label">{label}</span>
+      <input className="input" type={type} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+function ReverseDcf({ r }: { r?: { rate: number | null; status: string; candidates: number[] } }) {
+  if (!r) return null;
+  const v =
+    r.status === "ok"
+      ? fmtPct(r.rate, 1)
+      : r.status === "multiple_roots"
+        ? `หลายคำตอบ: ${r.candidates.map((c) => fmtPct(c, 1)).join(", ")}`
+        : r.status === "no_root"
+          ? "ไม่มี growth ในช่วง −50%…100% ที่ให้ราคานี้"
+          : "–";
+  return <KV k="Growth ที่ราคาตลาดสะท้อน (reverse DCF)" v={v} />;
+}
+
 function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) {
+  const [axis, setAxis] = useState<SensitivityAxis>("terminalGrowth");
   const r = useMemo(() => dcf(a, model), [a, model]);
-  const s = useMemo(() => dcfSensitivity(a, model), [a, model]);
-  const fmt = (v: number) => fmtNum(v, 0);
-  const rows: [string, (y: (typeof r.years)[number]) => string][] = [
+  const s = useMemo(() => dcfSensitivity(a, model, axis), [a, model, axis]);
+  const fmt = (v: number | null) => fmtNum(v, 0);
+  type Y = (typeof r.years)[number];
+  const rows: [string, (y: Y) => string][] = [
     ["Growth", (y) => fmtPct(y.growth, 1)],
     ["รายได้", (y) => fmt(y.revenue)],
     ["EBIT", (y) => fmt(y.ebit)],
@@ -510,16 +621,20 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
     ["FCFF", (y) => fmt(y.fcff)],
     ...(model === "fcfe"
       ? ([
-          ["ดอกเบี้ยจ่าย", (y) => fmt(y.interest)],
+          ["หนี้ต้นงวด", (y) => fmt(y.openingDebt)],
+          ["ดอกเบี้ยจ่าย (หนี้ต้นงวด × Kd)", (y) => fmt(y.interest)],
           ["กำไรสุทธิ", (y) => fmt(y.netIncome)],
           ["+ กู้สุทธิ", (y) => fmt(y.netBorrowing)],
+          ["หนี้ปลายงวด", (y) => fmt(y.closingDebt)],
           ["FCFE", (y) => fmt(y.fcfe)],
-        ] as [string, (y: (typeof r.years)[number]) => string][])
+        ] as [string, (y: Y) => string][])
       : []),
     ["Discount factor", (y) => y.discountFactor.toFixed(4)],
     ["PV", (y) => fmt(y.pv)],
   ];
+  const t = r.terminal;
   const base = r.valuePerShare;
+  const ret = model === "fcff" ? "ROIC" : "ROE";
   return (
     <div className="grid gap-6 lg:grid-cols-5">
       <section className="card overflow-x-auto lg:col-span-3">
@@ -545,17 +660,41 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
           </tbody>
         </table>
         <p className="mt-2 text-xs text-muted">
-          PV รวม {fmt(r.sumPvCashFlows)} + PV terminal {fmt(r.pvTerminalValue)} (TV {fmt(r.terminalValue)})
+          PV รวม {fmt(r.sumPvCashFlows)} + PV terminal {fmt(r.pvTerminalValue)} (TV {fmt(r.terminalValue)} คิดลด {t.discountYears} ปี) · TV คิดเป็น {fmtPct(r.terminalShareOfValue, 1)} ของมูลค่า
         </p>
+        <h3 className="mt-4 mb-1 text-sm font-semibold">Terminal ปีที่ {a.years + 1} (steady state)</h3>
+        <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-3">
+          {t.method !== "exit_multiple" && (
+            <>
+              <KV k={`${model === "fcff" ? "NOPAT" : "กำไรสุทธิ"} ปี n+1`} v={fmt(t.earningsNext)} />
+              <KV k={`${model === "fcff" ? "FCFF" : "FCFE"} ปี n+1`} v={fmt(t.cashFlowNext)} />
+              <KV k="Reinvestment rate" v={fmtPct(t.reinvestmentRate, 1)} />
+              <KV k={t.method === "stable_roic" ? `${ret} (สมมติฐาน)` : `${ret} ที่แฝงอยู่`} v={fmtPct(t.method === "stable_roic" ? (model === "fcff" ? a.terminalRoic : a.terminalRoe) : t.impliedReturnOnCapital, 1)} />
+            </>
+          )}
+          <KV k={`Implied ${t.multipleLabel}`} v={`${fmtNum(t.impliedMultiple, 1)}x`} />
+          {r.impliedPerpetualGrowth != null && <KV k="g ที่แฝงใน exit multiple" v={fmtPct(r.impliedPerpetualGrowth, 2)} />}
+        </div>
       </section>
       <section className="card overflow-x-auto lg:col-span-2">
-        <h2 className="mb-3 font-semibold">Sensitivity: มูลค่าต่อหุ้น</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Sensitivity: มูลค่าต่อหุ้น</h2>
+          <select className="input w-auto py-1 text-xs" value={axis} onChange={(e) => setAxis(e.target.value as SensitivityAxis)}>
+            {(Object.keys(SENSITIVITY_AXES) as SensitivityAxis[])
+              .filter((k) => model === "fcfe" || k !== "debtFinancingRatio")
+              .map((k) => (
+                <option key={k} value={k}>
+                  {SENSITIVITY_AXES[k].label}
+                </option>
+              ))}
+          </select>
+        </div>
         <table className="text-xs">
           <thead>
             <tr>
-              <th className="px-2 py-1 text-left text-muted">{model === "fcff" ? "WACC" : "Ke"} ↓ / g →</th>
-              {s.growths.map((g) => (
-                <th key={g} className="px-2 py-1 text-right text-muted">{fmtPct(g, 1)}</th>
+              <th className="px-2 py-1 text-left text-muted">{model === "fcff" ? "WACC" : "Ke"} ↓ / {SENSITIVITY_AXES[axis].label} →</th>
+              {s.columns.map((g, j) => (
+                <th key={j} className="px-2 py-1 text-right text-muted">{fmtPct(g, 1)}</th>
               ))}
             </tr>
           </thead>
@@ -564,15 +703,15 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
               <tr key={i}>
                 <th className="px-2 py-1 text-left font-medium text-muted">{fmtPct(s.rates[i], 1)}</th>
                 {row.map((v, j) => {
-                  const rel = Number.isFinite(v) && base ? v / base - 1 : 0;
+                  const rel = v != null && base ? v / base - 1 : 0;
                   const c = Math.min(1, Math.abs(rel) * 2);
                   return (
                     <td
                       key={j}
-                      className={clsx("border-2 border-panel px-2 py-1.5 text-right tabular-nums", i === 2 && j === 2 && "font-semibold")}
-                      style={{ background: `color-mix(in oklab, ${rel >= 0 ? "var(--series-3)" : "var(--series-2)"} ${c * 45}%, var(--panel))` }}
+                      className={clsx("border-2 border-panel px-2 py-1.5 text-right tabular-nums", i === 2 && j === 2 && "font-semibold", v == null && "text-muted")}
+                      style={v != null ? { background: `color-mix(in oklab, ${rel >= 0 ? "var(--series-3)" : "var(--series-2)"} ${c * 45}%, var(--panel))` } : undefined}
                     >
-                      {Number.isFinite(v) ? fmtNum(v) : "–"}
+                      {v != null ? fmtNum(v) : "N/A"}
                     </td>
                   );
                 })}
@@ -580,8 +719,109 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">ราคาปัจจุบัน {fmtNum(a.currentPrice)}</p>
+        <p className="mt-2 text-xs text-muted">ราคาปัจจุบัน {fmtNum(a.currentPrice)} · N/A = สมมติฐานใช้ไม่ได้ (เช่น อัตราคิดลด ≤ g)</p>
       </section>
     </div>
+  );
+}
+
+const SCEN_COLS: { key: ScenarioField; label: string }[] = [
+  { key: "growthStart", label: "Growth ปีแรก" },
+  { key: "growthEnd", label: "Growth ปีสุดท้าย" },
+  { key: "ebitMarginStart", label: "Margin ปีแรก" },
+  { key: "ebitMarginEnd", label: "Margin ปีสุดท้าย" },
+  { key: "terminalGrowth", label: "Terminal g" },
+];
+
+function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff" | "fcfe"; onChange: (s: DcfScenario[] | undefined) => void }) {
+  const sc = a.scenarios;
+  const res = useMemo(() => (sc?.length ? scenarioAnalysis(a, model, sc) : null), [a, model, sc]);
+  const update = (i: number, patch: Partial<DcfScenario>) => onChange(sc!.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <section className="card overflow-x-auto">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Scenarios (Bear / Base / Bull)</h2>
+        <Toggle label="ใช้ scenarios" checked={!!sc?.length} onChange={(on) => onChange(on ? defaultScenarios(a) : undefined)} />
+      </div>
+      {!sc?.length ? (
+        <p className="text-xs text-muted">เปิดเพื่อกำหนดสมมติฐานแต่ละกรณีพร้อมความน่าจะเป็น แล้วดูมูลค่าคาดหวังและช่วงมูลค่า — ค่าเริ่มต้นเป็นตัวอย่าง (growth ±2 จุด, margin ±15% จาก base)</p>
+      ) : (
+        <>
+          <table className="table text-xs">
+            <thead>
+              <tr>
+                <th>กรณี</th>
+                <th className="num">โอกาส (%)</th>
+                {SCEN_COLS.map((c) => (
+                  <th key={c.key} className="num">{c.label} (%)</th>
+                ))}
+                <th className="num">มูลค่า/หุ้น</th>
+                <th className="num">Upside</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sc.map((x, i) => (
+                <tr key={i}>
+                  <td>
+                    <input className="input w-20 py-1 text-xs" value={x.name} onChange={(e) => update(i, { name: e.target.value })} />
+                  </td>
+                  <td className="num">
+                    <PctCell value={x.probability} onChange={(v) => update(i, { probability: v ?? 0 })} />
+                  </td>
+                  {SCEN_COLS.map((c) => (
+                    <td key={c.key} className="num">
+                      <PctCell
+                        value={x.overrides[c.key]}
+                        placeholder={fmtPct(a[c.key], 1)}
+                        onChange={(v) => {
+                          const o = { ...x.overrides };
+                          if (v == null) delete o[c.key];
+                          else o[c.key] = v;
+                          update(i, { overrides: o });
+                        }}
+                      />
+                    </td>
+                  ))}
+                  <td className="num font-medium">{fmtNum(res?.rows[i]?.value)}</td>
+                  <td className={clsx("num", signClass(res?.rows[i]?.upside))}>{fmtPct(res?.rows[i]?.upside, 1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {res && (
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span>
+                มูลค่าคาดหวัง <b className="tabular-nums">{fmtNum(res.expectedValue)}</b> <span className={signClass(res.expectedUpside)}>({fmtPct(res.expectedUpside, 1)})</span>
+              </span>
+              <span className="text-muted">
+                ช่วง {fmtNum(res.low)} – {fmtNum(res.high)} · σ {fmtNum(res.stdev)}
+              </span>
+              {res.errors.map((e) => (
+                <span key={e} className="text-xs text-neg">⚠️ {e}</span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-muted">ช่องว่าง = ใช้ค่าเดียวกับ base · บันทึก valuation เพื่อเก็บ scenarios ไว้กับสมมติฐาน</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PctCell({ value, onChange, placeholder }: { value: number | undefined; onChange: (v: number | null) => void; placeholder?: string }) {
+  const [text, setText] = useState(value == null ? "" : String(Number((value * 100).toFixed(4))));
+  return (
+    <input
+      className="input w-16 py-1 text-right text-xs tabular-nums"
+      inputMode="decimal"
+      value={text}
+      placeholder={placeholder?.replace("%", "")}
+      onChange={(e) => {
+        setText(e.target.value);
+        if (e.target.value.trim() === "") return onChange(null);
+        const n = Number(e.target.value);
+        if (Number.isFinite(n)) onChange(n / 100);
+      }}
+    />
   );
 }

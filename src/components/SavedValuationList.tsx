@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { explainValuation } from "@/lib/valuation-explain";
-import type { ValuationInput } from "@/lib/valuation-schemas";
+import { valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
 import { deleteValuationAction } from "@/app/(app)/valuation/actions";
 import { CalculationDetail } from "./CalculationDetail";
 import { ConfirmButton } from "./ConfirmButton";
@@ -36,7 +36,10 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
         let explanation = null;
         if (isOpen) {
           try {
-            explanation = explainValuation({ method: v.method, assumptions: v.assumptions } as ValuationInput);
+            // Parse so fields added after the valuation was saved get their defaults.
+            const raw = { method: v.method, assumptions: v.assumptions };
+            const parsed = valuationInput.safeParse(raw);
+            explanation = explainValuation(parsed.success ? parsed.data : (raw as ValuationInput));
           } catch {
             explanation = null;
           }
@@ -65,6 +68,13 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                   <Link href={`/valuation/${v.id}`} className="btn-ghost text-xs">แก้ไขสมมติฐาน</Link>
                   <ConfirmButton onConfirm={deleteValuationAction.bind(null, v.id)} label="ลบ valuation นี้" />
                 </div>
+                {explanation &&
+                  v.intrinsicValue != null &&
+                  (explanation.value == null || Math.abs(explanation.value - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue))) && (
+                    <p className="rounded-lg bg-bg p-3 text-xs text-neg">
+                      ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
+                    </p>
+                  )}
                 {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
                 {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
               </div>

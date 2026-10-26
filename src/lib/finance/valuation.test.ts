@@ -61,12 +61,14 @@ describe("DCF", () => {
   it("reverse DCF recovers the growth that prices the stock", () => {
     // Fixed target capital structure so the discount rate does not depend on the price.
     const a = { ...DEFAULT_DCF, growthStart: 0.05, growthEnd: 0.05, targetDebtWeight: 0.3 };
-    const price = dcfAtRate(a, "fcff", dcf(a, "fcff").discountRate);
+    const price = dcfAtRate(a, "fcff", dcf(a, "fcff").discountRate)!;
     const g = impliedGrowth({ ...a, currentPrice: price }, "fcff")!;
     expect(g).toBeCloseTo(0.05, 4);
   });
   it("warns when r <= g", () => {
-    expect(dcf({ ...flat, terminalGrowth: 0.12 }, "fcff").warnings.length).toBeGreaterThan(0);
+    const r = dcf({ ...flat, terminalGrowth: 0.12 }, "fcff");
+    expect(r.errors.map((e) => e.code)).toContain("RATE_NOT_ABOVE_GROWTH");
+    expect(r.valuePerShare).toBeNull();
   });
 });
 
@@ -171,7 +173,7 @@ describe("optimizer", () => {
 describe("DCF sensitivity", () => {
   it("centre cell equals the base valuation", () => {
     const s = dcfSensitivityCheck();
-    expect(s.center).toBeCloseTo(s.base, 8);
+    expect(s.center!).toBeCloseTo(s.base!, 8);
     expect(s.higherRateLower).toBe(true);
   });
 });
@@ -180,7 +182,7 @@ import { dcfSensitivity } from "./valuation";
 function dcfSensitivityCheck() {
   const a = { ...DEFAULT_DCF, targetDebtWeight: 0.3 };
   const s = dcfSensitivity(a, "fcff");
-  return { center: s.grid[2][2], base: dcf(a, "fcff").valuePerShare, higherRateLower: s.grid[4][2] < s.grid[0][2] };
+  return { center: s.grid[2][2], base: dcf(a, "fcff").valuePerShare, higherRateLower: s.grid[4][2]! < s.grid[0][2]! };
 }
 
 describe("bond current yield", () => {
