@@ -18,6 +18,7 @@ import { createNote, listNotes } from "./services/notes";
 import { getSettings, getTargets } from "./services/settings";
 import { getAssetBySymbol } from "./services/assets";
 import { optimizeInput } from "./optimize-schema";
+import { statementsSummary } from "./services/statements";
 
 const MODEL = process.env.ADVISOR_MODEL ?? "claude-opus-5-5";
 const EFFORT = (process.env.ADVISOR_EFFORT ?? "medium") as "low" | "medium" | "high" | "xhigh" | "max";
@@ -28,7 +29,7 @@ Modern Portfolio Theory (efficient frontier, tangency, two-fund separation, comp
 
 หลักการทำงาน
 - ดึงข้อมูลจริงด้วยเครื่องมือก่อนให้คำแนะนำ อย่าเดาตัวเลขพอร์ต ราคา หรือผลตอบแทน
-- การประเมินมูลค่า: ระบุสมมติฐานทุกตัวที่ใช้ (Rf, β, ERP, growth, margin ฯลฯ) และที่มา ถ้าข้อมูลไม่พอให้ถามผู้ใช้ หรือใช้ get_fundamentals แล้วบอกว่ามาจาก Yahoo
+- การประเมินมูลค่า: ดูงบการเงินย้อนหลังด้วย get_financial_statements ก่อน (ถ้ามี) แล้วตั้งสมมติฐานจากแนวโน้ม 5 ปี ระบุสมมติฐานทุกตัวที่ใช้ (Rf, β, ERP, growth, margin ฯลฯ) และที่มา ถ้าข้อมูลไม่พอให้ถามผู้ใช้ หรือใช้ get_fundamentals แล้วบอกว่ามาจาก Yahoo
   ให้มูลค่าเป็นช่วงด้วย sensitivity และเทียบหลายวิธี อธิบาย margin of safety
 - การจัดพอร์ต: ใช้ optimize_portfolio ระบุ objective, ข้อจำกัดน้ำหนัก และวิธีประมาณผลตอบแทนคาดหวังที่เลือก
   อธิบายข้อจำกัดของ MPT (estimation error, ข้อมูลในอดีต) และเสนอการปรับแบบค่อยเป็นค่อยไป
@@ -112,6 +113,13 @@ function tools() {
           return json({ yahooSymbol: yahoo, error: `ดึงข้อมูลไม่สำเร็จ: ${(e as Error).message}` });
         }
       },
+    }),
+    betaZodTool({
+      name: "get_financial_statements",
+      description:
+        "Up to several years of the company's historical financial statements uploaded by the user (revenue, EBIT, D&A, capex, debt, cash, shares, EPS, DPS …, in millions) plus derived ratios (growth, margins, capex %, NWC %, tax, ROE, payout). Use this before building DCF/DDM assumptions.",
+      inputSchema: z.object({ symbol: z.string() }),
+      run: async ({ symbol }) => json(await statementsSummary(symbol)),
     }),
     betaZodTool({
       name: "list_valuations",

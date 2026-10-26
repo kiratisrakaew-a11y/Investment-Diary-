@@ -3,6 +3,7 @@ import { z } from "zod";
 import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
 import { bondSchema, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
+import { financialYearSchema } from "@/lib/financials";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -138,6 +139,20 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Saved valuation") },
         },
       },
+      "/api/v1/statements": {
+        get: {
+          operationId: "getFinancialStatements",
+          summary: "Historical financial statements (millions) and derived ratios for a company",
+          parameters: [{ ...q("symbol", "Asset symbol"), required: true }],
+          responses: { "200": ok("Statements and ratios") },
+        },
+        post: {
+          operationId: "saveFinancialStatements",
+          summary: "Store historical statements, one object per fiscal year; money in millions, shares in millions, EPS/DPS per share",
+          requestBody: body("SaveStatements"),
+          responses: { "200": okList("All stored years") },
+        },
+      },
       "/api/v1/bonds": {
         get: { operationId: "getBondHoldings", summary: "YTM and duration of the user's bonds", responses: { "200": ok("Bond holdings") } },
       },
@@ -183,6 +198,13 @@ export function buildOpenApi(origin: string) {
           }),
         ),
         BondInput: schema(bondSchema),
+        SaveStatements: schema(
+          z.object({
+            symbol: z.string(),
+            currency: z.string().optional(),
+            years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int() })),
+          }),
+        ),
         OptimizeInput: schema(optimizeInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },

@@ -16,6 +16,8 @@ import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, saveValuation } from "./services/valuations";
+import { saveYears, statementsSummary } from "./services/statements";
+import { emptyYear, financialYearSchema } from "@/lib/financials";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -258,6 +260,35 @@ export function createMcpServer() {
       annotations: { readOnlyHint: true },
     },
     safe(async (p) => optimizePortfolio(p)),
+  );
+
+  server.registerTool(
+    "get_financial_statements",
+    {
+      title: "Historical financial statements",
+      description: "The company's stored historical statements (millions; EPS/DPS in currency units) with derived ratios: growth, margins, capex %, NWC %, tax, ROE, payout.",
+      inputSchema: { symbol: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ symbol }) => statementsSummary(symbol)),
+  );
+
+  server.registerTool(
+    "save_financial_statements",
+    {
+      title: "Save financial statements",
+      description:
+        "Store historical statement figures for a company, one object per fiscal year (Gregorian). Monetary values in MILLIONS of currency, sharesOutstanding in millions, EPS/DPS per share. " +
+        "Use when the user gives you statements (PDF / Excel / pasted) so they appear in the app's valuation page. Existing years are merged (given fields overwrite).",
+      inputSchema: {
+        symbol: z.string(),
+        currency: z.string().optional(),
+        years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int() })),
+      },
+    },
+    safe(async ({ symbol, currency, years }) =>
+      saveYears(symbol, years.map((y) => ({ ...emptyYear(y.fiscalYear), ...y })), { source: "claude", currency }),
+    ),
   );
 
   return server;
