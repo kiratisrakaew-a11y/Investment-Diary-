@@ -117,6 +117,14 @@ export const residualIncomeSchema = z.object({
     .max(30)
     .optional()
     .describe("Multi-stage: yearly forecasts, year 1 first. Omit for the single-stage model"),
+  model: z
+    .enum(["single_stage", "multi_stage"])
+    .optional()
+    .describe("single_stage = V₀ = B₀ + (ROE − Ke)B₀/(Ke − g); multi_stage = yearly forecast (forecast rows or the *Forecast arrays). Default: multi_stage when yearly data is given"),
+  roeForecast: z.array(z.number().nullable()).max(30).optional().describe("Multi-stage alternative to `forecast`: ROE per year (decimal), year 1 first"),
+  epsForecast: z.array(z.number().nullable()).max(30).optional().describe("EPS per year (overrides ROE for that year)"),
+  payoutForecast: z.array(z.number().nullable()).max(30).optional().describe("Payout ratio per year (decimal)"),
+  bookValueForecast: z.array(z.number().nullable()).max(30).optional().describe("Stated year-end book value per share per year (null = clean surplus)"),
   terminalMethod: z
     .enum(["perpetuity", "persistence", "none"])
     .optional()
@@ -179,6 +187,30 @@ export interface EvaluationSummary {
   price: number | null;
   upside: number | null;
   details: Record<string, unknown>;
+}
+
+type RiAssumptions = z.infer<typeof residualIncomeSchema>;
+
+/** Yearly rows from `forecast` and/or the parallel *Forecast arrays (array values fill gaps in the rows). */
+export function riForecastRows(a: Partial<RiAssumptions>) {
+  const n = Math.max(a.forecast?.length ?? 0, a.roeForecast?.length ?? 0, a.epsForecast?.length ?? 0, a.payoutForecast?.length ?? 0, a.bookValueForecast?.length ?? 0);
+  const pick = (arr: (number | null)[] | undefined, i: number) => arr?.[i] ?? undefined;
+  return Array.from({ length: n }, (_, i) => {
+    const r = a.forecast?.[i] ?? {};
+    return Object.fromEntries(
+      Object.entries({
+        roe: r.roe ?? pick(a.roeForecast, i),
+        eps: r.eps ?? pick(a.epsForecast, i),
+        payoutRatio: r.payoutRatio ?? pick(a.payoutForecast, i),
+        bookValueEnd: r.bookValueEnd ?? pick(a.bookValueForecast, i),
+      }).filter(([, v]) => v != null),
+    ) as NonNullable<RiAssumptions["forecast"]>[number];
+  });
+}
+
+/** Which residual-income model applies: explicit `model`, else multi-stage when yearly data exists. */
+export function riModel(a: Partial<RiAssumptions>): "single_stage" | "multi_stage" {
+  return a.model ?? (riForecastRows(a).length ? "multi_stage" : "single_stage");
 }
 
 /** Continuing value spec for the multi-stage residual-income model. */
@@ -266,8 +298,8 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
     case "residual_income": {
       const a = input.assumptions;
       const ke = costOfEquity(a.riskFree, a.beta, a.equityRiskPremium, a.extraPremium);
-      if (a.forecast?.length) {
-        const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: a.forecast, terminal: riTerminal(a) });
+      if (riModel(a) === "multi_stage") {
+        const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: riForecastRows(a), terminal: riTerminal(a) });
         return {
           value: m.value,
           price: a.currentPrice,

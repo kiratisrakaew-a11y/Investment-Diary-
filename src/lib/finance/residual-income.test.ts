@@ -103,3 +103,33 @@ describe("multi-stage residual income", () => {
     expect(e.table!.columns).toHaveLength(3);
   });
 });
+
+describe("explicit model: multi_stage", () => {
+  const common = { bookValuePerShare: 10, roe: 0.12, payoutRatio: 0.5, currentPrice: 12, riskFree: 0.02, beta: 1, equityRiskPremium: 0.08, extraPremium: 0, terminalGrowth: 0.03 };
+  const rows = [
+    { roe: 0.2, payoutRatio: 0.5 },
+    { roe: 0.15, payoutRatio: 0.5, bookValueEnd: 12 },
+    { roe: 0.12, payoutRatio: 0.5 },
+  ];
+
+  it("parallel yearly arrays (ROE / payout / book value) equal the row form", () => {
+    const byRows = evaluate({ method: "residual_income", assumptions: { ...common, model: "multi_stage", forecast: rows, terminalMethod: "none" } });
+    const byArrays = evaluate({
+      method: "residual_income",
+      assumptions: { ...common, model: "multi_stage", roeForecast: [0.2, 0.15, 0.12], payoutForecast: [0.5, 0.5, 0.5], bookValueForecast: [null, 12, null], terminalMethod: "none" },
+    });
+    expect(byArrays.value!).toBeCloseTo(byRows.value!, 12);
+    expect(byArrays.details.model).toBe("multi_stage");
+  });
+
+  it("multi_stage without yearly data is an error, not a silent single-stage value", () => {
+    const r = evaluate({ method: "residual_income", assumptions: { ...common, model: "multi_stage" } });
+    expect(r.value).toBeNull();
+    expect((r.details.errors as { message: string }[]).length).toBeGreaterThan(0);
+  });
+
+  it("single_stage ignores a forecast that is present", () => {
+    const r = evaluate({ method: "residual_income", assumptions: { ...common, model: "single_stage", forecast: rows } });
+    expect(r.value!).toBeCloseTo(residualIncome(10, 0.12, 0.1, 0.03), 12);
+  });
+});

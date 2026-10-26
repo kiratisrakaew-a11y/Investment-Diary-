@@ -16,7 +16,7 @@ import {
   type ScenarioField,
   type SensitivityAxis,
 } from "@/lib/finance/valuation";
-import { evaluate, type ValuationInput } from "@/lib/valuation-schemas";
+import { evaluate, riForecastRows, type ValuationInput } from "@/lib/valuation-schemas";
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
 import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
@@ -110,7 +110,7 @@ export function ValuationEditor({
     currentPrice: defaults.currentPrice || 30,
     ...discount,
     terminalGrowth: 0.03,
-    ...(initialMethod === "residual_income" ? (assumptions as Partial<Ri>) : {}),
+    ...(initialMethod === "residual_income" ? normalizeRi(assumptions as Partial<Ri>) : {}),
   });
   const [mult, setMult] = useState<Mult>({
     eps: 2,
@@ -680,6 +680,14 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
 
 type RiRow = NonNullable<Ri["forecast"]>[number];
 
+/** Saved RI assumptions may use the parallel *Forecast arrays; the editor works on rows. */
+function normalizeRi(a: Partial<Ri> | undefined): Partial<Ri> {
+  if (!a) return {};
+  const { roeForecast: _r, epsForecast: _e, payoutForecast: _p, bookValueForecast: _b, ...rest } = a;
+  const rows = riForecastRows(a);
+  return { ...rest, forecast: rows.length ? rows : undefined };
+}
+
 /** Yearly ROE / payout / book value forecast for the multi-stage residual income model. */
 function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.SetStateAction<Ri>> }) {
   const rows = ri.forecast ?? [];
@@ -693,7 +701,11 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
     <fieldset className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Residual income หลายช่วง (ประมาณการรายปี)</legend>
-        <Toggle label="ใช้ประมาณการรายปี" checked={on} onChange={(v) => setRi((a) => ({ ...a, forecast: v ? seed() : undefined }))} />
+        <Toggle
+          label="ใช้ประมาณการรายปี (multi_stage)"
+          checked={on}
+          onChange={(v) => setRi((a) => ({ ...a, model: v ? "multi_stage" : "single_stage", forecast: v ? seed() : undefined }))}
+        />
       </div>
       {!on ? (
         <p className="text-xs text-muted">ปิดอยู่ = ใช้สูตรช่วงเดียว V₀ = B₀ + (ROE − Ke)B₀ ÷ (Ke − g) · เปิดเพื่อใส่ ROE / payout / Book value รายปี แล้วเลือก continuing value</p>

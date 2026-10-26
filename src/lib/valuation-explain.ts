@@ -18,7 +18,7 @@ import {
   type DcfAssumptions,
   type InputMeta,
 } from "./finance/valuation";
-import { riTerminal, type ValuationInput } from "./valuation-schemas";
+import { riForecastRows, riModel, riTerminal, type ValuationInput } from "./valuation-schemas";
 import { rateScaleWarnings } from "./rate-scale";
 
 export type Unit = "%" | "x" | "money" | "perShare" | "years" | "text" | "factor";
@@ -476,7 +476,7 @@ function explainDdm(a: Ddm): Explanation {
 function explainRiMulti(a: Ri): Explanation {
   const { ke, step, assumptions: keA } = keSteps(a);
   const terminal = riTerminal(a);
-  const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: a.forecast ?? [], terminal });
+  const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: riForecastRows(a), terminal });
   const n = m.years.length;
   const last = m.years[n - 1];
   const steps: Step[] = [
@@ -569,7 +569,7 @@ function explainRiMulti(a: Ri): Explanation {
 }
 
 function explainRi(a: Ri): Explanation {
-  if (a.forecast?.length) return explainRiMulti(a);
+  if (riModel(a) === "multi_stage") return explainRiMulti(a);
   const { ke, step, assumptions: keA } = keSteps(a);
   const warnings: string[] = [];
   const value = residualIncome(a.bookValuePerShare, a.roe, ke, a.terminalGrowth);
