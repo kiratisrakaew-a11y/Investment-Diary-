@@ -1,0 +1,133 @@
+/** OpenAPI 3.1 document for ChatGPT Custom GPT Actions, generated from the shared zod schemas. */
+import { z } from "zod";
+import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
+
+const schema = (s: z.ZodType) => {
+  const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
+  return rest;
+};
+
+const ok = (description: string) => ({
+  description,
+  content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+});
+const okList = (description: string) => ({
+  description,
+  content: { "application/json": { schema: { type: "array", items: { type: "object", additionalProperties: true } } } },
+});
+const body = (ref: string) => ({
+  required: true,
+  content: { "application/json": { schema: { $ref: `#/components/schemas/${ref}` } } },
+});
+const q = (name: string, description: string, type = "string") => ({
+  name,
+  in: "query",
+  required: false,
+  description,
+  schema: { type },
+});
+
+export function buildOpenApi(origin: string) {
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: "Investment Diary API",
+      version: "1.0.0",
+      description:
+        "Personal investment diary (THB base). Record journal notes and trades, update prices, and read holdings, " +
+        "asset allocation and finance-theory performance metrics. When writing, set source to \"chatgpt\".",
+    },
+    servers: [{ url: origin }],
+    paths: {
+      "/api/v1/notes": {
+        get: {
+          operationId: "searchNotes",
+          summary: "Search journal notes on the timeline",
+          parameters: [
+            q("q", "Text search"),
+            q("type", "idea | thesis | review | lesson | market"),
+            q("tag", "Tag"),
+            q("symbol", "Asset symbol"),
+            q("from", "From date YYYY-MM-DD"),
+            q("to", "To date YYYY-MM-DD"),
+            q("limit", "Max results", "integer"),
+          ],
+          responses: { "200": okList("Notes, newest first") },
+        },
+        post: {
+          operationId: "addNote",
+          summary: "Add an idea / thesis / review / lesson / market note to the diary",
+          requestBody: body("NoteInput"),
+          responses: { "200": ok("Created note") },
+        },
+      },
+      "/api/v1/transactions": {
+        get: {
+          operationId: "listTransactions",
+          summary: "List recent transactions",
+          parameters: [q("symbol", "Asset symbol"), q("limit", "Max results", "integer")],
+          responses: { "200": okList("Transactions") },
+        },
+        post: {
+          operationId: "recordTransaction",
+          summary: "Record a buy, sell, dividend, coupon, deposit, withdraw or fee",
+          description:
+            "For buy/sell give quantity and price per unit in the asset currency; for other types put the total amount in price. " +
+            "The asset must already exist (addAsset).",
+          requestBody: body("TransactionInput"),
+          responses: { "200": ok("Created transaction") },
+        },
+      },
+      "/api/v1/assets": {
+        get: { operationId: "listAssets", summary: "List registered assets", responses: { "200": okList("Assets") } },
+        post: {
+          operationId: "addAsset",
+          summary: "Register a stock, bond, fund, gold or cash asset",
+          description:
+            "Thai stock: assetClass thai_stock, priceSource yahoo, providerSymbol e.g. PTT.BK. US stock: currency USD, providerSymbol AAPL. " +
+            "Thai gold bar: assetClass gold, priceSource yahoo, providerSymbol GOLD_TH. Thai fund: priceSource sec_th + SEC proj_id, or manual.",
+          requestBody: body("AssetInput"),
+          responses: { "200": ok("Created (or existing) asset") },
+        },
+      },
+      "/api/v1/prices": {
+        post: {
+          operationId: "updatePrice",
+          summary: "Set the closing price / NAV of an asset for a date",
+          requestBody: body("PriceInput"),
+          responses: { "200": ok("Saved price") },
+        },
+      },
+      "/api/v1/portfolio/summary": {
+        get: { operationId: "getPortfolioSummary", summary: "Holdings, cost, market value and P&L in THB", responses: { "200": ok("Summary") } },
+      },
+      "/api/v1/portfolio/allocation": {
+        get: { operationId: "getAllocation", summary: "Actual vs target asset allocation and rebalance amounts", responses: { "200": ok("Allocation") } },
+      },
+      "/api/v1/portfolio/performance": {
+        get: {
+          operationId: "getPerformanceMetrics",
+          summary: "TWR, XIRR, volatility, drawdown, risk premium, Sharpe, Sortino, beta, Jensen's alpha, Treynor",
+          responses: { "200": ok("Metrics (decimals, 0.05 = 5%)") },
+        },
+      },
+      "/api/v1/portfolio/mpt": {
+        get: {
+          operationId: "getPortfolioOptimization",
+          summary: "Modern Portfolio Theory: min-variance and max-Sharpe weights, correlation, CML",
+          responses: { "200": ok("MPT analysis") },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        NoteInput: schema(noteInput),
+        TransactionInput: schema(transactionInput),
+        AssetInput: schema(assetInput),
+        PriceInput: schema(priceInput),
+      },
+      securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+    },
+    security: [{ bearerAuth: [] }],
+  };
+}
