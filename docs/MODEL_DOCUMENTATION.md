@@ -87,6 +87,23 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - With the risk-free asset, the objective is solved on the CAL. y > 1 (borrowing) or y < 0 is clamped and disclosed.
 - The closed-form frontier with short sales is shown for comparison only. It is not investable when shorting is not allowed.
 
+- One engine: the analytics page (`getMptAnalysis`) and the legacy `mpt.ts` exports (`minVariancePortfolio`, `maxSharpePortfolio`, `efficientFrontier`, `meanVarianceOptimize`) now call the active-set QP in `optimizer.ts` with long-only bounds. The projected-gradient solver was removed. With no portfolio above Rf there is no tangency portfolio (null), instead of a "best negative Sharpe" point.
+
+### 4b. Black–Litterman — `black-litterman.ts`, `returnMethod: "black_litterman"`
+
+- Prior: Π = δΣw_mkt (excess returns).
+  - w_mkt is required for every asset (0 allowed) and is normalized. It is never taken from the user's holdings.
+  - δ is given, or implied as ERP ÷ w_mktᵀΣw_mkt from the ERP setting.
+- Σ is the covariance selected for the optimizer (sample or Ledoit–Wolf).
+- Views:
+  - Absolute: P row = eᵢ, Q = return − Rf.
+  - Relative: equal weights within each leg, +1 long, −1 short; Q = outperformance.
+- Ω = diag(((1 − c)/c) · pτΣpᵀ) for confidence c ∈ (0, 1], or an explicit variance per view. c = 0.5 is He–Litterman; c = 1 makes the view hold exactly.
+- Posterior: μ = Π + τΣPᵀ(PτΣPᵀ + Ω)⁻¹(Q − PΠ), plus Rf. Σ_post = Σ + τΣ − τΣPᵀ(PτΣPᵀ + Ω)⁻¹PτΣ, used only when `posteriorCovariance` is set.
+  - It equals the Theil mixed-estimation form (tested).
+- Weights come from the existing `recommend` / QP with the same constraints. The output also gives the weights from the prior for comparison. With no views and no binding bounds, they equal w_mkt (tested).
+- Not supported yet: sector / group limits. Assets have no sector field and the QP handles box and budget constraints only.
+
 ## 5. Bonds — `src/lib/finance/bonds.ts`
 
 - The schedule is built back from maturity (or from the penultimate date) with an end-of-month rule. An issue date plus first coupon date gives a short or long first period. A date off the coupon cycle is `MALFORMED_SCHEDULE`.

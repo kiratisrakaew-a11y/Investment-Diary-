@@ -4,6 +4,8 @@
  * which matches what a retail investor can actually hold.
  */
 import { TRADING_DAYS, covariance, mean } from "./stats";
+// Circular with optimizer.ts (which imports portfolioStats from here); only used inside functions, so safe.
+import { OptimizerError, constrainedFrontier, constrainedMeanVariance, gmvPortfolio, tangencyPortfolio } from "./optimizer";
 
 export type Matrix = number[][];
 
@@ -62,92 +64,40 @@ export function projectToSimplex(v: number[]): number[] {
   return v.map((x) => Math.max(0, x - theta));
 }
 
-function stepSize(cov: Matrix): number {
-  // Gershgorin bound on the largest eigenvalue of Σ.
-  const l = Math.max(...cov.map((row) => row.reduce((s, x) => s + Math.abs(x), 0)), 1e-12);
-  return 1 / (2 * l);
-}
+// ------------------------------------------------------------------ long-only wrappers (Roadmap Phase 3)
+// The projected-gradient solver that used to live here was a second optimization engine.
+// These exports keep their signatures but delegate to the exact active-set QP in optimizer.ts
+// with long-only, fully-invested bounds, so every page gets the same weights.
 
-/**
- * Solve min_w  wᵀΣw − λ μᵀw  on the simplex by projected gradient descent.
- * λ = 0 gives the global minimum-variance portfolio; λ → ∞ the max-return asset.
- */
-export function meanVarianceOptimize(mu: number[], cov: Matrix, lambda: number, iters = 3000): number[] {
-  const n = mu.length;
-  let w = Array(n).fill(1 / n);
-  const eta = stepSize(cov);
-  for (let k = 0; k < iters; k++) {
-    const g = matVec(cov, w).map((x, i) => 2 * x - lambda * mu[i]);
-    const next = projectToSimplex(w.map((x, i) => x - eta * g[i]));
-    const diff = next.reduce((s, x, i) => s + Math.abs(x - w[i]), 0);
-    w = next;
-    if (diff < 1e-12) break;
-  }
-  return w;
+const LONG_ONLY = { min: 0, max: 1 };
+
+/** min wᵀΣw − λ μᵀw on the simplex (λ = 0: global minimum variance). */
+export function meanVarianceOptimize(mu: number[], cov: Matrix, lambda: number): number[] {
+  return constrainedMeanVariance(mu, cov, lambda, LONG_ONLY);
 }
 
 export function minVariancePortfolio(mu: number[], cov: Matrix, rf: number): PortfolioPoint {
-  return portfolioStats(meanVarianceOptimize(mu, cov, 0), mu, cov, rf);
+  return gmvPortfolio(mu, cov, rf, LONG_ONLY);
 }
 
-/** λ large enough that the optimizer reaches the max-return corner. */
-function lambdaUpper(mu: number[], cov: Matrix): number {
-  const maxVar = Math.max(...cov.map((r, i) => r[i]), 1e-6);
-  const muSpread = Math.max(Math.max(...mu) - Math.min(...mu), 1e-6);
-  return (20 * maxVar) / muSpread;
-}
-
-/** Long-only efficient frontier traced by sweeping the risk-aversion trade-off λ. */
+/** Long-only efficient frontier (the efficient arm of the constrained bullet). */
 export function efficientFrontier(mu: number[], cov: Matrix, rf: number, points = 30): PortfolioPoint[] {
-  const out: PortfolioPoint[] = [];
-  const lambdaMax = lambdaUpper(mu, cov);
-  for (let i = 0; i < points; i++) {
-    // Cubic spacing puts more points near the curved minimum-variance end.
-    const lambda = lambdaMax * (i / (points - 1)) ** 3;
-    out.push(portfolioStats(meanVarianceOptimize(mu, cov, lambda, 1500), mu, cov, rf));
-  }
-  out.sort((a, b) => a.volatility - b.volatility);
-  // Keep only the efficient (upper) part: returns must be non-decreasing in risk.
-  const eff: PortfolioPoint[] = [];
-  for (const p of out) if (!eff.length || p.expectedReturn >= eff[eff.length - 1].expectedReturn - 1e-9) eff.push(p);
-  return eff;
+  return constrainedFrontier(mu, cov, rf, LONG_ONLY, points * 2)
+    .curve.filter((p) => p.efficient)
+    .map((p) => portfolioStats(p.weights, mu, cov, rf));
 }
 
 /**
- * Tangency (maximum-Sharpe) portfolio — the point where the Capital Market Line
- * from R_f touches the efficient frontier. Sharpe is unimodal along the frontier,
- * so a golden-section search over the risk-aversion parameter λ finds it.
+ * Long-only tangency (maximum-Sharpe) portfolio. When no portfolio earns more than Rf there is no
+ * tangency portfolio; null is returned instead of a meaningless "best negative Sharpe" point.
  */
-export function maxSharpePortfolio(mu: number[], cov: Matrix, rf: number): PortfolioPoint {
-  const at = (lambda: number) => portfolioStats(meanVarianceOptimize(mu, cov, lambda), mu, cov, rf);
-  const score = (p: PortfolioPoint) => p.sharpe ?? -Infinity;
-  let lo = 0;
-  let hi = lambdaUpper(mu, cov);
-  const g = (Math.sqrt(5) - 1) / 2;
-  let c = hi - g * (hi - lo);
-  let d = lo + g * (hi - lo);
-  let pc = at(c);
-  let pd = at(d);
-  for (let i = 0; i < 40; i++) {
-    // Ties go left: beyond some λ the optimizer sits at the max-return corner (flat Sharpe).
-    if (score(pc) >= score(pd) - 1e-9) {
-      hi = d;
-      d = c;
-      pd = pc;
-      c = hi - g * (hi - lo);
-      pc = at(c);
-    } else {
-      lo = c;
-      c = d;
-      pc = pd;
-      d = lo + g * (hi - lo);
-      pd = at(d);
-    }
+export function maxSharpePortfolio(mu: number[], cov: Matrix, rf: number): PortfolioPoint | null {
+  try {
+    return tangencyPortfolio(mu, cov, rf, LONG_ONLY);
+  } catch (e) {
+    if (e instanceof OptimizerError) return null;
+    throw e;
   }
-  const best = score(pc) > score(pd) ? pc : pd;
-  // Guard against a corner solution outside the bracket.
-  const corners = [at(0), at(lambdaUpper(mu, cov))];
-  return [best, ...corners].reduce((a, b) => (score(b) > score(a) ? b : a));
 }
 
 /** Random long-only portfolios (uniform on the simplex) for the risk/return scatter. */

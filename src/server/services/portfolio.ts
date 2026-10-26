@@ -2,14 +2,12 @@ import { computeAllocation } from "@/lib/finance/allocation";
 import { computeMetrics } from "@/lib/finance/metrics";
 import {
   covarianceDiagnostics,
-  efficientFrontier,
   estimateInputs,
   correlationMatrix,
-  maxSharpePortfolio,
-  minVariancePortfolio,
   portfolioStats,
   randomPortfolios,
 } from "@/lib/finance/mpt";
+import { constrainedFrontier } from "@/lib/finance/optimizer";
 import { asOf, buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
 import { simpleReturns } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
@@ -141,7 +139,9 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
   const covWarnings = covarianceDiagnostics(cov).warnings;
   const totalHeld = usable.reduce((s, p) => s + p.marketValueThb, 0);
   const current = portfolioStats(usable.map((p) => p.marketValueThb / totalHeld), mu, cov, rf);
-  const tangency = maxSharpePortfolio(mu, cov, rf);
+  // Same QP engine as the optimizer page (long-only, fully invested).
+  const f = constrainedFrontier(mu, cov, rf, { min: 0, max: 1 }, 100);
+  const tangency = f.tangency;
 
   return {
     ok: true as const,
@@ -156,11 +156,13 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
     assets: usable.map((p, i) => ({ symbol: p.symbol, expectedReturn: mu[i], volatility: Math.sqrt(cov[i][i]) })),
     correlation: correlationMatrix(cov),
     current,
-    minVariance: minVariancePortfolio(mu, cov, rf),
+    minVariance: f.gmv,
+    /** null when no long-only portfolio earns more than Rf. */
     tangency,
-    frontier: efficientFrontier(mu, cov, rf, 50),
+    frontier: f.curve.filter((p) => p.efficient).map((p) => portfolioStats(p.weights, mu, cov, rf)),
+    warnings: tangency ? [] : [`ไม่มีพอร์ตที่ผลตอบแทนคาดหวังสูงกว่า Rf (${(rf * 100).toFixed(2)}%) — ไม่มี tangency portfolio`],
     cloud: randomPortfolios(mu, cov, rf, 400).map((p) => ({ volatility: p.volatility, expectedReturn: p.expectedReturn })),
     /** Capital Market Line: E[R] = Rf + Sharpe_tangency · σ */
-    cml: tangency.sharpe != null ? { intercept: rf, slope: tangency.sharpe } : null,
+    cml: tangency?.sharpe != null ? { intercept: rf, slope: tangency.sharpe } : null,
   };
 }

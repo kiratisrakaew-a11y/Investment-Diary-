@@ -93,10 +93,17 @@ describe("modern portfolio theory", () => {
   });
   it("tangency portfolio matches w ∝ Σ⁻¹(μ − Rf)", () => {
     // excess = [0.08, 0.04]; Σ⁻¹·excess = [2, 4] → [1/3, 2/3]
-    const p = maxSharpePortfolio(mu, cov, 0.02);
+    const p = maxSharpePortfolio(mu, cov, 0.02)!;
     expect(p.weights[0]).toBeCloseTo(1 / 3, 2);
     const s = portfolioStats([1 / 3, 2 / 3], mu, cov, 0.02).sharpe!;
     expect(p.sharpe!).toBeCloseTo(s, 4);
+  });
+  it("uses the optimizer QP (one engine): same weights as tangencyPortfolio / gmvPortfolio; no tangency when nothing beats Rf", async () => {
+    const { tangencyPortfolio, gmvPortfolio } = await import("./optimizer");
+    const b = { min: 0, max: 1 };
+    expect(maxSharpePortfolio(mu, cov, 0.02)!.weights).toEqual(tangencyPortfolio(mu, cov, 0.02, b).weights);
+    expect(minVariancePortfolio(mu, cov, 0.02).weights).toEqual(gmvPortfolio(mu, cov, 0.02, b).weights);
+    expect(maxSharpePortfolio(mu, cov, 0.5)).toBeNull();
   });
   it("frontier is increasing in risk and return", () => {
     const f = efficientFrontier(mu, cov, 0.02, 20);

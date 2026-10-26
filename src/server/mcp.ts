@@ -327,7 +327,8 @@ export function createMcpServer() {
       title: "Recommend portfolio weights (MPT)",
       description:
         "Markowitz optimization with editable expected returns and weight limits. Objectives: max_sharpe, min_variance, target_return, target_risk, utility (risk aversion A). " +
-        "Returns recommended weights, THB buy/sell amounts vs. current holdings, and the min-variance / max-Sharpe portfolios.",
+        "Returns recommended weights, THB buy/sell amounts vs. current holdings, and the min-variance / max-Sharpe portfolios. " +
+        "returnMethod black_litterman: give blackLitterman.marketWeights for every asset (benchmark/market-cap weights — do not use the user's holdings unless they say so), views [{type absolute, symbol, return, confidence} | {type relative, long[], short[], return, confidence}], optional marketRiskAversion δ (else implied from ERP), tau (0.05). Returns prior vs posterior returns and market / prior-optimal / posterior-optimal weights. ",
       inputSchema: optimizeInput.shape,
       annotations: { readOnlyHint: true },
     },

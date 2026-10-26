@@ -137,6 +137,7 @@ export default async function AnalyticsPage() {
               ประมาณจากผลตอบแทน (บาท) {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
               {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
+              {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}
             </p>
             <FrontierChart
               cloud={mpt.cloud}
@@ -167,7 +168,7 @@ export default async function AnalyticsPage() {
                       <td className="num">{fmtPct(a.volatility, 1)}</td>
                       <td className="num">{fmtPct(mpt.current.weights[i], 1)}</td>
                       <td className="num">{fmtPct(mpt.minVariance.weights[i], 1)}</td>
-                      <td className="num">{fmtPct(mpt.tangency.weights[i], 1)}</td>
+                      <td className="num">{mpt.tangency ? fmtPct(mpt.tangency.weights[i], 1) : "–"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,7 +184,7 @@ export default async function AnalyticsPage() {
                       <td colSpan={3}>{label}</td>
                       <td className="num">{f(mpt.current)}</td>
                       <td className="num">{f(mpt.minVariance)}</td>
-                      <td className="num">{f(mpt.tangency)}</td>
+                      <td className="num">{mpt.tangency ? f(mpt.tangency) : "–"}</td>
                     </tr>
                   ))}
                 </tfoot>

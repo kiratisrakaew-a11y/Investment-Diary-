@@ -98,7 +98,8 @@ function tools() {
       name: "optimize_portfolio",
       description:
         "Markowitz mean-variance optimization over held/registered assets. Returns recommended weights, THB trades vs. current holdings, and the min-variance / max-Sharpe portfolios. " +
-        "objective: max_sharpe | min_variance | target_return | target_risk | utility (uses riskAversion A in U = E[R] − ½Aσ²). useRiskFree mixes the tangency portfolio with the risk-free asset and solves the objective on the capital allocation line. Infeasible bounds/targets return { ok: false, issue } — never relax them; explain the suggestion to the user.",
+        "objective: max_sharpe | min_variance | target_return | target_risk | utility (uses riskAversion A in U = E[R] − ½Aσ²). useRiskFree mixes the tangency portfolio with the risk-free asset and solves the objective on the capital allocation line. Infeasible bounds/targets return { ok: false, issue } — never relax them; explain the suggestion to the user. " +
+        "returnMethod black_litterman: give blackLitterman.marketWeights for every asset (benchmark/market-cap weights — do not use the user's holdings unless they say so), views [{type absolute, symbol, return, confidence} | {type relative, long[], short[], return, confidence}], optional marketRiskAversion δ (else implied from ERP), tau (0.05). Returns prior vs posterior returns and market / prior-optimal / posterior-optimal weights. ",
       inputSchema: optimizeInput,
       run: async (p) => {
         try {

@@ -115,11 +115,11 @@ export function FrontierChart({
   frontier: Pt[];
   assets: (Pt & { symbol: string })[];
   current: Pt;
-  tangency: Pt;
+  tangency: Pt | null;
   minVariance: Pt;
   cml: { intercept: number; slope: number } | null;
 }) {
-  const maxVol = Math.max(...assets.map((a) => a.volatility), current.volatility, tangency.volatility) * 1.1;
+  const maxVol = Math.max(...assets.map((a) => a.volatility), current.volatility, tangency?.volatility ?? 0) * 1.1;
   const cmlLine = cml ? [0, maxVol].map((v) => ({ volatility: v, expectedReturn: cml.intercept + cml.slope * v })) : [];
   const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
   return (
@@ -140,7 +140,7 @@ export function FrontierChart({
         {cml && <Line name="Capital Market Line" data={cmlLine} dataKey="expectedReturn" stroke="var(--series-3)" strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />}
         <Scatter name="สินทรัพย์รายตัว" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
         <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />
-        <Scatter name="Max Sharpe" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />
+        {tangency && <Scatter name="Max Sharpe" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />}
         <Scatter name="Min variance" data={[minVariance]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>

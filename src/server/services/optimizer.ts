@@ -1,6 +1,7 @@
 import { asOf, buildSnapshot, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
 import { covarianceDiagnostics, estimateInputs, ledoitWolf, type Matrix } from "@/lib/finance/mpt";
 import { recommend, type Objective } from "@/lib/finance/recommend";
+import { blackLitterman, type BlView } from "@/lib/finance/black-litterman";
 import { OptimizerError } from "@/lib/finance/optimizer";
 import { beta as calcBeta } from "@/lib/finance/risk";
 import { simpleReturns, mean } from "@/lib/finance/stats";
@@ -154,14 +155,14 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
   };
 }
 
-export type ReturnMethod = "historical" | "capm" | "blend";
+export type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
 
 export function expectedReturns(u: OptimizerUniverse, method: ReturnMethod, overrides: Record<string, number> = {}) {
   return u.assets.map((a) => {
     const o = overrides[a.symbol];
     if (o != null) return o;
     const capm = a.capmReturn ?? a.historicalReturn;
-    if (method === "capm") return capm;
+    if (method === "capm" || method === "black_litterman") return capm;
     if (method === "blend") return 0.5 * a.historicalReturn + 0.5 * capm;
     return a.historicalReturn;
   });
@@ -183,18 +184,41 @@ export interface OptimizeParams {
   /** Additional THB to invest on top of current holdings. */
   extraCash?: number;
   covMethod?: "sample" | "ledoit_wolf";
+  blackLitterman?: { marketWeights: Record<string, number>; marketRiskAversion?: number; tau?: number; views?: BlView[]; posteriorCovariance?: boolean };
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
   const u = await loadUniverse(p.lookbackDays, p.symbols);
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
-  const mu = expectedReturns(u, p.returnMethod ?? "blend", p.overrides);
+  const symbols = u.assets.map((a) => a.symbol);
+  const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
+  const method = p.returnMethod ?? "blend";
+  let mu = expectedReturns(u, method, p.overrides);
+  let cov = baseCov;
+  const extraWarnings: string[] = [];
+  let bl: ReturnType<typeof blackLittermanSummary> | null = null;
+  if (method === "black_litterman") {
+    if (!p.blackLitterman) throw new OptimizerError({ code: "INVALID_INPUT", message: "Black–Litterman ต้องระบุ marketWeights" });
+    const b = blackLitterman({
+      symbols,
+      cov: baseCov,
+      rf: u.riskFree,
+      marketWeights: p.blackLitterman.marketWeights,
+      riskAversion: p.blackLitterman.marketRiskAversion,
+      marketPremium: u.equityRiskPremium,
+      tau: p.blackLitterman.tau ?? 0.05,
+      views: p.blackLitterman.views ?? [],
+    });
+    if (!b.ok) throw new OptimizerError({ code: "INVALID_INPUT", message: b.errors.join(" · ") });
+    mu = b.posterior.map((m, i) => p.overrides?.[symbols[i]] ?? m);
+    if (p.overrides && Object.keys(p.overrides).length) extraWarnings.push("ใช้ overrides แทน posterior ของสินทรัพย์ที่ระบุ");
+    if (p.blackLitterman.posteriorCovariance) cov = b.posteriorCov!;
+    extraWarnings.push(...b.warnings);
+    bl = blackLittermanSummary(b, symbols);
+  }
   const currentValues = u.assets.map((a) => a.currentValue);
-  const r = recommend({
-    symbols: u.assets.map((a) => a.symbol),
-    mu,
-    cov: p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov,
+  const constraints = {
     rf: u.riskFree,
     bounds: { min: p.minWeight ?? 0, max: p.maxWeight ?? 1 },
     objective: p.objective ?? "max_sharpe",
@@ -204,14 +228,32 @@ export async function optimizePortfolio(p: OptimizeParams) {
     currentValues,
     totalWealth: currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0),
     useRiskFree: p.useRiskFree ?? false,
+  };
+  const r = recommend({
+    symbols,
+    mu,
+    cov,
+    ...constraints,
   });
+  // Same optimizer and constraints with the equilibrium prior, to compare recommended weights.
+  if (bl) {
+    const prior = recommend({ symbols, mu: bl.assets.map((a) => a.prior), cov: baseCov, ...constraints });
+    bl.weights = symbols.map((s, i) => ({
+      symbol: s,
+      market: bl!.assets[i].marketWeight,
+      priorOptimal: prior.ok ? prior.allocations[i].weight : null,
+      posteriorOptimal: r.ok ? r.allocations[i].weight : null,
+    }));
+    if (!prior.ok) extraWarnings.push(`พอร์ตจาก prior คำนวณไม่ได้: ${prior.issue.message}`);
+  }
   // Surfaces as REST 400 / MCP isError with the typed code; no weights are returned.
   if (!r.ok) throw new OptimizerError(r.issue);
   return {
     ok: true as const,
     period: { from: u.from, to: u.to, observations: u.observations },
     riskFree: u.riskFree,
-    returnMethod: p.returnMethod ?? "blend",
+    returnMethod: method,
+    blackLitterman: bl,
     assets: u.assets.map((a, i) => ({ symbol: a.symbol, assetClass: a.assetClass, expectedReturn: mu[i], volatility: a.volatility, beta: a.beta })),
     skipped: u.skipped,
     objective: r.objective,
@@ -225,6 +267,18 @@ export async function optimizePortfolio(p: OptimizeParams) {
     solver: r.solver,
     constraints: r.constraints,
     covariance: { method: p.covMethod ?? "sample", shrinkage: p.covMethod === "ledoit_wolf" ? u.shrinkage : 0, ...r.covariance, periodsPerYear: u.periodsPerYear },
-    warnings: [...u.covarianceWarnings, ...r.warnings],
+    warnings: [...u.covarianceWarnings, ...extraWarnings, ...r.warnings],
+  };
+}
+
+function blackLittermanSummary(b: ReturnType<typeof blackLitterman>, symbols: string[]) {
+  return {
+    riskAversion: b.riskAversion,
+    riskAversionSource: b.riskAversionSource,
+    tau: b.tau,
+    omegaMethod: "ω = ((1 − confidence) / confidence) · pτΣpᵀ unless a view variance is given",
+    assets: symbols.map((s, i) => ({ symbol: s, marketWeight: b.marketWeights[i], prior: b.prior[i], posterior: b.posterior[i], change: b.posterior[i] - b.prior[i] })),
+    views: b.views.map(({ label, q, confidence, omega, priorValue, posteriorValue }) => ({ view: label, q, confidence, omega, priorValue, posteriorValue })),
+    weights: [] as { symbol: string; market: number; priorOptimal: number | null; posteriorOptimal: number | null }[],
   };
 }
