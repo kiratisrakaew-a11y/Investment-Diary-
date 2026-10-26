@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { evaluate, valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
+import { evaluate, evaluateMultiStageRi, multiStageRiToolInput, valuationInput, type MultiStageRiToolInput, type ValuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
 import { MODEL_VERSION } from "@/lib/governance";
 import { getAssetBySymbol } from "./assets";
@@ -68,6 +68,16 @@ export async function saveValuation(input: SaveValuationInput) {
   }
   const [row] = await db.insert(schema.valuations).values(values).returning();
   return { valuation: row, summary };
+}
+
+/** Multi-stage residual income from the flat tool input; saves it when `save` is true. */
+export async function multiStageResidualIncome(input: MultiStageRiToolInput | unknown, source: SaveValuationInput["source"]) {
+  const x = multiStageRiToolInput.parse(input);
+  const r = evaluateMultiStageRi(x);
+  if (!x.save) return r.result;
+  if (!x.symbol) throw new Error("ต้องระบุ symbol เมื่อ save = true");
+  const saved = await saveValuation({ symbol: x.symbol, title: x.title, note: x.note, valuation: r.valuation, source });
+  return { ...r.result, saved: { id: saved.valuation.id, symbol: saved.valuation.symbol } };
 }
 
 export async function deleteValuation(id: number) {

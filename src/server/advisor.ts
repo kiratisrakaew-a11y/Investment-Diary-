@@ -7,14 +7,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { bondSchema, evaluate, valuationInput } from "@/lib/valuation-schemas";
+import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { noteInput, today } from "@/lib/validation";
 import { fetchFundamentals } from "@/lib/prices/yahoo";
 import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { bondHoldings } from "./services/bonds";
-import { listValuations, saveValuation } from "./services/valuations";
+import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
 import { getSettings, getTargets } from "./services/settings";
 import { getAssetBySymbol } from "./services/assets";
@@ -158,6 +158,14 @@ function tools() {
       description: "Save a note to the diary timeline. Only call when the user asks to save/record something.",
       inputSchema: noteInput.omit({ source: true }),
       run: async (n) => json(await createNote({ ...n, source: "claude" })),
+    }),
+    betaZodTool({
+      name: "multi_stage_residual_income",
+      description:
+        "Residual income with yearly ROE (and optional EPS / payout / stated book value) forecasts plus a perpetuity, persistence or no continuing value. " +
+        "Returns value per share and the yearly table. save: true (with symbol) saves it — only when the user asks to save.",
+      inputSchema: multiStageRiToolInput,
+      run: async (x) => json(await multiStageResidualIncome(x, "claude")),
     }),
     betaZodTool({
       name: "save_valuation",

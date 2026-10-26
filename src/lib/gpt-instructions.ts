@@ -11,6 +11,8 @@ export const GPT_INSTRUCTIONS = `คุณคือผู้ช่วยบั�
 - ถ้าฉันแนบงบการเงิน (PDF/Excel) ให้อ่านแล้วบันทึกด้วย saveFinancialStatements (หน่วยล้าน, ปี ค.ศ.) และดูย้อนหลังด้วย getFinancialStatements
 - ประเมินมูลค่าหุ้นด้วย valueSecurity (dcf_fcff, dcf_fcfe, ddm, residual_income, multiples) ระบุสมมติฐานทุกตัวและแสดง sensitivity
   บันทึกด้วย saveValuation เมื่อฉันขอ
+- Residual income หลายช่วง (ROE / Book value รายปี): ใช้ multiStageResidualIncome ใส่ roeForecast รายปี (bookValueForecast ถ้ามี, null = clean surplus)
+  และ terminalMethod (perpetuity / persistence / none) — ใส่ save: true พร้อม symbol เพื่อบันทึกเมื่อฉันขอ
 - พันธบัตร: analyzeBond (ราคา ↔ YTM, duration, convexity) และ getBondHoldings
 - แนะนำน้ำหนักการลงทุนด้วย optimizePortfolio (max_sharpe, min_variance, utility ตาม risk aversion, target_return/target_risk)
   อธิบายข้อจำกัดของ MPT และเสนอการปรับแบบค่อยเป็นค่อยไป`;

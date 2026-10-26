@@ -133,3 +133,36 @@ describe("explicit model: multi_stage", () => {
     expect(r.value!).toBeCloseTo(residualIncome(10, 0.12, 0.1, 0.03), 12);
   });
 });
+
+describe("multi_stage_residual_income tool input", () => {
+  it("flat tool input gives the same value as the residual_income valuation with model multi_stage", async () => {
+    const { evaluateMultiStageRi, multiStageRiToolInput } = await import("../valuation-schemas");
+    const x = multiStageRiToolInput.parse({
+      bookValuePerShare: 10,
+      currentPrice: 12,
+      riskFree: 0.02,
+      beta: 1,
+      equityRiskPremium: 0.08,
+      payoutRatio: 0.5,
+      roeForecast: [0.2, 0.15, 0.12],
+      bookValueForecast: [null, 12, null],
+      terminalMethod: "none",
+    });
+    const r = evaluateMultiStageRi(x);
+    const ref = evaluate({
+      method: "residual_income",
+      assumptions: { bookValuePerShare: 10, roe: 0.12, payoutRatio: 0.5, currentPrice: 12, riskFree: 0.02, beta: 1, equityRiskPremium: 0.08, extraPremium: 0, terminalGrowth: 0, model: "multi_stage", forecast: [{ roe: 0.2 }, { roe: 0.15, bookValueEnd: 12 }, { roe: 0.12 }], terminalMethod: "none" },
+    });
+    expect(r.result.value!).toBeCloseTo(ref.value!, 12);
+    expect(r.result.model).toBe("multi_stage");
+    expect((r.valuation.assumptions as { model: string }).model).toBe("multi_stage");
+  });
+  it("tool schema is flat (no union over valuation methods) and requires roeForecast", async () => {
+    const { z } = await import("zod");
+    const { multiStageRiToolInput } = await import("../valuation-schemas");
+    const js = z.toJSONSchema(multiStageRiToolInput, { io: "input", unrepresentable: "any" }) as { required?: string[]; anyOf?: unknown };
+    expect(js.anyOf).toBeUndefined();
+    expect(js.required).toContain("roeForecast");
+    expect(JSON.stringify(js).length).toBeLessThan(6000);
+  });
+});

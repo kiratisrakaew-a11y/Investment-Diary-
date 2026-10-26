@@ -396,3 +396,64 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
     }
   }
 }
+
+// ------------------------------------------------------------------ multi-stage residual income tool
+
+/**
+ * Flat input for the dedicated `multi_stage_residual_income` tool, so AI clients do not have to
+ * navigate the nested multi-method valuation schema. Converted to a residual_income valuation
+ * with model: "multi_stage".
+ */
+export const multiStageRiToolInput = z.object({
+  symbol: z.string().optional().describe("Stock symbol, required when save = true"),
+  save: z.boolean().default(false).describe("true = also save to the Valuation page"),
+  title: z.string().optional(),
+  note: z.string().optional(),
+  bookValuePerShare: money("Opening book value per share B₀"),
+  currentPrice: money("Current share price"),
+  riskFree: rate("Risk-free rate"),
+  beta: z.number().describe("Equity beta"),
+  equityRiskPremium: rate("Equity risk premium"),
+  extraPremium: rate("Additional premium").default(0),
+  payoutRatio: rate("Base payout ratio (used for years without payoutForecast)").default(0.5),
+  roeForecast: z.array(z.number().nullable()).min(1).max(30).describe("ROE per year (decimal), year 1 first; null when that year uses epsForecast"),
+  epsForecast: z.array(z.number().nullable()).max(30).optional().describe("EPS per year (overrides ROE for that year)"),
+  payoutForecast: z.array(z.number().nullable()).max(30).optional().describe("Payout ratio per year (decimal)"),
+  bookValueForecast: z.array(z.number().nullable()).max(30).optional().describe("Stated year-end book value per share; null = clean surplus"),
+  terminalMethod: z.enum(["perpetuity", "persistence", "none"]).default("perpetuity").describe("Continuing value after the last year"),
+  terminalGrowth: rate("Long-run growth for the perpetuity continuing value").default(0),
+  terminalRoe: rate("ROE after the forecast (defaults to the last year)").optional(),
+  persistence: z.number().min(0).max(1).optional().describe("ω for the persistence continuing value (default 0.6)"),
+  inputMeta: inputMetaSchema,
+});
+export type MultiStageRiToolInput = z.infer<typeof multiStageRiToolInput>;
+
+export function toRiValuation(x: MultiStageRiToolInput): ValuationInput {
+  const { symbol: _s, save: _v, title: _t, note: _n, ...a } = x;
+  // Single-stage `roe` is required by the schema but unused in multi-stage; keep the long-run ROE there for the editor.
+  const lastRoe = [...a.roeForecast].reverse().find((v): v is number => v != null);
+  return { method: "residual_income", assumptions: { ...a, roe: a.terminalRoe ?? lastRoe ?? 0, model: "multi_stage" } };
+}
+
+/** Evaluate (and summarize) a multi-stage residual income valuation for the AI tools. */
+export function evaluateMultiStageRi(x: MultiStageRiToolInput) {
+  const valuation = toRiValuation(x);
+  const r = evaluate(valuation);
+  const d = r.details as { years?: unknown; costOfEquity?: number; pvResidualIncome?: number; terminalValue?: number | null; pvTerminalValue?: number | null; errors?: unknown; warnings?: string[] };
+  return {
+    valuation,
+    result: {
+      model: "multi_stage",
+      value: r.value,
+      price: r.price,
+      upside: r.upside,
+      costOfEquity: d.costOfEquity,
+      pvResidualIncome: d.pvResidualIncome,
+      continuingValue: d.terminalValue,
+      pvContinuingValue: d.pvTerminalValue,
+      years: d.years,
+      errors: d.errors,
+      warnings: [...((r.details.sanityWarnings as string[] | undefined) ?? [])],
+    },
+  };
+}

@@ -1,7 +1,7 @@
 /** OpenAPI 3.1 document for ChatGPT Custom GPT Actions, generated from the shared zod schemas. */
 import { z } from "zod";
 import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
-import { bondSchema, valuationInput } from "@/lib/valuation-schemas";
+import { bondSchema, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { financialYearSchema } from "@/lib/financials";
 
@@ -132,6 +132,17 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Valuation summary") },
         },
       },
+      "/api/v1/valuation/residual-income": {
+        post: {
+          operationId: "multiStageResidualIncome",
+          summary: "Multi-stage residual income: yearly ROE / EPS / payout / book value forecasts + continuing value (optionally save)",
+          description:
+            "roeForecast is required (decimal per year, year 1 first). bookValueForecast null = clean surplus. terminalMethod: perpetuity RI(n+1)/(Ke−g), persistence RI(n+1)/(1+Ke−ω) or none. " +
+            "Set save: true and symbol to save it to the Valuation page (ask the user first).",
+          requestBody: body("MultiStageResidualIncome"),
+          responses: { "200": ok("Value per share, upside, yearly residual income table, warnings") },
+        },
+      },
       "/api/v1/valuations": {
         get: {
           operationId: "listValuations",
@@ -195,6 +206,7 @@ export function buildOpenApi(origin: string) {
         AssetInput: schema(assetInput),
         PriceInput: schema(priceInput),
         ValuationInput: schema(valuationInput),
+        MultiStageResidualIncome: schema(multiStageRiToolInput),
         SaveValuation: schema(
           z.object({
             symbol: z.string(),

@@ -11,12 +11,12 @@ import { createNote, listNotes } from "./services/notes";
 import { recordPrice } from "./services/prices";
 import { createTransaction, listTransactions } from "./services/transactions";
 import { getAllocation, getMptAnalysis, getPerformance, getPortfolioSummary } from "./services/portfolio";
-import { bondSchema, evaluate, valuationInput } from "@/lib/valuation-schemas";
+import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { bondHoldings } from "./services/bonds";
-import { listValuations, saveValuation } from "./services/valuations";
+import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
 
@@ -211,6 +211,7 @@ export function createMcpServer() {
       title: "Value a stock / bond",
       description:
         "Run a valuation model with explicit assumptions: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond. " +
+        "residual_income supports model: multi_stage with yearly roeForecast / bookValueForecast — the simpler multi_stage_residual_income tool does the same. " +
         "Returns intrinsic value per share, upside vs. price, WACC/Ke, terminal value share, reverse-DCF growth and a WACC×g sensitivity grid. Rates are decimals.",
       inputSchema: { valuation: valuationInput },
       annotations: { readOnlyHint: true },
@@ -222,10 +223,24 @@ export function createMcpServer() {
     "save_valuation",
     {
       title: "Save valuation",
-      description: "Save a valuation (method + assumptions) to the app so it appears on the Valuation page.",
+      description:
+        "Save a valuation (method + assumptions) to the app so it appears on the Valuation page. For multi-stage residual income use multi_stage_residual_income with save: true (or residual_income with model: multi_stage).",
       inputSchema: { symbol: z.string(), title: z.string().optional(), note: z.string().optional(), valuation: valuationInput },
     },
     safe(async (v) => saveValuation({ ...v, source: "claude" })),
+  );
+
+  server.registerTool(
+    "multi_stage_residual_income",
+    {
+      title: "Multi-stage residual income valuation",
+      description:
+        "Residual income with yearly forecasts: give book value per share B₀, CAPM inputs, roeForecast per year (and optionally epsForecast, payoutForecast, " +
+        "bookValueForecast — null = clean surplus), then a continuing value: perpetuity RI(n+1)/(Ke−g), persistence RI(n+1)/(1+Ke−ω) or none. " +
+        "Returns value per share, upside, yearly RI table and warnings. Set save: true with symbol to save it to the Valuation page. Rates are decimals.",
+      inputSchema: multiStageRiToolInput.shape,
+    },
+    safe(async (x) => multiStageResidualIncome(x, "claude")),
   );
 
   server.registerTool(
