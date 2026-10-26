@@ -38,7 +38,7 @@ Decisions taken with the owner:
 |---|---|---|
 | Buy 10 @100, sell 11 @120 (legacy) | realized **320** | realized **200** + `OVERSELL` warning |
 | Same via REST/MCP today | accepted | **400 OVERSELL** / `isError: true` |
-| 182 days, +5% | "annualized" **5.00%** | cumulative **5.00%**, annualized **–**, equivalent 10.27% (labelled extrapolated) |
+| 182 days, +5% | "annualized" **5.00%** | cumulative **5.00%**, annualized **–**, equivalent 10.28% (labelled extrapolated) |
 | Local seed portfolio (719 days) | — | TWR cum 26.66%, annual 12.74%, XIRR 12.88% (status ok, residual 1e-8), Sharpe 0.60 (N ≈ 260.4), β 0.39 ± 0.06, α 7.31% ± 13.88% (not significant) |
 
 ## 4. Changed files
