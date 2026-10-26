@@ -11,6 +11,11 @@ import { createNote, listNotes } from "./services/notes";
 import { recordPrice } from "./services/prices";
 import { createTransaction, listTransactions } from "./services/transactions";
 import { getAllocation, getMptAnalysis, getPerformance, getPortfolioSummary } from "./services/portfolio";
+import { bondSchema, evaluate, valuationInput } from "@/lib/valuation-schemas";
+import { optimizeInput } from "./optimize-schema";
+import { loadUniverse, optimizePortfolio } from "./services/optimizer";
+import { bondHoldings } from "./services/bonds";
+import { listValuations, saveValuation } from "./services/valuations";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -32,7 +37,8 @@ export function createMcpServer() {
         "Personal investment diary (base currency THB). Use add_note to record ideas, theses, reviews and lessons " +
         "on the timeline; record_transaction for trades (add_asset first for new symbols); update_price for manual " +
         "prices/NAVs; and get_* tools to read holdings, asset allocation and risk-adjusted performance " +
-        "(TWR, XIRR, Sharpe, Sortino, Beta, Jensen's alpha, Treynor, efficient frontier). Dates are YYYY-MM-DD.",
+        "(TWR, XIRR, Sharpe, Sortino, Beta, Jensen's alpha, Treynor, efficient frontier). value_security runs DCF (FCFF/FCFE), DDM, " +
+        "residual income and multiples; analyze_bond gives YTM/duration; optimize_portfolio recommends weights. Dates are YYYY-MM-DD.",
     },
   );
 
@@ -179,6 +185,79 @@ export function createMcpServer() {
       const { cloud: _c, frontier: _f, ...rest } = r;
       return rest;
     }),
+  );
+
+  server.registerTool(
+    "value_security",
+    {
+      title: "Value a stock / bond",
+      description:
+        "Run a valuation model with explicit assumptions: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond. " +
+        "Returns intrinsic value per share, upside vs. price, WACC/Ke, terminal value share, reverse-DCF growth and a WACC×g sensitivity grid. Rates are decimals.",
+      inputSchema: { valuation: valuationInput },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ valuation }) => evaluate(valuation)),
+  );
+
+  server.registerTool(
+    "save_valuation",
+    {
+      title: "Save valuation",
+      description: "Save a valuation (method + assumptions) to the app so it appears on the Valuation page.",
+      inputSchema: { symbol: z.string(), title: z.string().optional(), note: z.string().optional(), valuation: valuationInput },
+    },
+    safe(async (v) => saveValuation({ ...v, source: "claude" })),
+  );
+
+  server.registerTool(
+    "list_valuations",
+    { title: "List valuations", description: "Saved valuations, optionally for one symbol.", inputSchema: { symbol: z.string().optional() }, annotations: { readOnlyHint: true } },
+    safe(async ({ symbol }) => listValuations({ symbol, limit: 50 })),
+  );
+
+  server.registerTool(
+    "analyze_bond",
+    {
+      title: "Bond analytics",
+      description: "Price ↔ yield to maturity, accrued interest, current yield, Macaulay/modified duration, convexity, DV01, yield to call. Prices per 100 face.",
+      inputSchema: bondSchema.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (a) => evaluate({ method: "bond", assumptions: a })),
+  );
+
+  server.registerTool(
+    "get_bond_holdings",
+    { title: "Bond holdings", description: "YTM and duration of the user's bonds and the portfolio-weighted bond duration.", annotations: { readOnlyHint: true } },
+    safe(async () => bondHoldings()),
+  );
+
+  server.registerTool(
+    "get_investment_universe",
+    {
+      title: "Investment universe",
+      description: "Assets with enough history: historical return, volatility, beta and CAPM expected return (THB, annual).",
+      inputSchema: { lookbackDays: z.number().int().min(90).max(3650).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ lookbackDays }) => {
+      const { cov: _c, ...u } = await loadUniverse(lookbackDays);
+      return u;
+    }),
+  );
+
+  server.registerTool(
+    "optimize_portfolio",
+    {
+      title: "Recommend portfolio weights (MPT)",
+      description:
+        "Markowitz optimization with editable expected returns and weight limits. Objectives: max_sharpe, min_variance, target_return, target_risk, utility (risk aversion A). " +
+        "Returns recommended weights, THB buy/sell amounts vs. current holdings, and the min-variance / max-Sharpe portfolios.",
+      inputSchema: optimizeInput.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (p) => optimizePortfolio(p)),
   );
 
   return server;

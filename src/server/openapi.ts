@@ -1,6 +1,8 @@
 /** OpenAPI 3.1 document for ChatGPT Custom GPT Actions, generated from the shared zod schemas. */
 import { z } from "zod";
 import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
+import { bondSchema, valuationInput } from "@/lib/valuation-schemas";
+import { optimizeInput } from "./optimize-schema";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -111,6 +113,51 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Metrics (decimals, 0.05 = 5%)") },
         },
       },
+      "/api/v1/valuation/evaluate": {
+        post: {
+          operationId: "valueSecurity",
+          summary: "Value a stock or bond: DCF (FCFF/FCFE), DDM, residual income, multiples, bond",
+          description:
+            "Send { method, assumptions }. Rates are decimals. DCF monetary inputs share one unit (e.g. THB million & million shares). " +
+            "Returns intrinsic value per share, upside, WACC/Ke, terminal-value share, reverse-DCF growth and a sensitivity grid.",
+          requestBody: body("ValuationInput"),
+          responses: { "200": ok("Valuation summary") },
+        },
+      },
+      "/api/v1/valuations": {
+        get: {
+          operationId: "listValuations",
+          summary: "List saved valuations",
+          parameters: [q("symbol", "Asset symbol")],
+          responses: { "200": okList("Valuations") },
+        },
+        post: {
+          operationId: "saveValuation",
+          summary: "Save a valuation to the app (set source to chatgpt)",
+          requestBody: body("SaveValuation"),
+          responses: { "200": ok("Saved valuation") },
+        },
+      },
+      "/api/v1/bonds": {
+        get: { operationId: "getBondHoldings", summary: "YTM and duration of the user's bonds", responses: { "200": ok("Bond holdings") } },
+      },
+      "/api/v1/bonds/analyze": {
+        post: {
+          operationId: "analyzeBond",
+          summary: "Bond price ↔ YTM, accrued interest, duration, convexity, DV01, yield to call (per 100 face)",
+          requestBody: body("BondInput"),
+          responses: { "200": ok("Bond analytics") },
+        },
+      },
+      "/api/v1/portfolio/optimize": {
+        post: {
+          operationId: "optimizePortfolio",
+          summary: "Recommend portfolio weights with Modern Portfolio Theory",
+          description: "Objectives: max_sharpe, min_variance, target_return, target_risk, utility (risk aversion A). Returns weights and THB trades.",
+          requestBody: body("OptimizeInput"),
+          responses: { "200": ok("Recommendation") },
+        },
+      },
       "/api/v1/portfolio/mpt": {
         get: {
           operationId: "getPortfolioOptimization",
@@ -125,6 +172,18 @@ export function buildOpenApi(origin: string) {
         TransactionInput: schema(transactionInput),
         AssetInput: schema(assetInput),
         PriceInput: schema(priceInput),
+        ValuationInput: schema(valuationInput),
+        SaveValuation: schema(
+          z.object({
+            symbol: z.string(),
+            title: z.string().optional(),
+            note: z.string().optional(),
+            source: z.enum(["chatgpt", "api"]).optional(),
+            valuation: valuationInput,
+          }),
+        ),
+        BondInput: schema(bondSchema),
+        OptimizeInput: schema(optimizeInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
     },
