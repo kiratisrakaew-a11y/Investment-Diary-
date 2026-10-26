@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 /** Paths that authenticate themselves (Bearer API key) or are public. */
-const PUBLIC = [/^\/login/, /^\/api\/v1\//, /^\/api\/mcp/, /^\/api\/openapi\.json$/, /^\/api\/cron\//];
+const PUBLIC = [/^\/login/, /^\/api\/v1\//, /^\/api\/advisor/, /^\/api\/mcp/, /^\/api\/openapi\.json$/, /^\/api\/cron\//];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

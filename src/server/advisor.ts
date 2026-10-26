@@ -1,0 +1,188 @@
+/**
+ * In-app AI investment advisor built on the Claude API tool runner. Claude
+ * reads the user's real portfolio through the same services the UI uses and
+ * runs the app's valuation / bond / Markowitz engines as tools, so every number
+ * it quotes is computed rather than guessed.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { z } from "zod";
+import { bondSchema, evaluate, valuationInput } from "@/lib/valuation-schemas";
+import { noteInput, today } from "@/lib/validation";
+import { fetchFundamentals } from "@/lib/prices/yahoo";
+import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
+import { loadUniverse, optimizePortfolio } from "./services/optimizer";
+import { bondHoldings } from "./services/bonds";
+import { listValuations, saveValuation } from "./services/valuations";
+import { createNote, listNotes } from "./services/notes";
+import { getSettings, getTargets } from "./services/settings";
+import { getAssetBySymbol } from "./services/assets";
+import { optimizeInput } from "./optimize-schema";
+
+const MODEL = process.env.ADVISOR_MODEL ?? "claude-opus-5-5";
+const EFFORT = (process.env.ADVISOR_EFFORT ?? "medium") as "low" | "medium" | "high" | "xhigh" | "max";
+
+const SYSTEM = `คุณคือที่ปรึกษาการลงทุนส่วนตัวในแอป Investment Diary ของผู้ใช้ (สกุลเงินหลักบาท) ตอบเป็นภาษาไทย
+ใช้ทฤษฎีการเงินอย่างถูกต้อง: CAPM, WACC, DCF (FCFF/FCFE), DDM, residual income, multiples, bond pricing/YTM/duration,
+Modern Portfolio Theory (efficient frontier, tangency, two-fund separation, complete portfolio ตาม risk aversion)
+
+หลักการทำงาน
+- ดึงข้อมูลจริงด้วยเครื่องมือก่อนให้คำแนะนำ อย่าเดาตัวเลขพอร์ต ราคา หรือผลตอบแทน
+- การประเมินมูลค่า: ระบุสมมติฐานทุกตัวที่ใช้ (Rf, β, ERP, growth, margin ฯลฯ) และที่มา ถ้าข้อมูลไม่พอให้ถามผู้ใช้ หรือใช้ get_fundamentals แล้วบอกว่ามาจาก Yahoo
+  ให้มูลค่าเป็นช่วงด้วย sensitivity และเทียบหลายวิธี อธิบาย margin of safety
+- การจัดพอร์ต: ใช้ optimize_portfolio ระบุ objective, ข้อจำกัดน้ำหนัก และวิธีประมาณผลตอบแทนคาดหวังที่เลือก
+  อธิบายข้อจำกัดของ MPT (estimation error, ข้อมูลในอดีต) และเสนอการปรับแบบค่อยเป็นค่อยไป
+- ค่าจากเครื่องมือเป็นทศนิยม (0.05 = 5%) ให้แสดงเป็น % ที่อ่านง่าย
+- บันทึกลงไดอารี่ (save_note / save_valuation) เฉพาะเมื่อผู้ใช้ขอ
+- ตอบกระชับ ใช้หัวข้อและตารางเมื่อช่วยให้อ่านง่าย
+- ปิดท้ายคำแนะนำการซื้อขายด้วยหมายเหตุสั้น ๆ ว่าเป็นการวิเคราะห์เพื่อประกอบการตัดสินใจ ไม่ใช่คำแนะนำจากผู้ได้รับใบอนุญาต`;
+
+const json = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === "number" && !Number.isInteger(x) ? Number(x.toPrecision(6)) : x));
+
+function tools() {
+  return [
+    betaZodTool({
+      name: "get_portfolio_summary",
+      description: "Current holdings: quantity, average cost, market value, unrealized/realized P&L and weights in THB, plus cash.",
+      inputSchema: z.object({}),
+      run: async () => json(await getPortfolioSummary()),
+    }),
+    betaZodTool({
+      name: "get_allocation",
+      description: "Actual vs. target asset allocation by asset class with drift and rebalance amounts (THB).",
+      inputSchema: z.object({}),
+      run: async () => json({ ...(await getAllocation()), targets: await getTargets() }),
+    }),
+    betaZodTool({
+      name: "get_performance_metrics",
+      description: "Portfolio TWR, XIRR, volatility, max drawdown, VaR, Sharpe, Sortino, beta, Jensen's alpha, Treynor vs. benchmark, and the app's risk-free rate / ERP settings.",
+      inputSchema: z.object({}),
+      run: async () => {
+        const { growth: _g, valueSeries: _v, ...m } = await getPerformance();
+        return json({ ...m, settings: await getSettings() });
+      },
+    }),
+    betaZodTool({
+      name: "get_investment_universe",
+      description: "Assets with enough price history for portfolio optimization: historical return, volatility, beta and CAPM expected return (annual, THB).",
+      inputSchema: z.object({ lookbackDays: z.number().int().min(90).max(3650).optional() }),
+      run: async ({ lookbackDays }) => {
+        const { cov: _c, ...u } = await loadUniverse(lookbackDays);
+        return json(u);
+      },
+    }),
+    betaZodTool({
+      name: "optimize_portfolio",
+      description:
+        "Markowitz mean-variance optimization over held/registered assets. Returns recommended weights, THB trades vs. current holdings, and the min-variance / max-Sharpe portfolios. " +
+        "objective: max_sharpe | min_variance | target_return | target_risk | utility (uses riskAversion A in U = E[R] − ½Aσ²). useRiskFree mixes the tangency portfolio with the risk-free asset (complete portfolio y*).",
+      inputSchema: optimizeInput,
+      run: async (p) => json(await optimizePortfolio(p)),
+    }),
+    betaZodTool({
+      name: "value_security",
+      description:
+        "Run a valuation model and return intrinsic value, upside and details. method: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond. " +
+        "DCF monetary inputs share one unit (e.g. THB million and million shares).",
+      inputSchema: z.object({ valuation: valuationInput }),
+      run: async ({ valuation }) => json(evaluate(valuation)),
+    }),
+    betaZodTool({
+      name: "analyze_bond",
+      description: "Bond price ↔ YTM, accrued interest, current yield, Macaulay/modified duration, convexity, DV01, yield to call. Prices per 100 face.",
+      inputSchema: bondSchema,
+      run: async (a) => json(evaluate({ method: "bond", assumptions: a })),
+    }),
+    betaZodTool({
+      name: "get_bond_holdings",
+      description: "YTM, duration and convexity of the user's bond assets at their latest prices, plus portfolio-weighted bond duration.",
+      inputSchema: z.object({}),
+      run: async () => json(await bondHoldings()),
+    }),
+    betaZodTool({
+      name: "get_fundamentals",
+      description: "Best-effort fundamentals snapshot from Yahoo Finance (revenue, EBITDA, margins, debt, cash, shares, beta, EPS, BVPS, dividend). Thai stocks use the .BK suffix. Monetary values in millions.",
+      inputSchema: z.object({ symbol: z.string().describe("App symbol or Yahoo symbol, e.g. PTT or PTT.BK") }),
+      run: async ({ symbol }) => {
+        const asset = await getAssetBySymbol(symbol);
+        const yahoo = asset?.providerSymbol ?? (asset?.assetClass === "thai_stock" ? `${asset.symbol}.BK` : symbol);
+        try {
+          return json({ yahooSymbol: yahoo, ...(await fetchFundamentals(yahoo)) });
+        } catch (e) {
+          return json({ yahooSymbol: yahoo, error: `ดึงข้อมูลไม่สำเร็จ: ${(e as Error).message}` });
+        }
+      },
+    }),
+    betaZodTool({
+      name: "list_valuations",
+      description: "Saved valuations (method, intrinsic value, price at valuation, date), optionally for one symbol.",
+      inputSchema: z.object({ symbol: z.string().optional() }),
+      run: async ({ symbol }) => json(await listValuations({ symbol, limit: 30 })),
+    }),
+    betaZodTool({
+      name: "search_notes",
+      description: "Search the user's investment diary notes (theses, ideas, lessons).",
+      inputSchema: z.object({ q: z.string().optional(), symbol: z.string().optional(), limit: z.number().int().max(50).optional() }),
+      run: async ({ q, symbol, limit }) => {
+        const asset = symbol ? await getAssetBySymbol(symbol) : null;
+        return json(await listNotes({ q, assetId: asset?.id, limit: limit ?? 15 }));
+      },
+    }),
+    betaZodTool({
+      name: "save_note",
+      description: "Save a note to the diary timeline. Only call when the user asks to save/record something.",
+      inputSchema: noteInput.omit({ source: true }),
+      run: async (n) => json(await createNote({ ...n, source: "claude" })),
+    }),
+    betaZodTool({
+      name: "save_valuation",
+      description: "Save a valuation with its assumptions to the app. Only call when the user asks to save it.",
+      inputSchema: z.object({ symbol: z.string(), title: z.string().optional(), note: z.string().optional(), valuation: valuationInput }),
+      run: async (v) => json(await saveValuation({ ...v, source: "claude" })),
+    }),
+  ];
+}
+
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+export class AdvisorNotConfigured extends Error {}
+
+export async function askAdvisor(history: ChatTurn[]): Promise<{ reply: string; toolsUsed: string[] }> {
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+    throw new AdvisorNotConfigured("ยังไม่ได้ตั้งค่า ANTHROPIC_API_KEY ใน environment variables");
+  }
+  const client = new Anthropic();
+  const runner = client.beta.messages.toolRunner({
+    model: MODEL,
+    max_tokens: 16000,
+    thinking: { type: "adaptive" },
+    output_config: { effort: EFFORT },
+    // Re-run declined requests on a suitable fallback model instead of stopping.
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+    tools: tools(),
+    messages: [
+      ...history.slice(0, -1).map((t) => ({ role: t.role, content: t.content })),
+      { role: "user" as const, content: `${history[history.length - 1].content}\n\n(วันนี้: ${today()})` },
+    ],
+    max_iterations: 15,
+    thread: false,
+  });
+
+  const toolsUsed: string[] = [];
+  let final: Anthropic.Beta.BetaMessage | undefined;
+  for await (const message of runner) {
+    final = message;
+    for (const b of message.content) if (b.type === "tool_use") toolsUsed.push(b.name);
+  }
+  if (!final) throw new Error("ไม่ได้รับคำตอบจากโมเดล");
+  if (final.stop_reason === "refusal") return { reply: "ขออภัย คำขอนี้ไม่สามารถตอบได้ ลองถามใหม่อีกแบบ", toolsUsed };
+  const reply = final.content
+    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+  const truncated = final.stop_reason === "max_tokens" ? "\n\n_(คำตอบถูกตัดเพราะยาวเกิน)_" : "";
+  return { reply: (reply || "(ไม่มีข้อความตอบกลับ)") + truncated, toolsUsed: [...new Set(toolsUsed)] };
+}
