@@ -12,6 +12,7 @@ import { noteInput, today } from "@/lib/validation";
 import { fetchFundamentals } from "@/lib/prices/yahoo";
 import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
+import { dataQualityReport } from "./services/data-quality";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
@@ -53,6 +54,13 @@ function tools() {
       description: "Actual vs. target asset allocation by asset class with drift and rebalance amounts (THB).",
       inputSchema: z.object({}),
       run: async () => json({ ...(await getAllocation()), targets: await getTargets() }),
+    }),
+    betaZodTool({
+      name: "get_data_quality",
+      description:
+        "Data-quality and provenance checks (stale prices/FX, illustrative Rf/ERP, inferred deposits, benchmark type, valuations from older formulas). Call before giving advice and mention material warnings.",
+      inputSchema: z.object({}),
+      run: async () => json(await dataQualityReport()),
     }),
     betaZodTool({
       name: "get_performance_metrics",

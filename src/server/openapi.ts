@@ -104,13 +104,20 @@ export function buildOpenApi(origin: string) {
       "/api/v1/portfolio/summary": {
         get: { operationId: "getPortfolioSummary", summary: "Holdings, cost, market value and P&L in THB", responses: { "200": ok("Summary") } },
       },
+      "/api/v1/data-quality": {
+        get: {
+          operationId: "getDataQuality",
+          summary: "Data quality and assumption provenance: stale prices/FX, illustrative Rf/ERP, inferred cash, benchmark type, outdated valuations",
+          responses: { "200": ok("Checks with status ok / warn / error") },
+        },
+      },
       "/api/v1/portfolio/allocation": {
         get: { operationId: "getAllocation", summary: "Actual vs target asset allocation and rebalance amounts", responses: { "200": ok("Allocation") } },
       },
       "/api/v1/portfolio/performance": {
         get: {
           operationId: "getPerformanceMetrics",
-          summary: "TWR, XIRR, volatility, drawdown, risk premium, Sharpe, Sortino, beta, Jensen's alpha, Treynor",
+          summary: "Cumulative/annualized TWR, XIRR (with root status), volatility, drawdown, periodic-excess Sharpe/Sortino, OLS beta/alpha with standard errors, Treynor, IR, data-quality warnings",
           responses: { "200": ok("Metrics (decimals, 0.05 = 5%)") },
         },
       },

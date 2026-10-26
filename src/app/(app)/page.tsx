@@ -33,7 +33,8 @@ export default async function Dashboard() {
 
   return (
     <>
-      <PageHeader title="ภาพรวมพอร์ต" subtitle={perf.startDate ? `ตั้งแต่ ${perf.startDate} · Rf ${settings.riskFreeRate}% · เทียบ ${settings.benchmarkSymbol}` : undefined} />
+      <PageHeader title="ภาพรวมพอร์ต" subtitle={perf.startDate ? `ตั้งแต่ ${perf.startDate} · Rf ${settings.riskFreeRate}%${settings.rfSource ? ` (${settings.rfSource})` : " (ค่าตัวอย่าง)"} · เทียบ ${settings.benchmarkSymbol}` : undefined}
+        action={<Link href="/data-quality" className="text-xs text-accent">คุณภาพข้อมูล →</Link>} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat label="มูลค่าพอร์ต" value={fmtThb(summary.totalValueThb)} sub={`เงินสด ${fmtThb(summary.cashThb)}`} />

@@ -7,10 +7,11 @@ import { listNotes } from "@/server/services/notes";
 import { getPortfolioSummary } from "@/server/services/portfolio";
 import { PriceChart } from "@/components/charts";
 import { NoteCard } from "@/components/NoteCard";
-import { AddPriceForm } from "@/components/AssetForms";
+import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
+import { ActionForm } from "@/components/ActionForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
-import { deleteAssetAction } from "../../actions";
+import { deleteAssetAction, updateBondTermsAction } from "../../actions";
 import { ASSET_CLASS_LABEL, TX_TYPE_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
 export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +49,25 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           <Stat label="กำไรยังไม่รับรู้" value={fmtThb(pos.unrealizedPnlThb)} tone={signClass(pos.unrealizedPnlThb)} sub={fmtPctRaw(pos.unrealizedPnlPct)} />
           <Stat label="รับรู้แล้ว + ปันผล" value={fmtThb(pos.realizedPnlThb + pos.incomeThb)} tone={signClass(pos.realizedPnlThb + pos.incomeThb)} />
         </div>
+      )}
+      {asset.assetClass === "bond" && (
+        <Section title="เงื่อนไขพันธบัตร (ใช้คำนวณ YTM / duration ในพอร์ต)">
+          <ActionForm action={updateBondTermsAction.bind(null, id)} className="grid gap-3 sm:grid-cols-5" resetOnSuccess={false}>
+            <div>
+              <label className="label">ดอกเบี้ยหน้าตั๋ว %</label>
+              <input name="couponRate" type="number" step="any" className="input" defaultValue={asset.couponRate ?? ""} />
+            </div>
+            <div>
+              <label className="label">วันครบกำหนด</label>
+              <input name="maturityDate" type="date" className="input" defaultValue={asset.maturityDate ?? ""} />
+            </div>
+            <div>
+              <label className="label">มูลค่าที่ตราไว้</label>
+              <input name="faceValue" type="number" step="any" className="input" defaultValue={asset.faceValue ?? ""} />
+            </div>
+            <BondConventionFields frequency={asset.couponFrequency} dayCount={asset.dayCount} />
+          </ActionForm>
+        </Section>
       )}
       <Section title={`ราคา (${asset.currency})`}>
         {prices.length > 1 ? <PriceChart data={prices} currency={asset.currency} /> : <Empty>ยังไม่มีประวัติราคา</Empty>}

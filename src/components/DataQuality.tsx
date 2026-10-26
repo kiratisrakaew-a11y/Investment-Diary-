@@ -49,6 +49,9 @@ export function DataQualityPanel({ issues = [], warnings = [], reconciliation }:
           <li key={`m${k}`}>{w}</li>
         ))}
       </ul>
+      <a href="/data-quality" className="mt-2 inline-block text-xs text-accent">
+        รายงานคุณภาพข้อมูลทั้งหมด →
+      </a>
       {reconciliation && reconciliation.inferredContributionsThb > 0 && (
         <p className="mt-2 text-xs text-muted">
           รายการเก่าที่ซื้อโดยไม่มีเงินสดพอ ระบบไม่ได้แก้ข้อมูล แต่ถือส่วนที่ขาดเป็น “เงินฝากอนุมาน” ในการคำนวณผลตอบแทน — บันทึกรายการฝากเงินจริงเพื่อให้ตัวเลขแม่นยำ

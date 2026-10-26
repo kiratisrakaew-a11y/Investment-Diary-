@@ -47,6 +47,10 @@ export const assets = pgTable("assets", {
   couponRate: doublePrecision("coupon_rate"),
   maturityDate: date("maturity_date"),
   faceValue: doublePrecision("face_value"),
+  /** Bonds: coupons per year (1, 2, 4, 12); null = not specified (analytics assume 2 and say so). */
+  couponFrequency: integer("coupon_frequency"),
+  /** Bonds: accrued-interest day count, e.g. ACT/ACT-ICMA or ACT/365F. */
+  dayCount: text("day_count"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -144,6 +148,12 @@ export const settings = pgTable("settings", {
   /** Whether the benchmark series includes dividends. */
   benchmarkKind: text("benchmark_kind").$type<"price_index" | "total_return">().notNull().default("price_index"),
   baseCurrency: currencyEnum("base_currency").notNull().default("THB"),
+  /** Provenance of the market inputs; null source = illustrative default. */
+  rfSource: text("rf_source"),
+  rfSeries: text("rf_series"),
+  rfAsOf: date("rf_as_of"),
+  erpSource: text("erp_source"),
+  erpAsOf: date("erp_as_of"),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

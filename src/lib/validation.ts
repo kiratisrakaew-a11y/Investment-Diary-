@@ -34,6 +34,8 @@ export const assetInput = z.object({
   couponRate: z.number().optional().describe("Bonds: annual coupon %"),
   maturityDate: isoDate.optional(),
   faceValue: z.number().optional(),
+  couponFrequency: z.union([z.literal(1), z.literal(2), z.literal(4), z.literal(12)]).optional().describe("Bonds: coupons per year"),
+  dayCount: z.enum(["ACT/ACT-ICMA", "ACT/365F", "ACT/360", "30/360"]).optional().describe("Bonds: accrued-interest day count from the bond's terms"),
 });
 
 export const transactionInput = z
@@ -74,6 +76,11 @@ export const settingsInput = z.object({
   cashFlowPolicy: z.enum(["strict", "infer_with_warning"]).default("strict"),
   twrFlowTiming: z.enum(["start_of_day", "end_of_day", "modified_dietz"]).default("start_of_day"),
   benchmarkKind: z.enum(["price_index", "total_return"]).default("price_index"),
+  rfSource: z.string().max(200).nullable().default(null).describe("Where the risk-free rate comes from, e.g. ThaiBMA"),
+  rfSeries: z.string().max(200).nullable().default(null).describe("Which series / maturity, e.g. Thai government bond 10Y"),
+  rfAsOf: isoDate.nullable().default(null),
+  erpSource: z.string().max(200).nullable().default(null),
+  erpAsOf: isoDate.nullable().default(null),
 });
 
 export const targetsInput = z.record(assetClass, z.number().min(0).max(100));

@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { evaluate, valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
+import { MODEL_VERSION } from "@/lib/governance";
 import { getAssetBySymbol } from "./assets";
 
 export async function listValuations(opts: { symbol?: string; limit?: number } = {}) {
@@ -46,7 +47,15 @@ export async function saveValuation(input: SaveValuationInput) {
     method: parsed.method,
     title: input.title ?? "",
     assumptions: parsed.assumptions,
-    result: { value: summary.value, price: summary.price, upside: summary.upside },
+    // Audit trail: formula version, save time and the warnings shown when it was saved.
+    result: {
+      value: summary.value,
+      price: summary.price,
+      upside: summary.upside,
+      modelVersion: MODEL_VERSION,
+      savedAt: new Date().toISOString(),
+      warnings: (summary.details.sanityWarnings as string[] | undefined) ?? [],
+    },
     intrinsicValue: summary.value,
     priceAtValuation: summary.price,
     note: input.note ?? "",

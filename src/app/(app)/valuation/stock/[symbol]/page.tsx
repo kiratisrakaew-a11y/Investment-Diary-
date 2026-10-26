@@ -93,6 +93,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
               intrinsicValue: r.intrinsicValue,
               priceAtValuation: r.priceAtValuation,
               assumptions: r.assumptions,
+              modelVersion: (r.result as { modelVersion?: string } | null)?.modelVersion,
               isLatestForMethod: latestIds.has(r.id),
             }))}
           />

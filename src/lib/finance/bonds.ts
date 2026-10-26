@@ -513,6 +513,19 @@ export function keyRateDurations(b: BondSpec, curve: CurvePoint[], spread = 0) {
   });
 }
 
+/** Bond spec for a portfolio bond asset; reports which conventions had to be assumed. */
+export function specFromBondAsset(
+  a: { couponRate: number | null; maturityDate: string | null; couponFrequency?: number | null; dayCount?: string | null },
+  settlement: string,
+): { spec: BondSpec; assumed: string[] } {
+  const assumed: string[] = [];
+  const freq = a.couponFrequency;
+  const frequency = freq === 1 || freq === 2 || freq === 4 || freq === 12 ? freq : (assumed.push("จ่ายดอกเบี้ยทุก 6 เดือน"), 2);
+  const dcs: DayCount[] = ["ACT/ACT-ICMA", "ACT/365F", "ACT/360", "30/360"];
+  const dayCount = dcs.includes(a.dayCount as DayCount) ? (a.dayCount as DayCount) : (assumed.push("day count ACT/ACT-ICMA"), "ACT/ACT-ICMA" as const);
+  return { spec: { settlement, maturity: a.maturityDate ?? "", couponRate: (a.couponRate ?? 0) / 100, frequency, dayCount }, assumed };
+}
+
 /** Approximate % price change for a yield shock using duration + convexity. */
 export function priceChangeApprox(modifiedDuration: number, convexity: number, dy: number): number {
   return -modifiedDuration * dy + 0.5 * convexity * dy * dy;

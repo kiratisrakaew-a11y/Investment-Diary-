@@ -57,6 +57,7 @@ export function AddAssetForm() {
           <label className="label">มูลค่าที่ตราไว้</label>
           <input name="faceValue" type="number" step="any" className="input" />
         </div>
+        <BondConventionFields />
       </div>
     </ActionForm>
   );
@@ -82,5 +83,33 @@ export function AddPriceForm({ assets, symbol }: { assets: Asset[]; symbol?: str
         <input name="close" type="number" step="any" className="input" required />
       </div>
     </ActionForm>
+  );
+}
+
+/** Bond coupon frequency and day count (from the bond's terms / ThaiBMA). */
+export function BondConventionFields({ frequency, dayCount }: { frequency?: number | null; dayCount?: string | null }) {
+  return (
+    <>
+      <div>
+        <label className="label">จ่ายดอกเบี้ย (พันธบัตร)</label>
+        <select name="couponFrequency" className="input" defaultValue={frequency ?? ""}>
+          <option value="">ไม่ระบุ (สมมติทุก 6 เดือน)</option>
+          <option value="1">ปีละครั้ง</option>
+          <option value="2">ทุก 6 เดือน</option>
+          <option value="4">ทุกไตรมาส</option>
+          <option value="12">ทุกเดือน</option>
+        </select>
+      </div>
+      <div>
+        <label className="label">Day count (พันธบัตร)</label>
+        <select name="dayCount" className="input" defaultValue={dayCount ?? ""}>
+          <option value="">ไม่ระบุ (สมมติ ACT/ACT-ICMA)</option>
+          <option value="ACT/ACT-ICMA">ACT/ACT (ICMA)</option>
+          <option value="ACT/365F">ACT/365 Fixed</option>
+          <option value="ACT/360">ACT/360</option>
+          <option value="30/360">30/360</option>
+        </select>
+      </div>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { explainValuation } from "@/lib/valuation-explain";
 import { valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
+import { MODEL_VERSION } from "@/lib/governance";
 import { deleteValuationAction } from "@/app/(app)/valuation/actions";
 import { CalculationDetail } from "./CalculationDetail";
 import { ConfirmButton } from "./ConfirmButton";
@@ -21,6 +22,8 @@ export interface SavedValuationRow {
   intrinsicValue: number | null;
   priceAtValuation: number | null;
   assumptions: unknown;
+  /** Formula version the stored value was computed with (absent before PR 5). */
+  modelVersion?: string;
   isLatestForMethod: boolean;
 }
 
@@ -54,6 +57,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                 {v.title || <span className="text-muted">ไม่มีชื่อ scenario</span>}
                 {!v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>}
                 {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
+                {v.modelVersion !== MODEL_VERSION && <Badge className="ml-2 border-neg/40 text-neg">สูตรเวอร์ชันก่อน</Badge>}
               </span>
               <span className="text-right">
                 <span className="font-semibold tabular-nums">{fmtNum(v.intrinsicValue)}</span>
@@ -75,6 +79,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                       ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
                     </p>
                   )}
+                <p className="text-[11px] text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
                 {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
                 {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
               </div>

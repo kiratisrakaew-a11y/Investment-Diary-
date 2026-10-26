@@ -31,7 +31,10 @@ export async function createAsset(input: AssetInputT) {
 }
 
 export async function updateAsset(id: number, input: Partial<AssetInputT>) {
-  const data = assetInput.partial().parse(input);
+  const parsed = assetInput.partial().parse(input);
+  // Only write fields the caller supplied — schema defaults (currency, price source) must not overwrite stored values.
+  const data = Object.fromEntries(Object.entries(parsed).filter(([k, v]) => v !== undefined && (input as Record<string, unknown>)[k] !== undefined));
+  if (!Object.keys(data).length) return getAsset(id);
   const [row] = await getDb().update(schema.assets).set(data).where(eq(schema.assets.id, id)).returning();
   return row;
 }

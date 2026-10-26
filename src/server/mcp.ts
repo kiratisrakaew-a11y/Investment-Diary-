@@ -14,6 +14,7 @@ import { getAllocation, getMptAnalysis, getPerformance, getPortfolioSummary } fr
 import { bondSchema, evaluate, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
+import { dataQualityReport } from "./services/data-quality";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
@@ -159,6 +160,17 @@ export function createMcpServer() {
       annotations: { readOnlyHint: true },
     },
     safe(async () => getAllocation()),
+  );
+
+  server.registerTool(
+    "get_data_quality",
+    {
+      title: "Data quality & assumption provenance",
+      description:
+        "Checks that affect reliability: stale/missing prices and FX, illustrative (unsourced) Rf/ERP, inferred deposits, ledger issues, benchmark type/staleness, valuations saved under older formulas, bonds without conventions. Mention relevant warnings when reporting numbers.",
+      annotations: { readOnlyHint: true },
+    },
+    safe(async () => dataQualityReport()),
   );
 
   server.registerTool(

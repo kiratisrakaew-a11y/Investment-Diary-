@@ -1,4 +1,4 @@
-import { analyticsFromPrice } from "@/lib/finance/bonds";
+import { analyticsFromPrice, specFromBondAsset } from "@/lib/finance/bonds";
 import { today } from "@/lib/validation";
 import { listAssets } from "./assets";
 import { loadPriceHistory } from "./prices";
@@ -24,6 +24,10 @@ export async function bondHoldings() {
         lastPrice: last?.[1] ?? null,
         lastPriceDate: last?.[0] ?? null,
         marketValueThb: pos?.marketValueThb ?? 0,
+        couponFrequency: a.couponFrequency,
+        dayCount: a.dayCount,
+        /** Conventions the analytics had to assume because the asset does not store them. */
+        assumed: specFromBondAsset(a, settlement).assumed,
       };
       if (a.couponRate == null || !a.maturityDate || !last || a.maturityDate <= settlement) {
         return { ...base, analytics: null, missing: "ต้องมีอัตราคูปอง วันครบกำหนด และราคาล่าสุด" };
@@ -31,10 +35,7 @@ export async function bondHoldings() {
       // Prices are stored per unit; convert to per-100-face for yield maths.
       const cleanPer100 = a.faceValue ? (last[1] / a.faceValue) * 100 : last[1];
       try {
-        const r = analyticsFromPrice(
-          { settlement, maturity: a.maturityDate, couponRate: a.couponRate / 100, frequency: 2 },
-          cleanPer100,
-        );
+        const r = analyticsFromPrice(specFromBondAsset(a, settlement).spec, cleanPer100);
         const { flows: _f, ...analytics } = r;
         return { ...base, analytics, missing: null };
       } catch (e) {

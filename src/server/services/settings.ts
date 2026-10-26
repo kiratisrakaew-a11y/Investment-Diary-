@@ -14,6 +14,11 @@ export async function getSettings() {
       cashFlowPolicy: "strict" as const,
       twrFlowTiming: "start_of_day" as const,
       benchmarkKind: "price_index" as const,
+      rfSource: null as string | null,
+      rfSeries: null as string | null,
+      rfAsOf: null as string | null,
+      erpSource: null as string | null,
+      erpAsOf: null as string | null,
     }
   );
 }
@@ -25,6 +30,11 @@ export async function saveSettings(input: {
   cashFlowPolicy?: "strict" | "infer_with_warning";
   twrFlowTiming?: "start_of_day" | "end_of_day" | "modified_dietz";
   benchmarkKind?: "price_index" | "total_return";
+  rfSource?: string | null;
+  rfSeries?: string | null;
+  rfAsOf?: string | null;
+  erpSource?: string | null;
+  erpAsOf?: string | null;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
@@ -36,6 +46,11 @@ export async function saveSettings(input: {
     cashFlowPolicy: current.cashFlowPolicy,
     twrFlowTiming: current.twrFlowTiming,
     benchmarkKind: current.benchmarkKind,
+    rfSource: current.rfSource,
+    rfSeries: current.rfSeries,
+    rfAsOf: current.rfAsOf,
+    erpSource: current.erpSource,
+    erpAsOf: current.erpAsOf,
     ...defined,
   });
   await getDb()

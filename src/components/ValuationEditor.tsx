@@ -24,6 +24,7 @@ import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
 import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
+import { exportValuationFile, parseValuationImport, type InputProvenance } from "@/lib/governance";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
 type Ddm = Extract<ValuationInput, { method: "ddm" }>["assumptions"];
@@ -35,6 +36,9 @@ export interface EditorDefaults {
   equityRiskPremium: number;
   currentPrice: number;
   beta: number;
+  /** Sources copied into new valuations (from settings and the beta estimate). */
+  inputMeta?: InputMeta;
+  provenance?: { riskFree: InputProvenance; erp: InputProvenance };
 }
 
 const METHODS: { value: Method; label: string }[] = [
@@ -74,7 +78,14 @@ export function ValuationEditor({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
 
-  const discount = { riskFree: defaults.riskFree, beta: defaults.beta, equityRiskPremium: defaults.equityRiskPremium, extraPremium: 0 };
+  // New valuations start with the settings' sources; saved ones keep their own.
+  const discount = {
+    riskFree: defaults.riskFree,
+    beta: defaults.beta,
+    equityRiskPremium: defaults.equityRiskPremium,
+    extraPremium: 0,
+    ...(assumptions ? {} : { inputMeta: defaults.inputMeta }),
+  };
   const isDcf = initialMethod === "dcf_fcff" || initialMethod === "dcf_fcfe";
   const [dcfA, setDcfA] = useState<DcfAssumptions>({
     ...DEFAULT_DCF,
@@ -208,6 +219,32 @@ export function ValuationEditor({
     });
   }
 
+  function exportJson() {
+    const file = exportValuationFile({ symbol, title, note, valuation: input(method) });
+    const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${symbol || "valuation"}-${method}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function importJson(file: File) {
+    const r = parseValuationImport(await file.text());
+    if (!r.ok) return setMsg({ ok: false, text: r.error });
+    const v = r.valuation;
+    if (v.method === "bond") return setMsg({ ok: false, text: "ไฟล์นี้เป็นพันธบัตร — นำเข้าในหน้าพันธบัตรไม่ได้ในตอนนี้" });
+    if (v.method === "dcf_fcff" || v.method === "dcf_fcfe") setDcfA((a) => ({ ...a, ...(v.assumptions as Partial<DcfAssumptions>) }));
+    else if (v.method === "ddm") setDdm((a) => ({ ...a, ...v.assumptions }));
+    else if (v.method === "residual_income") setRi((a) => ({ ...a, ...v.assumptions }));
+    else setMult((a) => ({ ...a, ...v.assumptions }));
+    setMethod(v.method);
+    if (r.symbol) setSymbol(r.symbol);
+    if (r.title) setTitle(r.title);
+    if (r.note) setNote(r.note);
+    setMsg({ ok: true, text: `นำเข้าแล้ว${r.modelVersion ? ` (ไฟล์จากสูตรเวอร์ชัน ${r.modelVersion})` : ""} — ตรวจแล้วกดบันทึก` });
+  }
+
   function applyHistory(h: HistoryAssumptions) {
     setDcfA((a) => ({ ...a, ...h.dcf }));
     setDdm((a) => ({ ...a, ...h.ddm }));
@@ -240,6 +277,22 @@ export function ValuationEditor({
           <button type="button" className="btn-ghost" onClick={prefill}>
             ดึงข้อมูลพื้นฐาน (Yahoo)
           </button>
+          <button type="button" className="btn-ghost" onClick={exportJson}>
+            ส่งออก JSON
+          </button>
+          <label className="btn-ghost cursor-pointer">
+            นำเข้า JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importJson(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
           {msg && <span className={clsx("text-sm", msg.ok ? "text-pos" : "text-neg")}>{msg.text}</span>}
         </div>
       </div>
@@ -431,6 +484,14 @@ export function ValuationEditor({
                 {result.upside != null && result.upside > 0 && (
                   <div className="text-xs text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
                 )}
+                <KeyDrivers a={method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA} show={method !== "multiples"} />
+                {activeExplanation && activeExplanation.warnings.length > 0 && method !== "dcf_fcff" && method !== "dcf_fcfe" && (
+                  <div className="mt-3 space-y-1">
+                    {activeExplanation.warnings.slice(0, 4).map((w) => (
+                      <p key={w} className="text-xs text-neg">⚠️ {w}</p>
+                    ))}
+                  </div>
+                )}
                 <Details method={method} details={result.details} />
                 {activeExplanation && (
                   <details className="mt-4">
@@ -466,6 +527,32 @@ export function ValuationEditor({
         </>
       )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
+    </div>
+  );
+}
+
+/** Market inputs that drive the discount rate, with where each one came from. */
+function KeyDrivers({ a, show }: { a: { riskFree: number; equityRiskPremium: number; beta: number; inputMeta?: InputMeta }; show: boolean }) {
+  if (!show) return null;
+  const src = (v?: string) => v ?? "ค่าตัวอย่าง — ไม่ได้ระบุที่มา";
+  const rows: [string, string, string | undefined][] = [
+    ["Rf", fmtPct(a.riskFree), a.inputMeta?.rfSource],
+    ["ERP", fmtPct(a.equityRiskPremium), a.inputMeta?.erpSource],
+    ["Beta", fmtNum(a.beta), a.inputMeta?.betaSource],
+  ];
+  return (
+    <div className="mt-3 rounded-lg bg-bg p-2 text-xs">
+      <div className="mb-1 font-medium">ปัจจัยหลักและที่มา{a.inputMeta?.asOf && ` (ณ ${a.inputMeta.asOf})`}</div>
+      {rows.map(([k, v, s]) => (
+        <div key={k} className="flex justify-between gap-2">
+          <span>
+            {k} <b className="tabular-nums">{v}</b>
+          </span>
+          <span className={clsx("truncate text-right", s ? "text-muted" : "text-neg")} title={src(s)}>
+            {src(s)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

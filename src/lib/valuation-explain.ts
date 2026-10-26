@@ -18,6 +18,7 @@ import {
   type InputMeta,
 } from "./finance/valuation";
 import type { ValuationInput } from "./valuation-schemas";
+import { rateScaleWarnings } from "./rate-scale";
 
 export type Unit = "%" | "x" | "money" | "perShare" | "years" | "text" | "factor";
 
@@ -571,6 +572,12 @@ function explainMultiples(a: Mult): Explanation {
 
 /** Build the explanation for any stock valuation method (bonds are explained on the bond page). */
 export function explainValuation(input: ValuationInput): Explanation | null {
+  const e = explainCore(input);
+  if (e) e.warnings = [...rateScaleWarnings(input.assumptions as Record<string, unknown>), ...e.warnings];
+  return e;
+}
+
+function explainCore(input: ValuationInput): Explanation | null {
   switch (input.method) {
     case "dcf_fcff":
       return explainDcf(input.assumptions as DcfAssumptions, "fcff");

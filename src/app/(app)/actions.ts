@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import type { AssetClass } from "@/db/schema";
-import { createAsset, deleteAsset } from "@/server/services/assets";
+import { createAsset, deleteAsset, updateAsset } from "@/server/services/assets";
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
@@ -98,8 +98,27 @@ export async function addAssetAction(_: ActionState, f: FormData): Promise<Actio
       couponRate: num(f, "couponRate"),
       maturityDate: str(f, "maturityDate"),
       faceValue: num(f, "faceValue"),
+      couponFrequency: num(f, "couponFrequency") as 1 | 2 | 4 | 12 | undefined,
+      dayCount: str(f, "dayCount") as "ACT/ACT-ICMA" | undefined,
     });
     return done("เพิ่มสินทรัพย์แล้ว");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Bond terms on an existing asset (coupon, maturity, face, frequency, day count). */
+export async function updateBondTermsAction(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  try {
+    await updateAsset(id, {
+      couponRate: num(f, "couponRate"),
+      maturityDate: str(f, "maturityDate"),
+      faceValue: num(f, "faceValue"),
+      couponFrequency: num(f, "couponFrequency") as 1 | 2 | 4 | 12 | undefined,
+      dayCount: str(f, "dayCount") as "ACT/ACT-ICMA" | undefined,
+    });
+    revalidatePath("/", "layout");
+    return done("บันทึกเงื่อนไขพันธบัตรแล้ว");
   } catch (e) {
     return fail(e);
   }
@@ -128,6 +147,12 @@ export async function saveSettingsAction(_: ActionState, f: FormData): Promise<A
       cashFlowPolicy: (str(f, "cashFlowPolicy") as "strict" | "infer_with_warning" | undefined) ?? undefined,
       twrFlowTiming: (str(f, "twrFlowTiming") as "start_of_day" | "end_of_day" | "modified_dietz" | undefined) ?? undefined,
       benchmarkKind: (str(f, "benchmarkKind") as "price_index" | "total_return" | undefined) ?? undefined,
+      // Empty text clears a source (the input becomes illustrative again).
+      rfSource: str(f, "rfSource") ?? null,
+      rfSeries: str(f, "rfSeries") ?? null,
+      rfAsOf: str(f, "rfAsOf") ?? null,
+      erpSource: str(f, "erpSource") ?? null,
+      erpAsOf: str(f, "erpAsOf") ?? null,
     });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {

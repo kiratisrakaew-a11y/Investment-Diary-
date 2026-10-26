@@ -7,9 +7,15 @@ import { saveSettingsAction, saveTargetsAction } from "../actions";
 import { ASSET_CLASSES } from "@/lib/finance/allocation";
 import { ASSET_CLASS_LABEL } from "@/lib/format";
 import { GPT_INSTRUCTIONS } from "@/lib/gpt-instructions";
+import { MODEL_VERSION, marketInputProvenance } from "@/lib/governance";
+import Link from "next/link";
 
 export default async function SettingsPage() {
   const [settings, targets, h] = await Promise.all([getSettings(), getTargets(), headers()]);
+  const prov = marketInputProvenance(settings);
+  const tag = (p: { illustrative: boolean; label: string }) => (
+    <span className={`ml-1 rounded px-1 text-[11px] ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}>{p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}</span>
+  );
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
 
   return (
@@ -20,12 +26,26 @@ export default async function SettingsPage() {
         <Section title="สมมติฐานทางการเงิน">
           <ActionForm action={saveSettingsAction} className="space-y-3" resetOnSuccess={false}>
             <div>
-              <label className="label">Risk-free rate (% ต่อปี) — ค่าเริ่มต้นเป็นตัวอย่างเท่านั้น ควรใส่ค่าจริง เช่น อัตราผลตอบแทนพันธบัตรรัฐบาลไทย 1 ปี (ThaiBMA / ธปท.)</label>
+              <label className="label">
+                Risk-free rate (% ต่อปี){tag(prov.riskFree)} — ใช้สกุลเงินและอายุใกล้กับกระแสเงินสด (DCF เงินบาทระยะยาว → พันธบัตรรัฐบาลไทยระยะยาว)
+              </label>
               <input name="riskFreeRate" type="number" step="0.01" className="input" defaultValue={settings.riskFreeRate} />
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <input name="rfSource" className="input" placeholder="แหล่งที่มา เช่น ThaiBMA" defaultValue={settings.rfSource ?? ""} />
+                <input name="rfSeries" className="input" placeholder="ชุดข้อมูล เช่น พันธบัตรรัฐบาล 10 ปี" defaultValue={settings.rfSeries ?? ""} />
+                <input name="rfAsOf" type="date" className="input" defaultValue={settings.rfAsOf ?? ""} />
+              </div>
             </div>
             <div>
-              <label className="label">Equity risk premium (% ต่อปี) — ใช้คำนวณ Ke ด้วย CAPM และผลตอบแทนคาดหวังใน optimizer</label>
+              <label className="label">
+                Equity risk premium (% ต่อปี){tag(prov.erp)} — ERP แบบคาดการณ์ (forward-looking) ไม่ใช่ผลตอบแทนตลาดในอดีต
+              </label>
               <input name="equityRiskPremium" type="number" step="0.1" className="input" defaultValue={settings.equityRiskPremium} />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <input name="erpSource" className="input" placeholder="แหล่งที่มา เช่น Damodaran ม.ค. 2026 (Thailand)" defaultValue={settings.erpSource ?? ""} />
+                <input name="erpAsOf" type="date" className="input" defaultValue={settings.erpAsOf ?? ""} />
+              </div>
+              <p className="mt-1 text-xs text-muted">แหล่งที่มาและวันที่จะถูกบันทึกลงใน valuation ใหม่ทุกครั้ง · เว้นว่าง = ค่าตัวอย่าง</p>
             </div>
             <div>
               <label className="label">ดัชนีอ้างอิง (สัญลักษณ์ Yahoo) — ^SET.BK = SET Index, ^SET50.BK, ^GSPC = S&amp;P 500</label>
@@ -54,6 +74,22 @@ export default async function SettingsPage() {
               </select>
             </div>
           </ActionForm>
+        </Section>
+
+        <Section title="แบบจำลองและคุณภาพข้อมูล">
+          <div className="space-y-2 text-sm">
+            <p>
+              สูตรเวอร์ชัน <b>{MODEL_VERSION}</b> — valuation ที่บันทึกจะเก็บเวอร์ชันนี้ไว้ ถ้าสูตรเปลี่ยน ระบบจะบอกว่าค่าไหนคำนวณด้วยสูตรเก่า
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-xs text-muted">
+              <li>ผลตอบแทน: TWR ({settings.twrFlowTiming}), XIRR ACT/365, ต่ำกว่า 1 ปีแสดงแบบสะสม · Sharpe จากผลตอบแทนส่วนเกินรายงวด × √N</li>
+              <li>DCF: terminal แบบ Gordon / stable ROIC / exit multiple, mid-year ทั้งงวดและ terminal · ไม่แสดงมูลค่าถ้า r ≤ g</li>
+              <li>จัดพอร์ต: QP แบบ exact, ไม่ผ่อนข้อจำกัดเอง · พันธบัตร: day count / stub / call ตามเงื่อนไขตราสาร</li>
+            </ul>
+            <Link href="/data-quality" className="btn-ghost inline-block text-xs">
+              ดูรายงานคุณภาพข้อมูล →
+            </Link>
+          </div>
         </Section>
 
         <Section title="เป้าหมาย Asset allocation (%)">
