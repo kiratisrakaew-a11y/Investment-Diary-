@@ -170,7 +170,7 @@ export function BulletChart({
   current: Pt2 | null;
   recommended: Pt2;
   gmv: Pt2;
-  tangency: Pt2;
+  tangency: Pt2 | null;
   rf: number;
 }) {
   const maxVol = Math.max(...assets.map((a) => a.volatility), ...constrained.map((p) => p.volatility), recommended.volatility, current?.volatility ?? 0) * 1.15;
@@ -186,11 +186,14 @@ export function BulletChart({
     const a = clip(pts, eff).map(({ volatility, expectedReturn }) => ({ volatility, expectedReturn }));
     return eff ? [join, ...a] : [...a, join];
   };
-  const slope = tangency.volatility > 0 ? (tangency.expectedReturn - rf) / tangency.volatility : 0;
-  const cml = [
-    { volatility: 0, expectedReturn: rf },
-    { volatility: maxVol, expectedReturn: rf + slope * maxVol },
-  ];
+  const slope = tangency && tangency.volatility > 0 ? (tangency.expectedReturn - rf) / tangency.volatility : null;
+  const cml =
+    slope != null
+      ? [
+          { volatility: 0, expectedReturn: rf },
+          { volatility: maxVol, expectedReturn: rf + slope * maxVol },
+        ]
+      : [];
   const uncGmv = unconstrained.reduce((m, p) => (p.volatility < m.volatility ? p : m), unconstrained[0] ?? gmv);
   const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
   return (
@@ -208,17 +211,18 @@ export function BulletChart({
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
         {unconstrained.length > 0 && (
           <>
-            <Line name="Frontier (ขายชอร์ตได้)" data={arm(unconstrained, true, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line name="Frontier ขายชอร์ตได้ (สูตรปิด — ลงทุนจริงไม่ได้ถ้าห้าม short)" data={arm(unconstrained, true, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
             <Line name="ส่วนไม่มีประสิทธิภาพ (ขายชอร์ตได้)" data={arm(unconstrained, false, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} legendType="none" />
           </>
         )}
-        <Line name="Efficient frontier (ตามข้อจำกัด)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        <Line name="Efficient frontier ตามข้อจำกัด (ลงทุนได้จริง)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
         <Line name="ส่วนไม่มีประสิทธิภาพ" data={arm(constrained, false, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
-        <Line name="Capital Market Line" data={cml} dataKey="expectedReturn" stroke="var(--series-3)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
+        {cml.length > 0 && <Line name="Capital Market Line (จาก Rf)" data={cml} dataKey="expectedReturn" stroke="var(--series-3)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />}
         <Scatter name="สินทรัพย์" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
         {current && <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />}
         <Scatter name="Min variance" data={[gmv]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
-        <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />
+        {tangency && <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />}
+        <Scatter name="Rf" data={[{ volatility: 0, expectedReturn: rf }]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} legendType="none" />
         <Scatter name="แนะนำ" data={[recommended]} fill="var(--series-6)" stroke="var(--panel)" strokeWidth={2} shape="square" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>

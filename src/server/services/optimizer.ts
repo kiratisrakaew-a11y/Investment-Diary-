@@ -1,8 +1,9 @@
 import { asOf, buildSnapshot, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
-import { estimateInputs } from "@/lib/finance/mpt";
+import { covarianceDiagnostics, estimateInputs, ledoitWolf, type Matrix } from "@/lib/finance/mpt";
 import { recommend, type Objective } from "@/lib/finance/recommend";
+import { OptimizerError } from "@/lib/finance/optimizer";
 import { beta as calcBeta } from "@/lib/finance/risk";
-import { simpleReturns, mean, TRADING_DAYS } from "@/lib/finance/stats";
+import { simpleReturns, mean } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
@@ -35,8 +36,14 @@ export interface OptimizerUniverse {
   benchmark: string;
   assets: UniverseAsset[];
   skipped: { symbol: string; reason: string }[];
-  /** Annualized covariance of daily THB returns, aligned with `assets`. */
-  cov: number[][];
+  /** Annualized sample covariance of THB returns, aligned with `assets`. */
+  cov: Matrix;
+  /** Ledoit–Wolf shrinkage toward a scaled identity (annualized) and its intensity δ. */
+  covShrunk: Matrix;
+  shrinkage: number;
+  /** Return observations per year implied by the data (not a fixed 252). */
+  periodsPerYear: number;
+  covarianceWarnings: string[];
 }
 
 /**
@@ -91,24 +98,29 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
     assets: [],
     skipped,
     cov: [],
+    covShrunk: [],
+    shrinkage: 0,
+    periodsPerYear: 0,
+    covarianceWarnings: [],
   };
   if (usable.length < 2) return { ...empty, reason: "ต้องมีสินทรัพย์ที่มีประวัติราคาเพียงพออย่างน้อย 2 ตัว" };
 
-  // Common calendar: union of price dates after every asset has started trading.
-  const start = usable.reduce((m, a) => {
-    const first = prices.get(a.id)!.find(([d]) => d >= from)![0];
-    return first > m ? first : m;
-  }, from);
-  const cal = new Set<string>();
-  for (const a of usable) for (const [d] of prices.get(a.id)!) if (d >= start) cal.add(d);
-  const dates = [...cal].sort();
-  if (dates.length < MIN_OBS) return { ...empty, reason: "ช่วงเวลาที่มีราคาซ้อนกันสั้นเกินไป" };
+  // Common calendar: only dates on which every asset has an actual price (no forward-filled zero returns).
+  const sets = usable.map((a) => new Set(prices.get(a.id)!.filter(([d]) => d >= from).map(([d]) => d)));
+  const dates = [...sets[0]].filter((d) => sets.every((x) => x.has(d))).sort();
+  if (dates.length < MIN_OBS) return { ...empty, reason: `วันที่ทุกสินทรัพย์มีราคาพร้อมกันมีเพียง ${dates.length} วัน (ต้องการ ≥ ${MIN_OBS})` };
 
   const series = usable.map((a) =>
     simpleReturns(dates.map((d) => (asOf(prices.get(a.id), d) ?? 0) * (a.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1))),
   );
+  // Observations per year from the data, so daily, weekly or fund-NAV calendars annualize consistently.
+  const years = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / (365 * 86_400_000);
+  const N = years > 0 ? (dates.length - 1) / years : 252;
   const benchReturns = bench.length ? simpleReturns(dates.map((d) => asOf(bench, d) ?? 0)) : null;
-  const { cov } = estimateInputs(series);
+  const { cov } = estimateInputs(series, N);
+  const lw = ledoitWolf(series);
+  const covShrunk = lw.cov.map((r) => r.map((x) => x * N));
+  const covarianceWarnings = covarianceDiagnostics(cov).warnings;
 
   return {
     ok: true,
@@ -120,6 +132,10 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
     benchmark: settings.benchmarkSymbol,
     skipped,
     cov,
+    covShrunk,
+    shrinkage: lw.intensity,
+    periodsPerYear: N,
+    covarianceWarnings,
     assets: usable.map((a, i) => {
       const b = benchReturns && benchReturns.every((x) => Number.isFinite(x)) ? calcBeta(series[i], benchReturns) : null;
       return {
@@ -128,8 +144,8 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
         assetClass: a.assetClass,
         held: (valueOf.get(a.id) ?? 0) > 0,
         currentValue: valueOf.get(a.id) ?? 0,
-        // Geometric annualization of the mean daily return.
-        historicalReturn: (1 + mean(series[i])) ** TRADING_DAYS - 1,
+        // Arithmetic mean × N: the expected-return input consistent with an annualized covariance.
+        historicalReturn: mean(series[i]) * N,
         volatility: Math.sqrt(cov[i][i]),
         beta: b,
         capmReturn: b != null ? rf + b * erp : null,
@@ -166,6 +182,7 @@ export interface OptimizeParams {
   useRiskFree?: boolean;
   /** Additional THB to invest on top of current holdings. */
   extraCash?: number;
+  covMethod?: "sample" | "ledoit_wolf";
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
@@ -177,7 +194,7 @@ export async function optimizePortfolio(p: OptimizeParams) {
   const r = recommend({
     symbols: u.assets.map((a) => a.symbol),
     mu,
-    cov: u.cov,
+    cov: p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov,
     rf: u.riskFree,
     bounds: { min: p.minWeight ?? 0, max: p.maxWeight ?? 1 },
     objective: p.objective ?? "max_sharpe",
@@ -188,6 +205,8 @@ export async function optimizePortfolio(p: OptimizeParams) {
     totalWealth: currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0),
     useRiskFree: p.useRiskFree ?? false,
   });
+  // Surfaces as REST 400 / MCP isError with the typed code; no weights are returned.
+  if (!r.ok) throw new OptimizerError(r.issue);
   return {
     ok: true as const,
     period: { from: u.from, to: u.to, observations: u.observations },
@@ -202,7 +221,10 @@ export async function optimizePortfolio(p: OptimizeParams) {
     recommended: r.final,
     current: r.current && { expectedReturn: r.current.expectedReturn, volatility: r.current.volatility, sharpe: r.current.sharpe },
     minVariance: { expectedReturn: r.gmv.expectedReturn, volatility: r.gmv.volatility, sharpe: r.gmv.sharpe },
-    maxSharpe: { expectedReturn: r.tangency.expectedReturn, volatility: r.tangency.volatility, sharpe: r.tangency.sharpe },
-    notes: r.notes,
+    maxSharpe: r.tangency && { expectedReturn: r.tangency.expectedReturn, volatility: r.tangency.volatility, sharpe: r.tangency.sharpe },
+    solver: r.solver,
+    constraints: r.constraints,
+    covariance: { method: p.covMethod ?? "sample", shrinkage: p.covMethod === "ledoit_wolf" ? u.shrinkage : 0, ...r.covariance, periodsPerYear: u.periodsPerYear },
+    warnings: [...u.covarianceWarnings, ...r.warnings],
   };
 }

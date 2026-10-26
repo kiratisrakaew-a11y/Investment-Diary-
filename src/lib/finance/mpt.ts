@@ -165,3 +165,101 @@ export function randomPortfolios(mu: number[], cov: Matrix, rf: number, count = 
   }
   return out;
 }
+
+// ------------------------------------------------------------------ covariance diagnostics
+
+/** Eigen-decomposition of a symmetric matrix by cyclic Jacobi rotations. */
+export function symmetricEigen(m: Matrix): { values: number[]; vectors: Matrix } {
+  const n = m.length;
+  const a = m.map((r) => [...r]);
+  const v: Matrix = m.map((_, i) => m.map((__, j) => (i === j ? 1 : 0)));
+  for (let sweep = 0; sweep < 100; sweep++) {
+    let off = 0;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += a[i][j] ** 2;
+    if (off < 1e-30) break;
+    for (let p = 0; p < n; p++) {
+      for (let q = p + 1; q < n; q++) {
+        if (Math.abs(a[p][q]) < 1e-300) continue;
+        const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+        const c = 1 / Math.sqrt(t * t + 1);
+        const s = t * c;
+        for (let k = 0; k < n; k++) {
+          const akp = a[k][p];
+          const akq = a[k][q];
+          a[k][p] = c * akp - s * akq;
+          a[k][q] = s * akp + c * akq;
+        }
+        for (let k = 0; k < n; k++) {
+          const apk = a[p][k];
+          const aqk = a[q][k];
+          a[p][k] = c * apk - s * aqk;
+          a[q][k] = s * apk + c * aqk;
+        }
+        for (let k = 0; k < n; k++) {
+          const vkp = v[k][p];
+          const vkq = v[k][q];
+          v[k][p] = c * vkp - s * vkq;
+          v[k][q] = s * vkp + c * vkq;
+        }
+      }
+    }
+  }
+  return { values: a.map((r, i) => r[i]), vectors: v };
+}
+
+export interface CovarianceDiagnostics {
+  minEigenvalue: number;
+  maxEigenvalue: number;
+  /** λmax / λmin (Infinity when singular). */
+  conditionNumber: number;
+  psd: boolean;
+  /** Input with negative eigenvalues clipped to zero (equal to the input when already PSD). */
+  repaired: Matrix;
+  warnings: string[];
+}
+
+/** PSD and conditioning check; a non-PSD matrix is repaired by eigenvalue clipping, with a warning. */
+export function covarianceDiagnostics(cov: Matrix): CovarianceDiagnostics {
+  const n = cov.length;
+  const sym = cov.map((r, i) => r.map((x, j) => (x + cov[j][i]) / 2));
+  const { values, vectors } = symmetricEigen(sym);
+  const maxE = Math.max(...values);
+  const minE = Math.min(...values);
+  const tol = 1e-12 * Math.max(1e-12, Math.abs(maxE));
+  const psd = minE >= -tol;
+  const warnings: string[] = [];
+  let repaired = cov;
+  if (!psd) {
+    const clipped = values.map((x) => Math.max(0, x));
+    repaired = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => clipped.reduce((s, l, k) => s + l * vectors[i][k] * vectors[j][k], 0)));
+    warnings.push("Covariance matrix ไม่เป็น positive semidefinite (เช่น ข้อมูลไม่ครบช่วงเดียวกัน) — ปรับ eigenvalue ที่ติดลบเป็น 0 ก่อนคำนวณ");
+  }
+  const cond = minE > tol ? maxE / minE : Infinity;
+  if (cond > 1e8) warnings.push("Covariance เกือบ singular (มีสินทรัพย์ที่เคลื่อนไหวเหมือนกันมาก) — น้ำหนักที่ได้อาจไม่เสถียร พิจารณาตัดสินทรัพย์ที่ซ้ำกันหรือใช้ shrinkage");
+  return { minEigenvalue: minE, maxEigenvalue: maxE, conditionNumber: cond, psd, repaired, warnings };
+}
+
+/**
+ * Ledoit–Wolf (2004) shrinkage of the sample covariance toward a scaled identity:
+ * Σ* = δ·m·I + (1 − δ)·S with the optimal intensity δ. Returns the per-period matrix.
+ */
+export function ledoitWolf(series: number[][]): { cov: Matrix; intensity: number } {
+  const n = series.length;
+  const T = Math.min(...series.map((s) => s.length));
+  const means = series.map((s) => mean(s.slice(0, T)));
+  const x = Array.from({ length: T }, (_, t) => series.map((s, i) => s[t] - means[i]));
+  const S = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => x.reduce((a, r) => a + r[i] * r[j], 0) / T));
+  const m = S.reduce((a, r, i) => a + r[i], 0) / n;
+  let d2 = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) d2 += (S[i][j] - (i === j ? m : 0)) ** 2;
+  let b2 = 0;
+  for (const r of x) {
+    let f = 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) f += (r[i] * r[j] - S[i][j]) ** 2;
+    b2 += f;
+  }
+  b2 = Math.min(b2 / (T * T), d2);
+  const delta = d2 > 0 ? b2 / d2 : 1;
+  return { cov: S.map((r, i) => r.map((v, j) => delta * (i === j ? m : 0) + (1 - delta) * v)), intensity: delta };
+}

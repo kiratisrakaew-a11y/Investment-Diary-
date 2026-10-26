@@ -26,7 +26,9 @@ function safe<A>(fn: (args: A) => Promise<unknown>) {
     try {
       return json(await fn(args));
     } catch (e) {
-      return { content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+      const suggestion = (e as { issue?: { code?: string; suggestion?: string } }).issue;
+      const extra = suggestion?.code ? ` [${suggestion.code}]${suggestion.suggestion ? ` — ${suggestion.suggestion}` : ""}` : "";
+      return { content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}${extra}` }], isError: true };
     }
   };
 }

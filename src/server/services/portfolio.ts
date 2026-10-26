@@ -1,6 +1,7 @@
 import { computeAllocation } from "@/lib/finance/allocation";
 import { computeMetrics } from "@/lib/finance/metrics";
 import {
+  covarianceDiagnostics,
   efficientFrontier,
   estimateInputs,
   correlationMatrix,
@@ -134,7 +135,10 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
       common.map((d) => (asOf(hist, d) ?? 0) * (p.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1)),
     );
   });
-  const { mu, cov } = estimateInputs(series);
+  const years = (Date.parse(common[common.length - 1]) - Date.parse(common[0])) / (365 * 86_400_000);
+  const periodsPerYear = years > 0 ? (common.length - 1) / years : 252;
+  const { mu, cov } = estimateInputs(series, periodsPerYear);
+  const covWarnings = covarianceDiagnostics(cov).warnings;
   const totalHeld = usable.reduce((s, p) => s + p.marketValueThb, 0);
   const current = portfolioStats(usable.map((p) => p.marketValueThb / totalHeld), mu, cov, rf);
   const tangency = maxSharpePortfolio(mu, cov, rf);
@@ -144,6 +148,8 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
     symbols: usable.map((p) => p.symbol),
     skipped,
     observations: common.length,
+    periodsPerYear,
+    covarianceWarnings: covWarnings,
     from: common[0],
     to: common[common.length - 1],
     riskFreeRate: rf,

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 /** Input for the Markowitz optimizer tools (MCP / REST / advisor). */
-export const optimizeInput = z.object({
+export const optimizeInput = z
+  .object({
   symbols: z.array(z.string()).optional().describe("Universe; defaults to every asset with enough price history"),
   lookbackDays: z.number().int().min(90).max(3650).optional(),
   returnMethod: z.enum(["historical", "capm", "blend"]).optional().describe("How expected returns are estimated (default blend)"),
@@ -14,4 +15,6 @@ export const optimizeInput = z.object({
   maxWeight: z.number().min(0).max(1).optional(),
   useRiskFree: z.boolean().optional().describe("Mix the tangency portfolio with the risk-free asset (complete portfolio y*)"),
   extraCash: z.number().min(0).optional().describe("Extra THB to invest on top of current holdings"),
-});
+  covMethod: z.enum(["sample", "ledoit_wolf"]).optional().describe("Covariance estimator (default sample; ledoit_wolf shrinks toward a scaled identity)"),
+  })
+  .refine((v) => (v.minWeight ?? 0) <= (v.maxWeight ?? 1), { message: "minWeight must not exceed maxWeight" });

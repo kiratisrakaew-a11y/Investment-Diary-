@@ -17,10 +17,19 @@ export default async function OptimizerPage() {
         </Empty>
       ) : (
         <>
+          {u.covarianceWarnings.map((w) => (
+            <p key={w} className="text-xs text-neg">⚠️ {w}</p>
+          ))}
           {u.skipped.length > 0 && (
             <p className="text-xs text-muted">ไม่รวม: {u.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}</p>
           )}
-          <OptimizerClient assets={u.assets} cov={u.cov} rf={u.riskFree} erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} />
+          <OptimizerClient
+            assets={u.assets}
+            cov={u.cov}
+            covShrunk={u.covShrunk}
+            shrinkage={u.shrinkage}
+            periodsPerYear={u.periodsPerYear}
+            rf={u.riskFree} erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} />
         </>
       )}
     </>

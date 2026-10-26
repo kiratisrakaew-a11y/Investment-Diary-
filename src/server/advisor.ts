@@ -76,9 +76,18 @@ function tools() {
       name: "optimize_portfolio",
       description:
         "Markowitz mean-variance optimization over held/registered assets. Returns recommended weights, THB trades vs. current holdings, and the min-variance / max-Sharpe portfolios. " +
-        "objective: max_sharpe | min_variance | target_return | target_risk | utility (uses riskAversion A in U = E[R] − ½Aσ²). useRiskFree mixes the tangency portfolio with the risk-free asset (complete portfolio y*).",
+        "objective: max_sharpe | min_variance | target_return | target_risk | utility (uses riskAversion A in U = E[R] − ½Aσ²). useRiskFree mixes the tangency portfolio with the risk-free asset and solves the objective on the capital allocation line. Infeasible bounds/targets return { ok: false, issue } — never relax them; explain the suggestion to the user.",
       inputSchema: optimizeInput,
-      run: async (p) => json(await optimizePortfolio(p)),
+      run: async (p) => {
+        try {
+          return json(await optimizePortfolio(p));
+        } catch (e) {
+          // Infeasible constraints come back as a typed issue so the advisor can explain the fix.
+          const issue = (e as { issue?: unknown }).issue;
+          if (issue) return json({ ok: false, issue });
+          throw e;
+        }
+      },
     }),
     betaZodTool({
       name: "value_security",

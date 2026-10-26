@@ -134,7 +134,8 @@ export default async function AnalyticsPage() {
         ) : (
           <>
             <p className="mb-3 text-xs text-muted">
-              ประมาณจากผลตอบแทนรายวัน (บาท) {mpt.observations} วัน ({mpt.from} → {mpt.to}) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
+              ประมาณจากผลตอบแทน (บาท) {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
+              {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
             </p>
             <FrontierChart

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import clsx from "clsx";
-import { recommend, type Objective, type RecommendResult } from "@/lib/finance/recommend";
+import { recommend, type Objective, type RecommendOutcome } from "@/lib/finance/recommend";
 import type { UniverseAsset } from "@/server/services/optimizer";
 import type { AssetClass } from "@/db/schema";
 import { applyTargetsAction } from "@/app/(app)/optimizer/actions";
@@ -22,13 +22,19 @@ const OBJECTIVES: { value: Objective; label: string }[] = [
 
 export function OptimizerClient({
   assets,
-  cov,
+  cov: covSample,
+  covShrunk,
+  shrinkage,
+  periodsPerYear,
   rf,
   erp,
   period,
 }: {
   assets: UniverseAsset[];
   cov: number[][];
+  covShrunk: number[][];
+  shrinkage: number;
+  periodsPerYear: number;
   rf: number;
   erp: number;
   period: string;
@@ -44,7 +50,9 @@ export function OptimizerClient({
   const [maxW, setMaxW] = useState(0.4);
   const [useRiskFree, setUseRiskFree] = useState(false);
   const [extraCash, setExtraCash] = useState(0);
-  const [result, setResult] = useState<{ r: RecommendResult; idx: number[] } | null>(null);
+  const [covMethod, setCovMethod] = useState<"sample" | "ledoit_wolf">("sample");
+  const cov = covMethod === "ledoit_wolf" ? covShrunk : covSample;
+  const [result, setResult] = useState<{ r: RecommendOutcome; idx: number[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
@@ -57,19 +65,15 @@ export function OptimizerClient({
   const mu = assets.map((a) => overrides[a.symbol] ?? baseReturn(a));
 
   const params = useMemo(
-    () => ({ included, mu: mu.join(), objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash }),
+    () => ({ included, mu: mu.join(), objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [included, method, overrides, objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash],
+    [included, method, overrides, objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod],
   );
 
   function compute() {
     const idx = assets.map((a, i) => (included.has(a.symbol) ? i : -1)).filter((i) => i >= 0);
     if (idx.length < 2) {
       setError("เลือกอย่างน้อย 2 สินทรัพย์");
-      return;
-    }
-    if (minW * idx.length > 1) {
-      setError("น้ำหนักขั้นต่ำ × จำนวนสินทรัพย์ ต้องไม่เกิน 100%");
       return;
     }
     setError(null);
@@ -109,20 +113,22 @@ export function OptimizerClient({
   }, [params]);
 
   function applyTargets() {
-    if (!result) return;
+    if (!result || !result.r.ok) return;
+    const ok = result.r;
     const byClass: Partial<Record<AssetClass, number>> = {};
-    result.r.allocations.forEach((al, k) => {
+    ok.allocations.forEach((al, k) => {
       const cls = assets[result.idx[k]].assetClass;
       byClass[cls] = (byClass[cls] ?? 0) + al.weight * 100;
     });
-    if (result.r.riskFreeShare > 0) byClass.cash = (byClass.cash ?? 0) + result.r.riskFreeShare * 100;
+    if (ok.riskFreeShare > 0) byClass.cash = (byClass.cash ?? 0) + ok.riskFreeShare * 100;
     startApply(async () => {
       const r = await applyTargetsAction(byClass);
       setApplyMsg(r.ok ? "บันทึกเป็นเป้าหมาย asset allocation แล้ว" : r.error ?? "ผิดพลาด");
     });
   }
 
-  const r = result?.r;
+  const outcome = result?.r;
+  const r = outcome?.ok ? outcome : null;
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
@@ -142,9 +148,19 @@ export function OptimizerClient({
             <NumField label="น้ำหนักสูงสุด/ตัว" pct value={maxW} onChange={(v) => setMaxW(Math.min(1, Math.max(0.01, v ?? 1)))} />
           </div>
           <Toggle label="รวมสินทรัพย์ปลอดความเสี่ยง (Complete portfolio บน CML)" checked={useRiskFree} onChange={setUseRiskFree} />
+          {useRiskFree && <p className="text-xs text-muted">ส่วนเสี่ยง = tangency portfolio; objective กำหนดสัดส่วนบนเส้น CAL (ไม่กู้ยืม — สูงสุด 100%)</p>}
+          <SelectField
+            label="Covariance"
+            value={covMethod}
+            options={[
+              { value: "sample", label: "Sample (ข้อมูลในอดีตตรง ๆ)" },
+              { value: "ledoit_wolf", label: `Ledoit–Wolf shrinkage (δ = ${(shrinkage * 100).toFixed(1)}%)` },
+            ]}
+            onChange={setCovMethod}
+          />
           <NumField label="เงินลงทุนเพิ่ม (บาท)" value={extraCash} onChange={(v) => setExtraCash(Math.max(0, v ?? 0))} />
           <p className="text-xs text-muted">
-            Rf {fmtPct(rf)} · ERP {fmtPct(erp)} · ข้อมูล {period}
+            Rf {fmtPct(rf)} · ERP {fmtPct(erp)} · ข้อมูล {period} · {periodsPerYear.toFixed(1)} งวด/ปี · long-only, ลงทุนครบ 100%, ไม่มี margin
           </p>
         </section>
 
@@ -156,7 +172,7 @@ export function OptimizerClient({
                 label="วิธีตั้งต้น"
                 value={method}
                 options={[
-                  { value: "blend", label: "ผสม 50/50 (ลด estimation error)" },
+                  { value: "blend", label: "ผสม 50/50 (heuristic)" },
                   { value: "capm", label: "CAPM: Rf + β·ERP" },
                   { value: "historical", label: "ค่าเฉลี่ยในอดีต" },
                 ]}
@@ -211,11 +227,21 @@ export function OptimizerClient({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-muted">Covariance คำนวณจากผลตอบแทนรายวันเป็นบาทในอดีต · ช่องที่แก้เองมีกรอบเน้น ลบค่าออกเพื่อกลับไปใช้วิธีตั้งต้น</p>
+          <p className="text-xs text-muted">
+            อดีต = ค่าเฉลี่ยเลขคณิต × จำนวนงวดต่อปี (เฉพาะวันที่ทุกสินทรัพย์มีราคา, เป็นบาท) · ผสม 50/50 เป็นวิธีประมาณแบบง่าย ไม่ได้แก้ estimation error · ช่องที่แก้เองมีกรอบเน้น ลบค่าออกเพื่อกลับไปใช้วิธีตั้งต้น
+          </p>
         </section>
       </div>
 
       {error && <p className="text-sm text-neg">{error}</p>}
+      {outcome && !outcome.ok && (
+        <section className="card border-l-4 border-l-neg">
+          <h2 className="font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
+          <p className="mt-1 text-sm">{outcome.issue.message}</p>
+          {outcome.issue.suggestion && <p className="mt-1 text-sm text-muted">แนะนำ: {outcome.issue.suggestion}</p>}
+          <p className="mt-2 text-xs text-muted">ระบบไม่ผ่อนข้อจำกัดให้เอง เพื่อไม่ให้ได้น้ำหนักที่ขัดกับที่คุณตั้งไว้ ({outcome.issue.code})</p>
+        </section>
+      )}
 
       {r && (
         <>
@@ -235,7 +261,7 @@ export function OptimizerClient({
               rf={rf}
             />
             <p className="mt-1 text-xs text-muted">
-              แขนบน = efficient frontier, แขนล่าง (เส้นประ) = พอร์ตที่ไม่มีประสิทธิภาพ · เส้นสีเทา = กรณีขายชอร์ตได้ไม่จำกัด (สูตรปิดของ Markowitz/Merton)
+              แขนบน = efficient frontier, แขนล่าง (เส้นประ) = พอร์ตที่ไม่มีประสิทธิภาพ · เส้นสีน้ำเงิน = ตามข้อจำกัดน้ำหนัก {fmtPct(minW, 0)}–{fmtPct(maxW, 0)} (ลงทุนได้จริง) · เส้นสีเทา = สูตรปิดแบบขายชอร์ตได้ไม่จำกัด ใช้เทียบทฤษฎีเท่านั้น (มีน้ำหนักติดลบ ลงทุนจริงไม่ได้)
             </p>
           </section>
 
@@ -253,11 +279,11 @@ export function OptimizerClient({
                   <KV k="Sharpe" v={fmtRatio(r.current.sharpe)} />
                 </>
               )}
-              {r.notes.map((n) => (
+              {r.warnings.map((n) => (
                 <p key={n} className="pt-2 text-xs text-neg">⚠️ {n}</p>
               ))}
               <div className="pt-3">
-                <button className="btn" onClick={applyTargets} disabled={applying}>
+                <button className="btn" onClick={applyTargets} disabled={applying || !r}>
                   ใช้เป็นเป้าหมาย asset allocation
                 </button>
                 {applyMsg && <p className="mt-1 text-xs text-pos">{applyMsg}</p>}
@@ -302,6 +328,14 @@ export function OptimizerClient({
                   )}
                 </tbody>
               </table>
+              <div className="mt-3 grid grid-cols-2 gap-x-6 text-xs sm:grid-cols-3">
+                <KV k="Solver" v={`${r.solver.status === "optimal" ? "optimal" : r.solver.status} · ${r.solver.iterations} รอบ`} />
+                <KV k="KKT residual" v={r.solver.kktResidual.toExponential(1)} />
+                <KV k="|Σw − 1|" v={r.solver.sumError.toExponential(1)} />
+                <KV k="เกินขอบเขตสูงสุด" v={r.solver.maxBoundViolation.toExponential(1)} />
+                <KV k="ข้อจำกัด" v={`${r.constraints.n} ตัว · ${fmtPct(r.constraints.min, 0)}–${fmtPct(r.constraints.max, 0)}`} />
+                <KV k="Condition number Σ" v={Number.isFinite(r.covariance.conditionNumber) ? r.covariance.conditionNumber.toExponential(1) : "∞ (singular)"} />
+              </div>
               <p className="mt-2 text-xs text-muted">
                 ⚠️ MPT อ่อนไหวต่อผลตอบแทนคาดหวังมาก ควรใช้ข้อจำกัดน้ำหนัก ทดลองหลายสมมติฐาน และปรับพอร์ตทีละน้อย — เป็นเครื่องมือประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
               </p>
