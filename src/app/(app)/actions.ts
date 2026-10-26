@@ -125,6 +125,9 @@ export async function saveSettingsAction(_: ActionState, f: FormData): Promise<A
       riskFreeRate: num(f, "riskFreeRate") ?? 0,
       benchmarkSymbol: str(f, "benchmarkSymbol") ?? "^SET.BK",
       equityRiskPremium: num(f, "equityRiskPremium"),
+      cashFlowPolicy: (str(f, "cashFlowPolicy") as "strict" | "infer_with_warning" | undefined) ?? undefined,
+      twrFlowTiming: (str(f, "twrFlowTiming") as "start_of_day" | "end_of_day" | "modified_dietz" | undefined) ?? undefined,
+      benchmarkKind: (str(f, "benchmarkKind") as "price_index" | "total_return" | undefined) ?? undefined,
     });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {

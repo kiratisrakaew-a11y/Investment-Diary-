@@ -71,6 +71,9 @@ export const settingsInput = z.object({
   riskFreeRate: z.number().min(-5).max(50).describe("Annual risk-free rate in %, e.g. Thai 1Y govt bond yield"),
   benchmarkSymbol: z.string().min(1),
   equityRiskPremium: z.number().min(0).max(30).default(6).describe("Expected equity risk premium in %"),
+  cashFlowPolicy: z.enum(["strict", "infer_with_warning"]).default("strict"),
+  twrFlowTiming: z.enum(["start_of_day", "end_of_day", "modified_dietz"]).default("start_of_day"),
+  benchmarkKind: z.enum(["price_index", "total_return"]).default("price_index"),
 });
 
 export const targetsInput = z.record(assetClass, z.number().min(0).max(100));

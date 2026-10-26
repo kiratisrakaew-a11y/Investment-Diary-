@@ -1,7 +1,9 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { today, transactionInput, type TransactionInputT } from "@/lib/validation";
-import { getAssetBySymbol } from "./assets";
+import { getAssetBySymbol, listAssets } from "./assets";
+import { getSettings } from "./settings";
+import { validateNewTransaction } from "@/lib/finance/portfolio";
 import { latestFx } from "./prices";
 
 export async function listTransactions(opts: { assetId?: number; limit?: number } = {}) {
@@ -37,10 +39,19 @@ export async function createTransaction(input: TransactionInputT) {
       if (!Number.isFinite(fxRate)) throw new Error("No USD/THB rate available — please pass fxRate");
     }
   }
+  const date = data.date ?? today();
+  // Ledger integrity: no oversell, valid numbers, and (strict policy) enough recorded cash.
+  const [assets, existing, settings] = await Promise.all([listAssets(), allTransactions(), getSettings()]);
+  validateNewTransaction(
+    assets.map((a) => ({ id: a.id, symbol: a.symbol, name: a.name, assetClass: a.assetClass, currency: a.currency })),
+    existing.map((t) => ({ id: t.id, date: t.date, assetId: t.assetId, type: t.type, quantity: t.quantity, price: t.price, fee: t.fee, fxRate: t.fxRate })),
+    { date, assetId, type: data.type, quantity: data.quantity, price: data.price, fee: data.fee, fxRate },
+    settings.cashFlowPolicy,
+  );
   const [row] = await getDb()
     .insert(schema.transactions)
     .values({
-      date: data.date ?? today(),
+      date,
       assetId,
       type: data.type,
       quantity: data.quantity,

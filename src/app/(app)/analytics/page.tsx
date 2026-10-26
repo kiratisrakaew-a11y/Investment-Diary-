@@ -2,6 +2,15 @@ import { getMptAnalysis, getPerformance } from "@/server/services/portfolio";
 import { FrontierChart, GrowthChart } from "@/components/charts";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { fmtPct, fmtRatio, signClass } from "@/lib/format";
+import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
+
+const TIMING_LABEL = {
+  start_of_day: "เงินเข้า/ออกต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1",
+  end_of_day: "เงินเข้า/ออกสิ้นวัน: rₜ = (Vₜ − CFₜ) / Vₜ₋₁ − 1",
+  modified_dietz: "Modified Dietz: rₜ = (Vₜ − Vₜ₋₁ − CFₜ) / (Vₜ₋₁ + ½CFₜ)",
+} as const;
+
+const na = (v: number | null, reason: string) => (v == null ? reason : undefined);
 
 function Row({ label, value, formula, tone }: { label: string; value: string; formula: string; tone?: string }) {
   return (
@@ -27,52 +36,91 @@ export default async function AnalyticsPage() {
     <>
       <PageHeader
         title="วิเคราะห์ผลการดำเนินงาน"
-        subtitle={perf.startDate ? `ช่วง ${perf.startDate} → ${perf.endDate} · ${perf.periods} วันทำการ · Risk-free ${fmtPct(perf.riskFreeRate)}` : "ยังไม่มีข้อมูล"}
+        subtitle={
+          perf.startDate
+            ? `ช่วง ${perf.startDate} → ${perf.endDate} (${perf.periodDays} วัน) · ${perf.periods} งวด · N ≈ ${perf.observationsPerYear?.toFixed(1) ?? "–"} งวด/ปี · Risk-free ${fmtPct(perf.riskFreeRate)}`
+            : "ยังไม่มีข้อมูล"
+        }
       />
 
+      <p className="text-xs text-muted">
+        สมมติฐานการคำนวณ: TWR — {TIMING_LABEL[perf.flowTiming]} · XIRR ใช้ ACT/365 · ความผันผวน/Sharpe ใช้ผลตอบแทนส่วนเกินรายงวด × √N โดย N มาจากข้อมูลจริง (ไม่ใช่ 252 ตายตัว) ·
+        Rf ต่องวด = (1 + Rf)^(Δวัน/365) − 1{b && ` · ดัชนีอ้างอิง ${b.symbol} = ${b.kind === "price_index" ? "ดัชนีราคา (ไม่รวมปันผล)" : "ดัชนีผลตอบแทนรวม"}`}
+      </p>
+
+      <DataQualityPanel warnings={[...perf.dataQuality.warnings, ...(b?.warnings ?? [])]} />
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="ผลตอบแทนและความเสี่ยง">
-          <table className="table">
-            <tbody>
-              <Row label="TWR สะสม" value={fmtPct(perf.twrCumulative)} tone={signClass(perf.twrCumulative)} formula="Π(1 + rₜ) − 1, rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1 — ตัดผลการฝาก/ถอน" />
-              <Row label="TWR ต่อปี (Rp)" value={fmtPct(perf.twrAnnualized)} tone={signClass(perf.twrAnnualized)} formula="(1 + TWR)^(1/ปี) − 1" />
-              <Row label="XIRR (Money-weighted)" value={fmtPct(perf.mwrXirr)} tone={signClass(perf.mwrXirr)} formula="r ที่ทำให้ Σ CFᵢ/(1+r)^tᵢ = 0" />
-              <Row label="Risk-free rate (Rf)" value={fmtPct(perf.riskFreeRate)} formula="อัตราผลตอบแทนพันธบัตรรัฐบาลไทยระยะสั้น (ตั้งค่าได้)" />
-              <Row label="Risk premium" value={fmtPct(perf.riskPremium)} tone={signClass(perf.riskPremium)} formula="Rp − Rf" />
-              <Row label="Volatility (σ)" value={fmtPct(perf.volatility)} formula="σ(daily) × √252" />
-              <Row label="Downside deviation" value={fmtPct(perf.downsideDeviation)} formula="√(Σ min(0, r − Rf/252)² / n) × √252" />
-              <Row label="Max drawdown" value={fmtPct(perf.maxDrawdown)} formula="ลดลงสูงสุดจากจุดสูงสุด" />
-              <Row label="VaR 95% (1 วัน)" value={fmtPct(perf.var95Daily)} formula="Historical — 5% ของวันที่แย่ที่สุด" />
-              <Row label="CVaR / Expected shortfall" value={fmtPct(perf.cvar95Daily)} formula="ค่าเฉลี่ยของขาดทุนที่เกิน VaR" />
-            </tbody>
-          </table>
+        <Section title="ผลตอบแทนและความเสี่ยง" className="min-w-0">
+          <div className="overflow-x-auto">
+            <table className="table">
+              <tbody>
+                <Row label={`TWR สะสม (${perf.periodDays} วัน)`} value={fmtPct(perf.cumulativeReturn)} tone={signClass(perf.cumulativeReturn)} formula="Π(1 + rₜ) − 1 — ตัดผลการฝาก/ถอน" />
+                <Row
+                  label="TWR ต่อปี (Rp, geometric)"
+                  value={perf.annualizedReturn != null ? fmtPct(perf.annualizedReturn) : `– (เทียบเท่า ${fmtPct(perf.annualizedEquivalent)})`}
+                  tone={signClass(perf.annualizedReturn)}
+                  formula={perf.annualizationApplicable ? "(1 + TWR)^(365/วัน) − 1" : "ช่วงข้อมูล < 1 ปี: ไม่รายงานเป็นอัตราต่อปี; ค่าในวงเล็บเป็นการขยายผล (extrapolated)"}
+                />
+                <Row label="ผลตอบแทนเฉลี่ยต่อปี (arithmetic)" value={fmtPct(perf.arithmeticAnnualReturn)} formula="mean(rₜ) × N — ใช้คู่กับ σ; ต่างจาก geometric" />
+                <Row label="XIRR (Money-weighted)" value={xirrText(perf.xirr)} tone={signClass(perf.xirr.rate)} formula={`r ที่ทำให้ Σ CFᵢ/(1+r)^(dᵢ/365) = 0 · ${xirrNote(perf.xirr)}`} />
+                <Row label="Risk-free rate (Rf)" value={fmtPct(perf.riskFreeRate)} formula="ตั้งค่าเอง (ค่าเริ่มต้นเป็นตัวอย่าง ไม่ใช่ข้อมูลตลาด)" />
+                <Row label="Excess return ต่อปี" value={fmtPct(perf.realizedExcessReturn)} tone={signClass(perf.realizedExcessReturn)} formula="mean(rₜ − rf,ₜ) × N" />
+                <Row label="Volatility (σ)" value={fmtPct(perf.volatility)} formula="σ(rₜ) × √N" />
+                <Row label="Downside deviation" value={fmtPct(perf.downsideDeviation)} formula="√(Σ min(0, rₜ − rf,ₜ)² / n) × √N" />
+                <Row label="Max drawdown" value={fmtPct(perf.maxDrawdown)} formula="ลดลงสูงสุดจากจุดสูงสุดของดัชนี TWR" />
+                <Row
+                  label={`VaR 95% (1 งวด ≈ ${perf.varHorizonDays?.toFixed(1) ?? "–"} วัน)`}
+                  value={fmtPct(perf.var95)}
+                  formula={na(perf.var95, "ต้องมีอย่างน้อย 100 งวด") ?? "Historical — ควอนไทล์ 5% ของผลตอบแทนรายงวด"}
+                />
+                <Row label="Expected shortfall 95%" value={fmtPct(perf.cvar95)} formula={na(perf.cvar95, "ต้องมีอย่างน้อย 100 งวด") ?? "ค่าเฉลี่ยของ n·5% งวดที่แย่ที่สุด"} />
+              </tbody>
+            </table>
+          </div>
         </Section>
 
-        <Section title="Risk-adjusted & CAPM">
-          <table className="table">
-            <tbody>
-              <Row label="Sharpe ratio" value={fmtRatio(perf.sharpe)} formula="(Rp − Rf) / σp" />
-              <Row label="Sortino ratio" value={fmtRatio(perf.sortino)} formula="(Rp − Rf) / downside deviation" />
-              <Row label="Calmar ratio" value={fmtRatio(perf.calmar)} formula="Rp / Max drawdown" />
-              {b ? (
-                <>
-                  <Row label={`ผลตอบแทนตลาด Rm (${b.symbol})`} value={fmtPct(b.annualized)} formula={`สะสม ${fmtPct(b.cumulative)} · σm ${fmtPct(b.volatility)}`} />
-                  <Row label="Market risk premium" value={fmtPct(b.marketRiskPremium)} formula="Rm − Rf" />
-                  <Row label="Beta (β)" value={fmtRatio(b.beta)} formula="Cov(Rp, Rm) / Var(Rm)" />
-                  <Row label="Correlation (ρ)" value={fmtRatio(b.correlation)} formula="ความสัมพันธ์กับตลาด" />
-                  <Row label="CAPM expected return" value={fmtPct(b.capmExpectedReturn)} formula="Rf + β(Rm − Rf)" />
-                  <Row label="Jensen's alpha (α)" value={fmtPct(b.jensenAlpha)} tone={signClass(b.jensenAlpha)} formula="Rp − [Rf + β(Rm − Rf)]" />
-                  <Row label="Treynor ratio" value={fmtRatio(b.treynor)} formula="(Rp − Rf) / β" />
-                  <Row label="Tracking error" value={fmtPct(b.trackingError)} formula="σ(Rp − Rm)" />
-                  <Row label="Information ratio" value={fmtRatio(b.informationRatio)} formula="(Rp − Rm) / Tracking error" />
-                </>
-              ) : (
-                <tr>
-                  <td colSpan={3} className="text-muted">ยังไม่มีข้อมูลดัชนีอ้างอิง — กด “ดึงราคาล่าสุด” ในหน้าสินทรัพย์</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <Section title="Risk-adjusted & CAPM" className="min-w-0">
+          <div className="overflow-x-auto">
+            <table className="table">
+              <tbody>
+                <Row label="Sharpe ratio" value={fmtRatio(perf.sharpe)} formula={na(perf.sharpe, "ข้อมูลไม่พอ (ต้อง ≥ " + perf.dataQuality.minRequired + " งวด)") ?? "mean(rₜ − rf,ₜ) / σ(rₜ − rf,ₜ) × √N"} />
+                <Row label="Sortino ratio" value={fmtRatio(perf.sortino)} formula="mean(excess) × N / downside deviation" />
+                <Row label="Calmar ratio" value={fmtRatio(perf.calmar)} formula={na(perf.calmar, "ต้องมีข้อมูล ≥ 1 ปี") ?? "Rp (geometric ต่อปี) / Max drawdown"} />
+                {b ? (
+                  <>
+                    <Row
+                      label={`ตลาด Rm (${b.symbol})`}
+                      value={b.annualized != null ? fmtPct(b.annualized) : `สะสม ${fmtPct(b.cumulative)}`}
+                      formula={`${b.observations} งวดที่ดัชนีมีราคาจริง · σm ${fmtPct(b.volatility)}`}
+                    />
+                    <Row label="Market excess return (realized)" value={fmtPct(b.realizedMarketExcessReturn)} formula="ผลตอบแทนส่วนเกินของตลาดที่เกิดขึ้นจริงในช่วงนี้ — ไม่ใช่ ERP คาดการณ์" />
+                    <Row
+                      label="Beta (β, OLS)"
+                      value={b.regressionBeta != null ? `${fmtRatio(b.regressionBeta)} ± ${fmtRatio(b.betaStdError)}` : "–"}
+                      formula={`(rp − rf) = α + β(rm − rf) + ε · R² ${fmtRatio(b.rSquared)}`}
+                    />
+                    <Row label="Correlation (ρ)" value={fmtRatio(b.correlation)} formula="ความสัมพันธ์กับตลาด" />
+                    <Row
+                      label="Alpha ต่อปี (OLS)"
+                      value={b.regressionAlphaAnnual != null ? `${fmtPct(b.regressionAlphaAnnual)} ± ${fmtPct(b.alphaStdError)}` : "–"}
+                      tone={signClass(b.regressionAlphaAnnual)}
+                      formula="α รายงวด × N ± standard error — |α| < 2·SE ถือว่าไม่ต่างจากศูนย์อย่างมีนัยสำคัญ"
+                    />
+                    <Row label="CAPM expected return (ประมาณ)" value={fmtPct(b.capmExpectedReturn)} formula="Rf + β(Rm − Rf) บนอัตราต่อปี" />
+                    <Row label="Jensen's alpha (ประมาณ)" value={fmtPct(b.jensenAlphaApprox)} tone={signClass(b.jensenAlphaApprox)} formula="Rp − [Rf + β(Rm − Rf)] บนอัตราต่อปี — ใช้ค่า OLS ด้านบนเป็นหลัก" />
+                    <Row label="Treynor ratio" value={fmtRatio(b.treynor)} formula="(Rp − Rf) / β — ไม่แสดงเมื่อ β ≤ 0" />
+                    <Row label="Tracking error" value={fmtPct(b.trackingError)} formula="σ(rp − rm) × √N" />
+                    <Row label="Information ratio" value={fmtRatio(b.informationRatio)} formula="mean(rp − rm) × N / Tracking error" />
+                  </>
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="text-muted">ยังไม่มีข้อมูลดัชนีอ้างอิง — กด “ดึงราคาล่าสุด” ในหน้าสินทรัพย์</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Section>
       </div>
 
@@ -87,7 +135,7 @@ export default async function AnalyticsPage() {
           <>
             <p className="mb-3 text-xs text-muted">
               ประมาณจากผลตอบแทนรายวัน (บาท) {mpt.observations} วัน ({mpt.from} → {mpt.to}) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
-              {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาไม่พอ)`}
+              {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
             </p>
             <FrontierChart
               cloud={mpt.cloud}

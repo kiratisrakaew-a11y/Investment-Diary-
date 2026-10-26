@@ -20,7 +20,7 @@ export default async function SettingsPage() {
         <Section title="สมมติฐานทางการเงิน">
           <ActionForm action={saveSettingsAction} className="space-y-3" resetOnSuccess={false}>
             <div>
-              <label className="label">Risk-free rate (% ต่อปี) — เช่น อัตราผลตอบแทนพันธบัตรรัฐบาลไทย 1 ปี (ThaiBMA / ธปท.)</label>
+              <label className="label">Risk-free rate (% ต่อปี) — ค่าเริ่มต้นเป็นตัวอย่างเท่านั้น ควรใส่ค่าจริง เช่น อัตราผลตอบแทนพันธบัตรรัฐบาลไทย 1 ปี (ThaiBMA / ธปท.)</label>
               <input name="riskFreeRate" type="number" step="0.01" className="input" defaultValue={settings.riskFreeRate} />
             </div>
             <div>
@@ -30,6 +30,28 @@ export default async function SettingsPage() {
             <div>
               <label className="label">ดัชนีอ้างอิง (สัญลักษณ์ Yahoo) — ^SET.BK = SET Index, ^SET50.BK, ^GSPC = S&amp;P 500</label>
               <input name="benchmarkSymbol" className="input" defaultValue={settings.benchmarkSymbol} />
+            </div>
+            <div>
+              <label className="label">ประเภทดัชนีอ้างอิง — ^SET.BK จาก Yahoo เป็นดัชนีราคา (ไม่รวมปันผล)</label>
+              <select name="benchmarkKind" className="input" defaultValue={settings.benchmarkKind}>
+                <option value="price_index">ดัชนีราคา (price index)</option>
+                <option value="total_return">ดัชนีผลตอบแทนรวม (total return, เช่น SET TRI)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">นโยบายเงินสด — เมื่อบันทึกซื้อแต่เงินสดในพอร์ตไม่พอ</label>
+              <select name="cashFlowPolicy" className="input" defaultValue={settings.cashFlowPolicy}>
+                <option value="strict">เข้มงวด: ปฏิเสธรายการ ให้บันทึกฝากเงินก่อน (แนะนำ)</option>
+                <option value="infer_with_warning">ยอมรับ: อนุมานเป็นเงินฝากจากภายนอก พร้อมคำเตือน</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">จังหวะเงินเข้า/ออกในการคำนวณ TWR</label>
+              <select name="twrFlowTiming" className="input" defaultValue={settings.twrFlowTiming}>
+                <option value="start_of_day">ต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1</option>
+                <option value="end_of_day">สิ้นวัน: rₜ = (Vₜ − CFₜ) / Vₜ₋₁ − 1</option>
+                <option value="modified_dietz">Modified Dietz (กลางวัน)</option>
+              </select>
             </div>
           </ActionForm>
         </Section>

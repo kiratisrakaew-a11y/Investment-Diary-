@@ -86,7 +86,9 @@ export function createMcpServer() {
       title: "Record transaction",
       description:
         "Record a buy, sell, dividend, coupon, deposit, withdraw or fee. For buy/sell give quantity and price per unit " +
-        "in the asset's currency; for other types put the total amount in `price`. The asset must exist (add_asset).",
+        "in the asset's currency; for other types put the total amount in `price`. The asset must exist (add_asset). " +
+        "Selling more than held is rejected (OVERSELL); under the default strict cash policy a buy/fee without enough cash is " +
+        "rejected (INSUFFICIENT_CASH) — record a deposit first.",
       inputSchema: txShape,
     },
     safe(async (args) => createTransaction({ ...args, source: "claude" })),

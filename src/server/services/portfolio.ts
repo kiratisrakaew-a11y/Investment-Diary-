@@ -79,14 +79,22 @@ export async function getPerformance(end = today()) {
   const last = series[series.length - 1];
   const metrics = computeMetrics({
     values: series,
-    cashFlows: investorCashFlows(txs.filter((t) => t.date <= end)),
+    cashFlows: investorCashFlows(txs.filter((t) => t.date <= end), assetInputs),
     finalValue: last?.value ?? 0,
     finalDate: end,
     riskFreeRate: settings.riskFreeRate / 100,
-    benchmark: bench.length ? { symbol: settings.benchmarkSymbol, levels: dates.map((d) => asOf(bench, d)) } : null,
+    flowTiming: settings.twrFlowTiming,
+    benchmark: bench.length ? { symbol: settings.benchmarkSymbol, series: bench, kind: settings.benchmarkKind } : null,
   });
+  const inferredFlows = series.filter((p) => p.inferredFlow > 0).map((p) => ({ date: p.date, amount: p.inferredFlow }));
+  if (inferredFlows.length) {
+    metrics.dataQuality.warnings.push(
+      `มีเงินฝากที่ระบบอนุมาน ${inferredFlows.length} ครั้ง (รวม ${Math.round(inferredFlows.reduce((a, f) => a + f.amount, 0)).toLocaleString()} บาท) เพราะบันทึกซื้อโดยไม่มีเงินสด — TWR/XIRR ถือเป็นเงินลงทุนจากภายนอก`,
+    );
+  }
   return {
     ...metrics,
+    inferredFlows,
     valueSeries: series.map((p) => ({ date: p.date, value: p.value, contributed: p.contributed })),
   };
 }
@@ -102,7 +110,13 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
   const from = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
   const rf = settings.riskFreeRate / 100;
 
-  const usable = held.filter((p) => (prices.get(p.assetId)?.filter(([d]) => d >= from).length ?? 0) >= 30);
+  // USD assets need USDTHB for every date; never substitute FX = 1.
+  const fxStart = fx[0]?.[0];
+  const usable = held.filter(
+    (p) =>
+      (prices.get(p.assetId)?.filter(([d]) => d >= from).length ?? 0) >= 30 &&
+      (p.currency !== "USD" || (fxStart != null && fxStart <= (prices.get(p.assetId)!.find(([d]) => d >= from)?.[0] ?? from))),
+  );
   const skipped = held.filter((p) => !usable.includes(p)).map((p) => p.symbol);
   if (usable.length < 2) {
     return { ok: false as const, reason: "Need at least 2 held assets with 30+ days of price history.", skipped };
@@ -117,7 +131,7 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
   const series = usable.map((p) => {
     const hist = prices.get(p.assetId)!;
     return simpleReturns(
-      common.map((d) => (asOf(hist, d) ?? 0) * (p.currency === "USD" ? (asOf(fx, d) ?? 1) : 1)),
+      common.map((d) => (asOf(hist, d) ?? 0) * (p.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1)),
     );
   });
   const { mu, cov } = estimateInputs(series);

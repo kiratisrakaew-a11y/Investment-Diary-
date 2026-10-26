@@ -12,52 +12,71 @@ function days(a: string, b: string): number {
   return (Date.parse(b) - Date.parse(a)) / DAY_MS;
 }
 
+export type XirrStatus = "ok" | "no_sign_change" | "no_root" | "multiple_roots";
+
+export interface XirrResult {
+  /** Annual money-weighted return (ACT/365), or null when not uniquely defined. */
+  rate: number | null;
+  status: XirrStatus;
+  /** NPV at the returned rate (should be ≈ 0). */
+  residual: number | null;
+  /** All roots found in (−99%, +1000%]. */
+  candidates: number[];
+  convention: "ACT/365";
+}
+
 /**
- * Money-weighted return (XIRR): the annual rate r that solves
- * Σ CF_i / (1 + r)^((t_i - t_0) / 365) = 0.
- * Solved with Newton-Raphson, falling back to bisection.
+ * Money-weighted return (XIRR): rate r > −1 solving Σ CF_i / (1 + r)^((t_i − t_0)/365) = 0.
+ * Scans (−99%, +1000%] for every sign change, bisects each bracket, and reports
+ * `multiple_roots` (rate = null) instead of picking one arbitrarily.
  */
-export function xirr(flows: CashFlow[], guess = 0.1): number | null {
-  if (flows.length < 2) return null;
-  const sorted = [...flows].sort((a, b) => a.date.localeCompare(b.date));
-  const hasPos = sorted.some((f) => f.amount > 0);
-  const hasNeg = sorted.some((f) => f.amount < 0);
-  if (!hasPos || !hasNeg) return null;
+export function xirrDetailed(flows: CashFlow[]): XirrResult {
+  const base = { convention: "ACT/365" as const };
+  const sorted = [...flows].filter((f) => Number.isFinite(f.amount) && f.amount !== 0).sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.some((f) => f.amount > 0) || !sorted.some((f) => f.amount < 0)) {
+    return { ...base, rate: null, status: "no_sign_change", residual: null, candidates: [] };
+  }
   const t0 = sorted[0].date;
   const ts = sorted.map((f) => days(t0, f.date) / 365);
-
   const npv = (r: number) => sorted.reduce((s, f, i) => s + f.amount / (1 + r) ** ts[i], 0);
-  const dnpv = (r: number) =>
-    sorted.reduce((s, f, i) => s - (ts[i] * f.amount) / (1 + r) ** (ts[i] + 1), 0);
 
-  let r = guess;
-  for (let i = 0; i < 100; i++) {
-    const f = npv(r);
-    const d = dnpv(r);
-    if (Math.abs(f) < 1e-9) return r;
-    if (d === 0 || !Number.isFinite(d)) break;
-    const next = r - f / d;
-    if (!Number.isFinite(next) || next <= -0.9999) break;
-    if (Math.abs(next - r) < 1e-12) return next;
-    r = next;
-  }
-
-  // Bisection fallback on [-0.9999, 100]
-  let lo = -0.9999;
-  let hi = 100;
-  let flo = npv(lo);
-  if (flo * npv(hi) > 0) return null;
-  for (let i = 0; i < 300; i++) {
-    const mid = (lo + hi) / 2;
-    const fm = npv(mid);
-    if (Math.abs(fm) < 1e-9) return mid;
-    if (flo * fm < 0) hi = mid;
-    else {
-      lo = mid;
-      flo = fm;
+  // Grid on log(1 + r) so that low and high rates are both covered densely.
+  const lo = Math.log(0.01);
+  const hi = Math.log(11);
+  const steps = 4000;
+  const roots: number[] = [];
+  let prevR = Math.exp(lo) - 1;
+  let prevV = npv(prevR);
+  for (let k = 1; k <= steps; k++) {
+    const r = Math.exp(lo + ((hi - lo) * k) / steps) - 1;
+    const v = npv(r);
+    if (prevV === 0) roots.push(prevR);
+    else if (prevV * v < 0) {
+      let a = prevR;
+      let b = r;
+      let fa = prevV;
+      for (let i = 0; i < 200 && b - a > 1e-14; i++) {
+        const m = (a + b) / 2;
+        const fm = npv(m);
+        if (fa * fm <= 0) b = m;
+        else {
+          a = m;
+          fa = fm;
+        }
+      }
+      roots.push((a + b) / 2);
     }
+    prevR = r;
+    prevV = v;
   }
-  return (lo + hi) / 2;
+  if (roots.length === 0) return { ...base, rate: null, status: "no_root", residual: null, candidates: [] };
+  if (roots.length > 1) return { ...base, rate: null, status: "multiple_roots", residual: null, candidates: roots };
+  return { ...base, rate: roots[0], status: "ok", residual: npv(roots[0]), candidates: roots };
+}
+
+/** Convenience wrapper: the unique XIRR or null. */
+export function xirr(flows: CashFlow[]): number | null {
+  return xirrDetailed(flows).rate;
 }
 
 export interface ValuePoint {
@@ -68,18 +87,54 @@ export interface ValuePoint {
   flow: number;
 }
 
+/** How external flows are timed within a valuation period. */
+export type FlowTiming = "start_of_day" | "end_of_day" | "modified_dietz";
+
+export interface PeriodReturn {
+  date: string;
+  r: number;
+  /** Calendar days since the previous valuation. */
+  gapDays: number;
+}
+
 /**
- * Daily time-weighted return series. The flow on day t is assumed to arrive at
- * the start of the day, so r_t = V_t / (V_{t-1} + F_t) - 1. This removes the
- * effect of the investor's deposits/withdrawals (GIPS-style TWR).
+ * Time-weighted sub-period returns between consecutive valuations.
+ *  - start_of_day:   r = V₁ / (V₀ + CF) − 1          (flow invested before the period's market move)
+ *  - end_of_day:     r = (V₁ − CF) / V₀ − 1          (flow arrives after the market move)
+ *  - modified_dietz: r = (V₁ − V₀ − CF) / (V₀ + ½CF)  (flow assumed mid-period — an approximation, not exact TWR)
+ * Periods whose base is ≤ 0 are skipped and reported.
  */
-export function twrDailyReturns(points: ValuePoint[]): { date: string; r: number }[] {
-  const out: { date: string; r: number }[] = [];
+export function periodReturns(points: ValuePoint[], timing: FlowTiming = "start_of_day"): { returns: PeriodReturn[]; issues: string[] } {
+  const returns: PeriodReturn[] = [];
+  const issues: string[] = [];
   for (let i = 1; i < points.length; i++) {
-    const base = points[i - 1].value + points[i].flow;
-    if (base > 0) out.push({ date: points[i].date, r: points[i].value / base - 1 });
+    const v0 = points[i - 1].value;
+    const v1 = points[i].value;
+    const cf = points[i].flow;
+    let base: number;
+    let r: number;
+    if (timing === "end_of_day") {
+      base = v0;
+      r = (v1 - cf) / v0 - 1;
+    } else if (timing === "modified_dietz") {
+      base = v0 + 0.5 * cf;
+      r = (v1 - v0 - cf) / base;
+    } else {
+      base = v0 + cf;
+      r = v1 / base - 1;
+    }
+    if (!(base > 0) || !Number.isFinite(r)) {
+      issues.push(`${points[i].date}: ฐานมูลค่า ≤ 0 — ข้ามช่วงนี้ในการคำนวณ TWR`);
+      continue;
+    }
+    returns.push({ date: points[i].date, r, gapDays: days(points[i - 1].date, points[i].date) });
   }
-  return out;
+  return { returns, issues };
+}
+
+/** Start-of-day TWR returns (kept for callers that only need the numbers). */
+export function twrDailyReturns(points: ValuePoint[]): { date: string; r: number }[] {
+  return periodReturns(points, "start_of_day").returns;
 }
 
 /** Geometrically link period returns: Π(1 + r) - 1. */
@@ -93,11 +148,23 @@ export function annualize(cumulative: number, periods: number, periodsPerYear = 
   return (1 + cumulative) ** (periodsPerYear / periods) - 1;
 }
 
-/** Annualize a cumulative return over a calendar span. */
-export function annualizeByDates(cumulative: number, start: string, end: string): number {
-  const years = days(start, end) / 365;
-  if (years <= 0) return 0;
-  // Do not extrapolate returns for periods shorter than a year.
-  if (years < 1) return cumulative;
-  return (1 + cumulative) ** (1 / years) - 1;
+export interface AnnualizedReturn {
+  /** Annualized rate — only when the period is at least one year, else null. */
+  annualized: number | null;
+  /** (1 + cumulative)^(365/days) − 1; extrapolated when days < 365. */
+  equivalent: number | null;
+  applicable: boolean;
+  periodDays: number;
+}
+
+/** Annualize a cumulative return over `periodDays` calendar days (ACT/365). */
+export function annualizeReturn(cumulative: number, periodDays: number): AnnualizedReturn {
+  if (!(periodDays > 0) || !(1 + cumulative > 0)) return { annualized: null, equivalent: null, applicable: false, periodDays };
+  const equivalent = (1 + cumulative) ** (365 / periodDays) - 1;
+  const applicable = periodDays >= 365;
+  return { annualized: applicable ? equivalent : null, equivalent, applicable, periodDays };
+}
+
+export function daysBetween(start: string, end: string): number {
+  return Math.round(days(start, end));
 }

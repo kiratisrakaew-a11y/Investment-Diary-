@@ -4,11 +4,40 @@ import type { AssetClass } from "@/db/schema";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
-  return row ?? { id: 1, riskFreeRate: 2.0, benchmarkSymbol: "^SET.BK", equityRiskPremium: 6.0, baseCurrency: "THB" as const };
+  return (
+    row ?? {
+      id: 1,
+      riskFreeRate: 2.0,
+      benchmarkSymbol: "^SET.BK",
+      equityRiskPremium: 6.0,
+      baseCurrency: "THB" as const,
+      cashFlowPolicy: "strict" as const,
+      twrFlowTiming: "start_of_day" as const,
+      benchmarkKind: "price_index" as const,
+    }
+  );
 }
 
-export async function saveSettings(input: { riskFreeRate: number; benchmarkSymbol: string; equityRiskPremium?: number }) {
-  const data = settingsInput.parse(input);
+export async function saveSettings(input: {
+  riskFreeRate: number;
+  benchmarkSymbol: string;
+  equityRiskPremium?: number;
+  cashFlowPolicy?: "strict" | "infer_with_warning";
+  twrFlowTiming?: "start_of_day" | "end_of_day" | "modified_dietz";
+  benchmarkKind?: "price_index" | "total_return";
+}) {
+  // Merge with stored values so a partial update never resets other settings to their defaults.
+  const current = await getSettings();
+  const defined = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+  const data = settingsInput.parse({
+    riskFreeRate: current.riskFreeRate,
+    benchmarkSymbol: current.benchmarkSymbol,
+    equityRiskPremium: current.equityRiskPremium,
+    cashFlowPolicy: current.cashFlowPolicy,
+    twrFlowTiming: current.twrFlowTiming,
+    benchmarkKind: current.benchmarkKind,
+    ...defined,
+  });
   await getDb()
     .insert(schema.settings)
     .values({ id: 1, ...data })

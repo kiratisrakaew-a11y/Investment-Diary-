@@ -5,7 +5,28 @@ import { latestValuationBySymbol } from "@/server/services/valuations";
 import { AddAssetForm, AddPriceForm } from "@/components/AssetForms";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
 import { Empty, PageHeader, Section } from "@/components/ui";
+import { DataQualityPanel } from "@/components/DataQuality";
+import type { Position } from "@/lib/finance/portfolio";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
+
+function PriceBadges({ p }: { p: Position }) {
+  const badges: string[] = [];
+  if (p.priceStatus === "stale") badges.push(`ราคาเก่า ${p.priceAgeDays} วัน`);
+  if (p.priceStatus === "tx_price_fallback") badges.push("ใช้ราคาซื้อขาย");
+  if (p.priceStatus === "missing") badges.push("ไม่มีราคา");
+  if (p.fxStatus === "stale") badges.push("FX เก่า");
+  if (p.fxStatus === "tx_fallback") badges.push("FX ณ วันซื้อขาย");
+  if (!badges.length) return null;
+  return (
+    <div className="mt-0.5 flex flex-wrap justify-end gap-1">
+      {badges.map((b) => (
+        <span key={b} className="rounded bg-neg/10 px-1 text-[11px] text-neg">
+          {b}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default async function HoldingsPage() {
   const [summary, assets, vals] = await Promise.all([getPortfolioSummary(), listAssets(), latestValuationBySymbol()]);
@@ -16,6 +37,8 @@ export default async function HoldingsPage() {
   return (
     <>
       <PageHeader title="สินทรัพย์ที่ถือ" subtitle="ต้นทุนเฉลี่ย, มูลค่าตลาด และกำไร/ขาดทุน (บาท)" action={<UpdatePricesButton />} />
+
+      <DataQualityPanel issues={summary.issues} reconciliation={summary.reconciliation} />
 
       <Section title="พอร์ตปัจจุบัน">
         {open.length === 0 ? (
@@ -53,6 +76,7 @@ export default async function HoldingsPage() {
                     <td className="num">
                       {fmtNum(p.lastPrice)} <span className="text-xs text-muted">{p.currency}</span>
                       <div className="text-[11px] text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
+                      <PriceBadges p={p} />
                     </td>
                     <td className="num">{fmtThb(p.marketValueThb)}</td>
                     <td className={`num ${signClass(p.unrealizedPnlThb)}`}>

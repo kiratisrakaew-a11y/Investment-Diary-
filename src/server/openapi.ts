@@ -76,7 +76,7 @@ export function buildOpenApi(origin: string) {
           summary: "Record a buy, sell, dividend, coupon, deposit, withdraw or fee",
           description:
             "For buy/sell give quantity and price per unit in the asset currency; for other types put the total amount in price. " +
-            "The asset must already exist (addAsset).",
+            "The asset must already exist (addAsset). Overselling returns 400 OVERSELL; with the strict cash policy a buy/fee without enough cash returns 400 INSUFFICIENT_CASH — record a deposit first.",
           requestBody: body("TransactionInput"),
           responses: { "200": ok("Created transaction") },
         },

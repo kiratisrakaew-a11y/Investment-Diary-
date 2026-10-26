@@ -137,6 +137,12 @@ export const settings = pgTable("settings", {
   benchmarkSymbol: text("benchmark_symbol").notNull().default("^SET.BK"),
   /** Expected equity risk premium (%) used for CAPM expected returns and cost of equity. */
   equityRiskPremium: doublePrecision("equity_risk_premium").notNull().default(6.0),
+  /** strict: reject buys/fees without enough recorded cash; infer_with_warning: allow with an explicit inferred deposit. */
+  cashFlowPolicy: text("cash_flow_policy").$type<"strict" | "infer_with_warning">().notNull().default("strict"),
+  /** How external flows are timed in TWR sub-periods. */
+  twrFlowTiming: text("twr_flow_timing").$type<"start_of_day" | "end_of_day" | "modified_dietz">().notNull().default("start_of_day"),
+  /** Whether the benchmark series includes dividends. */
+  benchmarkKind: text("benchmark_kind").$type<"price_index" | "total_return">().notNull().default("price_index"),
   baseCurrency: currencyEnum("base_currency").notNull().default("THB"),
 });
 

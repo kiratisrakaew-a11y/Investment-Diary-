@@ -65,10 +65,19 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
   const wanted = symbols?.length ? new Set(symbols.map((s) => s.toUpperCase())) : null;
   const skipped: { symbol: string; reason: string }[] = [];
   const candidates = assets.filter((a) => a.assetClass !== "cash" && (!wanted || wanted.has(a.symbol.toUpperCase())));
+  const fxStart = fx[0]?.[0];
   const usable = candidates.filter((a) => {
     const n = prices.get(a.id)?.filter(([d]) => d >= from).length ?? 0;
-    if (n < MIN_OBS) skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${n} วัน (ต้องการ ≥ ${MIN_OBS})` });
-    return n >= MIN_OBS;
+    if (n < MIN_OBS) {
+      skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${n} วัน (ต้องการ ≥ ${MIN_OBS})` });
+      return false;
+    }
+    // Never convert at FX = 1: USD assets need USDTHB history covering the window.
+    if (a.currency === "USD" && (fxStart == null || fxStart > (prices.get(a.id)!.find(([d]) => d >= from)?.[0] ?? from))) {
+      skipped.push({ symbol: a.symbol, reason: "ไม่มีอัตรา USDTHB ครอบคลุมช่วงข้อมูล" });
+      return false;
+    }
+    return true;
   });
 
   const empty: OptimizerUniverse = {
@@ -96,7 +105,7 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
   if (dates.length < MIN_OBS) return { ...empty, reason: "ช่วงเวลาที่มีราคาซ้อนกันสั้นเกินไป" };
 
   const series = usable.map((a) =>
-    simpleReturns(dates.map((d) => (asOf(prices.get(a.id), d) ?? 0) * (a.currency === "USD" ? (asOf(fx, d) ?? 1) : 1))),
+    simpleReturns(dates.map((d) => (asOf(prices.get(a.id), d) ?? 0) * (a.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1))),
   );
   const benchReturns = bench.length ? simpleReturns(dates.map((d) => asOf(bench, d) ?? 0)) : null;
   const { cov } = estimateInputs(series);

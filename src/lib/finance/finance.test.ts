@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { xirr, twrDailyReturns, linkReturns, annualizeByDates } from "./returns";
+import { xirr, twrDailyReturns, linkReturns, annualizeReturn } from "./returns";
 import { annualVolatility, beta, maxDrawdown, historicalVaR, downsideDeviation } from "./risk";
 import { sharpe, sortino, treynor, jensenAlpha, capmExpectedReturn, riskPremium } from "./ratios";
 import { minVariancePortfolio, maxSharpePortfolio, projectToSimplex, efficientFrontier, portfolioStats } from "./mpt";
@@ -35,9 +35,9 @@ describe("returns", () => {
     expect(linkReturns(rs)).toBeCloseTo(0.21);
   });
 
-  it("does not extrapolate sub-year returns", () => {
-    expect(annualizeByDates(0.05, "2024-01-01", "2024-06-01")).toBe(0.05);
-    expect(annualizeByDates(0.21, "2022-01-01", "2024-01-01")).toBeCloseTo(0.1, 2);
+  it("annualizes only periods of at least a year", () => {
+    expect(annualizeReturn(0.05, 152).annualized).toBeNull();
+    expect(annualizeReturn(0.21, 730).annualized!).toBeCloseTo(0.1, 2);
   });
 });
 

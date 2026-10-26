@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ZodError } from "zod";
 import { SESSION_COOKIE, checkApiKey, verifySessionToken } from "@/lib/auth";
+import { LedgerError } from "@/lib/finance/portfolio";
 
 async function authorized(req: Request) {
   if (checkApiKey(req)) return true;
@@ -12,6 +13,9 @@ async function authorized(req: Request) {
 export function errorResponse(e: unknown) {
   if (e instanceof ZodError) {
     return NextResponse.json({ error: "Invalid input", issues: e.issues }, { status: 400 });
+  }
+  if (e instanceof LedgerError) {
+    return NextResponse.json({ error: e.message, code: e.issue.code, issue: e.issue }, { status: 400 });
   }
   const message = e instanceof Error ? e.message : String(e);
   return NextResponse.json({ error: message }, { status: 400 });

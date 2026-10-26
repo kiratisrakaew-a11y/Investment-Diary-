@@ -7,6 +7,7 @@ import { AllocationTable } from "@/components/AllocationTable";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { NoteCard } from "@/components/NoteCard";
 import { fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
+import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 
 export default async function Dashboard() {
   const [summary, allocation, perf, notes, settings] = await Promise.all([
@@ -42,21 +43,39 @@ export default async function Dashboard() {
           tone={signClass(summary.totalPnlThb)}
           sub={`ลงทุนสุทธิ ${fmtThb(summary.netContributedThb)}`}
         />
+        {perf.displayReturnConvention === "annualized" ? (
+          <Stat
+            label="TWR ต่อปี"
+            value={fmtPct(perf.annualizedReturn)}
+            tone={signClass(perf.annualizedReturn)}
+            sub={`สะสม ${fmtPct(perf.cumulativeReturn)}`}
+            hint="Time-weighted return: วัดฝีมือการลงทุน ตัดผลของการฝาก/ถอนเงิน"
+          />
+        ) : (
+          <Stat
+            label={`TWR สะสม (${perf.periodDays} วัน)`}
+            value={fmtPct(perf.cumulativeReturn)}
+            tone={signClass(perf.cumulativeReturn)}
+            sub={`เทียบเท่าต่อปี (ประมาณการ) ${fmtPct(perf.annualizedEquivalent)}`}
+            hint="ช่วงข้อมูลสั้นกว่า 1 ปี จึงแสดงผลตอบแทนสะสมเป็นหลัก — ค่าเทียบเท่าต่อปีเป็นการขยายผล (extrapolation) ไม่ใช่ผลตอบแทนจริงต่อปี"
+          />
+        )}
         <Stat
-          label="TWR ต่อปี"
-          value={fmtPct(perf.twrAnnualized)}
-          tone={signClass(perf.twrAnnualized)}
-          sub={`สะสม ${fmtPct(perf.twrCumulative)}`}
-          hint="Time-weighted return: วัดฝีมือการลงทุน ตัดผลของการฝาก/ถอนเงิน"
+          label="XIRR (MWR) ต่อปี"
+          value={xirrText(perf.xirr)}
+          tone={signClass(perf.xirr.rate)}
+          sub={xirrNote(perf.xirr)}
+          hint="Money-weighted return: ผลตอบแทนจริงของเงินคุณ รวมจังหวะการเติมเงิน"
         />
-        <Stat label="XIRR (MWR)" value={fmtPct(perf.mwrXirr)} tone={signClass(perf.mwrXirr)} hint="Money-weighted return: ผลตอบแทนจริงของเงินคุณ รวมจังหวะการเติมเงิน" />
         <Stat
           label="Sharpe ratio"
           value={fmtRatio(perf.sharpe)}
-          sub={`σ ${fmtPct(perf.volatility, 1)} · MDD ${fmtPct(perf.maxDrawdown, 1)}`}
-          hint="(Rp − Rf) / σp — ผลตอบแทนส่วนเกินต่อหนึ่งหน่วยความเสี่ยง"
+          sub={perf.sharpe == null ? `ข้อมูลไม่พอ (${perf.dataQuality.observations}/${perf.dataQuality.minRequired} จุด)` : `σ ${fmtPct(perf.volatility, 1)} · MDD ${fmtPct(perf.maxDrawdown, 1)}`}
+          hint="mean(Rp − Rf) / σ(Rp − Rf) × √N — ใช้ผลตอบแทนส่วนเกินรายงวด, N = จำนวนงวดต่อปีจากข้อมูลจริง"
         />
       </div>
+
+      <DataQualityPanel issues={summary.issues} warnings={perf.dataQuality.warnings} reconciliation={summary.reconciliation} />
 
       <div className="grid gap-6 lg:grid-cols-5">
         <Section title="มูลค่าพอร์ต vs เงินลงทุน" className="lg:col-span-3">
@@ -77,18 +96,24 @@ export default async function Dashboard() {
           {perf.benchmark && (
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
               <div>
-                <div className="text-muted">Beta</div>
-                <div className="font-medium tabular-nums">{fmtRatio(perf.benchmark.beta)}</div>
+                <div className="text-muted">Beta (OLS)</div>
+                <div className="font-medium tabular-nums">{fmtRatio(perf.benchmark.regressionBeta)}</div>
               </div>
               <div>
-                <div className="text-muted">Jensen&apos;s α</div>
-                <div className={`font-medium tabular-nums ${signClass(perf.benchmark.jensenAlpha)}`}>{fmtPct(perf.benchmark.jensenAlpha)}</div>
+                <div className="text-muted">Alpha ต่อปี (OLS)</div>
+                <div className={`font-medium tabular-nums ${signClass(perf.benchmark.regressionAlphaAnnual)}`}>
+                  {fmtPct(perf.benchmark.regressionAlphaAnnual)}
+                  {perf.benchmark.alphaStdError != null && <span className="text-muted"> ±{fmtPct(perf.benchmark.alphaStdError)}</span>}
+                </div>
               </div>
               <div>
-                <div className="text-muted">Risk premium</div>
-                <div className="font-medium tabular-nums">{fmtPct(perf.riskPremium)}</div>
+                <div className="text-muted">Excess return (Rp − Rf)</div>
+                <div className="font-medium tabular-nums">{fmtPct(perf.realizedExcessReturn)}</div>
               </div>
             </div>
+          )}
+          {perf.benchmark?.kind === "price_index" && (
+            <p className="mt-2 text-xs text-muted">{perf.benchmark.symbol} เป็นดัชนีราคา (ไม่รวมปันผล) แต่พอร์ตรวมปันผล — การเทียบจึงเอียงเข้าข้างพอร์ต</p>
           )}
         </Section>
         <Section title="บันทึกล่าสุด" className="lg:col-span-2" action={<Link href="/journal" className="text-xs text-accent">ทั้งหมด →</Link>}>

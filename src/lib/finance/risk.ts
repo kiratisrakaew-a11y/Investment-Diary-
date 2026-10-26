@@ -1,4 +1,4 @@
-import { TRADING_DAYS, covariance, mean, quantile, stdev, variance } from "./stats";
+import { TRADING_DAYS, covariance, quantile, stdev, variance } from "./stats";
 
 /** Annualized volatility from periodic returns: σ_annual = σ_period · √N. */
 export function annualVolatility(rs: number[], periodsPerYear = TRADING_DAYS): number {
@@ -31,24 +31,37 @@ export function maxDrawdown(values: number[]): { maxDrawdown: number; peakIndex:
   return best;
 }
 
-/** CAPM beta: β = Cov(R_p, R_m) / Var(R_m). */
-export function beta(portfolio: number[], market: number[]): number {
+/** CAPM beta: β = Cov(R_p, R_m) / Var(R_m); null when the benchmark has no variance or too few points. */
+export function beta(portfolio: number[], market: number[], minObs = 3): number | null {
   const n = Math.min(portfolio.length, market.length);
+  if (n < minObs) return null;
   const vm = variance(market.slice(0, n));
-  if (vm === 0) return 0;
+  if (!(vm > 1e-18)) return null;
   return covariance(portfolio.slice(0, n), market.slice(0, n)) / vm;
 }
 
-/** Historical Value-at-Risk at confidence `c` (returns a positive loss fraction). */
-export function historicalVaR(rs: number[], c = 0.95): number {
+/** Minimum observations before historical VaR / ES are shown. */
+export const MIN_VAR_OBS = 100;
+
+/** Historical Value-at-Risk (one observation horizon) at confidence `c`, as a positive loss; null if the sample is too small. */
+export function historicalVaR(rs: number[], c = 0.95, minObs = MIN_VAR_OBS): number | null {
+  if (rs.length < minObs) return null;
   return Math.max(0, -quantile(rs, 1 - c));
 }
 
-/** Conditional VaR / Expected Shortfall: mean loss beyond VaR. */
-export function expectedShortfall(rs: number[], c = 0.95): number {
-  const cutoff = quantile(rs, 1 - c);
-  const tail = rs.filter((r) => r <= cutoff);
-  return tail.length ? Math.max(0, -mean(tail)) : 0;
+/**
+ * Expected Shortfall: average loss over the worst n·(1 − c) observations,
+ * including a fractional share of the boundary observation; null if the sample is too small.
+ */
+export function expectedShortfall(rs: number[], c = 0.95, minObs = MIN_VAR_OBS): number | null {
+  if (rs.length < minObs) return null;
+  const s = [...rs].sort((a, b) => a - b);
+  const k = s.length * (1 - c);
+  const whole = Math.floor(k);
+  let sum = 0;
+  for (let i = 0; i < whole; i++) sum += s[i];
+  if (k > whole && whole < s.length) sum += (k - whole) * s[whole];
+  return k > 0 ? Math.max(0, -sum / k) : null;
 }
 
 /** Tracking error: annualized stdev of active returns (R_p - R_b). */
