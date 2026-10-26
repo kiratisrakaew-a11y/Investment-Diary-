@@ -104,6 +104,47 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - Weights come from the existing `recommend` / QP with the same constraints. The output also gives the weights from the prior for comparison. With no views and no binding bounds, they equal w_mkt (tested).
 - Not supported yet: sector / group limits. Assets have no sector field and the QP handles box and budget constraints only.
 
+### 4c. Rebalancing proposals — `rebalance.ts`, `rebalance_portfolio`
+
+- Targets come from `optimize_portfolio`, or are custom `{symbol: weight}` (the optimizer page pre-fills them from the optimizer and every cell is editable).
+  - They are shares of (holdings + cash + extra cash − cash reserve). Whatever is not assigned stays in cash.
+  - Held assets without a target are kept unless `sellUnlisted`.
+- Holdings, cash, prices and FX come from the ledger snapshot (`buildSnapshot`). Stale or fallback prices are flagged.
+- Costs (Settings → ต้นทุนการซื้อขาย, overridable per call):
+  - commission = max(value × %, minimum); VAT on the commission
+  - slippage = value × bps; sell tax on sells only
+  - Lot size: per asset (`assets.lot_size`), else per asset class (default thai_stock 100), else 1.
+- Solver (only what the QP cannot do):
+  - The continuous ideal is rounded to whole lots: sells first, then buys by largest shortfall, each accepted only while cash after costs ≥ the reserve.
+  - Then a best-improvement local search, one lot at a time (or a jump to the minimum trade size), under these constraints: no-trade band, minimum trade value, liquidity cap per symbol, turnover cap, no-sell option.
+  - A 0% target means a full exit (odd lots included); the position is never added back.
+- Score (return units):
+  - track = ex-ante tracking error √((w − w*)ᵀΣ(w − w*)), using the optimizer covariance when all assets have history; otherwise the weight-gap norm
+  - after_cost = TE + cost/total
+  - min_cost = TE + 10·cost/total
+  - min_turnover = TE + 0.1·turnover/total
+  - These penalty weights are heuristic.
+- Output: quantities, lots, values, the cost breakdown, totals, end cash, final vs target weights, TE before/after (plus the fractional-unit ideal), violations and warnings.
+- **Proposals only — never written as transactions.**
+
+### 4d. Risk decomposition, robustness, stress
+
+- Risk contribution: MCTRᵢ = (Σw)ᵢ/σ, RCᵢ = wᵢ·MCTRᵢ, Σ RC = σ.
+- Concentration: HHI and 1/HHI on weights and on risk shares.
+- Component ES (historical): contributions over the portfolio's worst n(1 − c) observations, with the same fractional boundary as `expectedShortfall`. They sum to ES. Needs ≥ 100 observations.
+- Robustness (`optimize_portfolio.robust`):
+  - Bootstrap: resample dates with replacement → the same μ method (historical / CAPM β / blend / Black–Litterman) and covariance method → the same QP and constraints. Reports each weight's mean, sd, 5–95% range, how often it is held, the resampled-average weights, average turnover vs the base and failed draws.
+  - μᵢ ± shock sensitivity.
+  - A diagnostic, not a formal robust optimization.
+- Stress (`stress_test_portfolio`):
+  - equity: β × ΔR_m (bonds and cash excluded)
+  - rates: −D_mod·Δy + ½C·Δy² from the bond analytics, or a duration override (funds)
+  - FX: (1 + r)(1 + ΔFX) − 1 on USD assets
+  - specific / group shocks, liquidity haircut by asset class
+  - correlation: ρ' = ρ + k(1 − ρ) → σ and 1-day parametric 95% VaR
+  - plus the worst historical day and 21-day window of the current weights
+  - Sector shocks need a user-given group (no sector data). Preset sizes are illustrative and returned with the assumptions.
+
 ## 5. Bonds — `src/lib/finance/bonds.ts`
 
 - The schedule is built back from maturity (or from the penultimate date) with an end-of-month rule. An issue date plus first coupon date gives a short or long first period. A date off the coupon cycle is `MALFORMED_SCHEDULE`.

@@ -10,6 +10,8 @@ describe("MCP build info", () => {
     expect(names).toContain("get_server_info");
     expect(names).toContain("sync_historical_prices");
     expect(names).toContain("import_prices");
+    expect(names).toContain("rebalance_portfolio");
+    expect(names).toContain("stress_test_portfolio");
   });
   it("version carries the formula version and commit", () => {
     expect(serverVersion().startsWith(MODEL_VERSION)).toBe(true);

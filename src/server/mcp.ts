@@ -18,6 +18,8 @@ import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
+import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
+import { stressInput, stressTestPortfolio } from "./services/stress";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
@@ -180,6 +182,18 @@ export function createMcpServer() {
       inputSchema: importPricesInput.shape,
     },
     safe(async (x) => importPrices(x)),
+  );
+
+  server.registerTool(
+    "rebalance_portfolio",
+    { title: "Rebalancing proposal (no trades recorded)", description: "Turn target weights into whole-lot buy/sell proposals for the current holdings, after trading costs from Settings (commission with minimum, VAT, slippage, sell tax), cash, minimum trade, no-trade band and turnover cap. Targets: custom {symbol: weight} or omit to use optimize_portfolio (pass optimizer params). Returns quantities, values, costs, remaining cash, final weights, tracking error before/after and violations. PROPOSAL ONLY — never records transactions; record trades with record_transaction only after the user actually trades and asks.", inputSchema: rebalanceInput.shape, annotations: { readOnlyHint: true } },
+    safe(async (x) => rebalancePortfolio(x)),
+  );
+
+  server.registerTool(
+    "stress_test_portfolio",
+    { title: "Stress test", description: "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.", inputSchema: stressInput.shape, annotations: { readOnlyHint: true } },
+    safe(async (x) => stressTestPortfolio(x)),
   );
 
   server.registerTool(

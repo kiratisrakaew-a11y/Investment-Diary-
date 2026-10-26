@@ -1,6 +1,7 @@
 import { getDb, schema } from "@/db";
 import { settingsInput, targetsInput } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
+import { tradingCostsSchema, type TradingCosts } from "@/lib/finance/rebalance";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
@@ -19,6 +20,7 @@ export async function getSettings() {
       rfAsOf: null as string | null,
       erpSource: null as string | null,
       erpAsOf: null as string | null,
+      tradingCosts: {} as unknown,
     }
   );
 }
@@ -57,6 +59,24 @@ export async function saveSettings(input: {
     .insert(schema.settings)
     .values({ id: 1, ...data })
     .onConflictDoUpdate({ target: schema.settings.id, set: data });
+}
+
+/** Trading cost model for rebalancing proposals (all zero unless the user sets it). */
+export async function getTradingCosts(): Promise<TradingCosts> {
+  const s = await getSettings();
+  const parsed = tradingCostsSchema.safeParse(s.tradingCosts ?? {});
+  return parsed.success ? parsed.data : tradingCostsSchema.parse({});
+}
+
+export async function saveTradingCosts(input: Partial<TradingCosts>) {
+  const data = tradingCostsSchema.parse({ ...(await getTradingCosts()), ...input });
+  await getSettings().then((s) =>
+    getDb()
+      .insert(schema.settings)
+      .values({ ...s, id: 1, tradingCosts: data })
+      .onConflictDoUpdate({ target: schema.settings.id, set: { tradingCosts: data } }),
+  );
+  return data;
 }
 
 export async function getTargets(): Promise<Partial<Record<AssetClass, number>>> {

@@ -51,6 +51,8 @@ export const assets = pgTable("assets", {
   couponFrequency: integer("coupon_frequency"),
   /** Bonds: accrued-interest day count, e.g. ACT/ACT-ICMA or ACT/365F. */
   dayCount: text("day_count"),
+  /** Trading lot (units per lot); null = the default for the asset class in settings.tradingCosts. */
+  lotSize: doublePrecision("lot_size"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -158,6 +160,8 @@ export const settings = pgTable("settings", {
   rfAsOf: date("rf_as_of"),
   erpSource: text("erp_source"),
   erpAsOf: date("erp_as_of"),
+  /** Trading cost model for rebalancing proposals (see tradingCostsSchema); {} = all zero / defaults. */
+  tradingCosts: jsonb("trading_costs").notNull().default({}),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

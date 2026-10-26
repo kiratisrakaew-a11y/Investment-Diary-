@@ -15,6 +15,8 @@ import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
+import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
+import { stressInput, stressTestPortfolio } from "./services/stress";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
 import { getSettings, getTargets } from "./services/settings";
@@ -62,6 +64,18 @@ function tools() {
         "Backfill daily prices for existing assets over a date range (default 365 days) plus benchmark and USDTHB. Use dryRun first; never creates assets — ask the user to add unknown symbols.",
       inputSchema: syncHistoricalPricesInput,
       run: async (x) => json(await syncHistoricalPrices(x)),
+    }),
+    betaZodTool({
+      name: "rebalance_portfolio",
+      description: "Turn target weights into whole-lot buy/sell proposals for the current holdings, after trading costs from Settings (commission with minimum, VAT, slippage, sell tax), cash, minimum trade, no-trade band and turnover cap. Targets: custom {symbol: weight} or omit to use optimize_portfolio (pass optimizer params). Returns quantities, values, costs, remaining cash, final weights, tracking error before/after and violations. PROPOSAL ONLY — never records transactions; record trades with record_transaction only after the user actually trades and asks.",
+      inputSchema: rebalanceInput,
+      run: async (x) => json(await rebalancePortfolio(x)),
+    }),
+    betaZodTool({
+      name: "stress_test_portfolio",
+      description: "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.",
+      inputSchema: stressInput,
+      run: async (x) => json(await stressTestPortfolio(x)),
     }),
     betaZodTool({
       name: "import_prices",

@@ -3,6 +3,7 @@ import { FrontierChart, GrowthChart } from "@/components/charts";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { fmtPct, fmtRatio, signClass } from "@/lib/format";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
+import { StressPanel } from "@/components/StressPanel";
 
 const TIMING_LABEL = {
   start_of_day: "เงินเข้า/ออกต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1",
@@ -225,6 +226,55 @@ export default async function AnalyticsPage() {
           </div>
         </Section>
       )}
+
+      {mpt.ok && (
+        <Section title="ส่วนร่วมความเสี่ยง (Risk contribution)">
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>สินทรัพย์</th>
+                  <th className="num">น้ำหนัก</th>
+                  <th className="num">MCTR</th>
+                  <th className="num">ส่วนร่วม σ</th>
+                  <th className="num">% ของความเสี่ยง</th>
+                  <th className="num">Component ES 95% (รายวัน)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mpt.risk.assets.map((a, i) => (
+                  <tr key={a.symbol}>
+                    <td className="font-medium">{a.symbol}</td>
+                    <td className="num">{fmtPct(a.weight, 1)}</td>
+                    <td className="num">{fmtPct(a.mctr, 1)}</td>
+                    <td className="num">{fmtPct(a.contribution, 2)}</td>
+                    <td className={`num ${a.share > a.weight + 0.05 ? "text-neg" : ""}`}>{fmtPct(a.share, 1)}</td>
+                    <td className="num">{mpt.risk.componentES95 ? fmtPct(mpt.risk.componentES95.assets[i].contribution, 2) : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-medium">
+                  <td>รวม</td>
+                  <td />
+                  <td />
+                  <td className="num">{fmtPct(mpt.risk.volatility, 2)}</td>
+                  <td className="num">100%</td>
+                  <td className="num">{mpt.risk.componentES95 ? fmtPct(mpt.risk.componentES95.expectedShortfall, 2) : "ต้องมี ≥ 100 วัน"}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            MCTR = (Σw)ᵢ / σ · ส่วนร่วม = w × MCTR (รวมเท่ากับ σ พอร์ต) · กระจุกตัว: HHI {mpt.risk.concentration.hhi.toFixed(3)} → เทียบเท่า {mpt.risk.concentration.effectiveN.toFixed(1)} ตัว (น้ำหนัก),{" "}
+            {mpt.risk.concentration.effectiveRiskN.toFixed(1)} ตัว (ความเสี่ยง) · ใหญ่สุด {fmtPct(mpt.risk.concentration.maxWeight, 1)} · 3 อันดับแรก {fmtPct(mpt.risk.concentration.top3, 1)} · สีแดง = ความเสี่ยงเกินน้ำหนักมากกว่า 5 จุด
+          </p>
+        </Section>
+      )}
+
+      <Section title="Stress test">
+        <StressPanel />
+      </Section>
     </>
   );
 }

@@ -36,6 +36,14 @@ export const optimizeInput = z
   lookbackDays: z.number().int().min(90).max(3650).optional(),
   returnMethod: z.enum(["historical", "capm", "blend", "black_litterman"]).optional().describe("How expected returns are estimated (default blend). black_litterman needs blackLitterman.marketWeights"),
   blackLitterman: blackLittermanInput.optional(),
+  robust: z
+    .object({
+      bootstrap: z.number().int().min(0).max(500).default(100).describe("Resampling draws (0 = skip)"),
+      returnShock: z.number().min(0).max(0.5).default(0.02).describe("± change to each expected return for the sensitivity table (decimal)"),
+      seed: z.number().int().optional(),
+    })
+    .optional()
+    .describe("Robustness diagnostics: bootstrap weight distribution and expected-return sensitivity (same optimizer and constraints)"),
   overrides: z.record(z.string(), z.number()).optional().describe("Expected annual return overrides by symbol (decimal)"),
   objective: z.enum(["max_sharpe", "min_variance", "target_return", "target_risk", "utility"]).optional(),
   riskAversion: z.number().min(0.5).max(20).optional().describe("A in U = E[R] − ½Aσ² (2 aggressive … 10 conservative)"),

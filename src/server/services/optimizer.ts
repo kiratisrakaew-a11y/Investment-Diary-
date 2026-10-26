@@ -2,6 +2,8 @@ import { asOf, buildSnapshot, type AssetInput, type TxInput } from "@/lib/financ
 import { covarianceDiagnostics, estimateInputs, ledoitWolf, type Matrix } from "@/lib/finance/mpt";
 import { recommend, type Objective } from "@/lib/finance/recommend";
 import { blackLitterman, type BlView } from "@/lib/finance/black-litterman";
+import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
+import { robustDiagnostics } from "@/lib/finance/robust";
 import { OptimizerError } from "@/lib/finance/optimizer";
 import { beta as calcBeta } from "@/lib/finance/risk";
 import { simpleReturns, mean } from "@/lib/finance/stats";
@@ -45,6 +47,8 @@ export interface OptimizerUniverse {
   /** Return observations per year implied by the data (not a fixed 252). */
   periodsPerYear: number;
   covarianceWarnings: string[];
+  /** Aligned periodic returns (only with `withSeries`): per asset, the benchmark, and price dates (returns end on dates[t + 1]). */
+  series?: { returns: number[][]; benchmark: number[] | null; dates: string[] };
 }
 
 /**
@@ -52,7 +56,7 @@ export interface OptimizerUniverse {
  * history, its THB daily returns on a common forward-filled calendar,
  * historical and CAPM expected returns, and the covariance matrix.
  */
-export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): Promise<OptimizerUniverse> {
+export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean } = {}): Promise<OptimizerUniverse> {
   const [assets, txRows, prices, fx, settings] = await Promise.all([
     listAssets(),
     allTransactions(),
@@ -137,6 +141,7 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[]): 
     shrinkage: lw.intensity,
     periodsPerYear: N,
     covarianceWarnings,
+    ...(opts.withSeries ? { series: { returns: series, benchmark: benchReturns && benchReturns.every(Number.isFinite) ? benchReturns : null, dates } } : {}),
     assets: usable.map((a, i) => {
       const b = benchReturns && benchReturns.every((x) => Number.isFinite(x)) ? calcBeta(series[i], benchReturns) : null;
       return {
@@ -185,11 +190,12 @@ export interface OptimizeParams {
   extraCash?: number;
   covMethod?: "sample" | "ledoit_wolf";
   blackLitterman?: { marketWeights: Record<string, number>; marketRiskAversion?: number; tau?: number; views?: BlView[]; posteriorCovariance?: boolean };
+  robust?: { bootstrap?: number; returnShock?: number; seed?: number };
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
-  const u = await loadUniverse(p.lookbackDays, p.symbols);
+  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true });
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
@@ -248,12 +254,57 @@ export async function optimizePortfolio(p: OptimizeParams) {
   }
   // Surfaces as REST 400 / MCP isError with the typed code; no weights are returned.
   if (!r.ok) throw new OptimizerError(r.issue);
+  const recommendedWeights = r.allocations.map((a) => a.weight);
+  // Risk decomposition of the recommended risky sleeve (weights normalized within risky assets).
+  const riskyW = r.risky.weights;
+  const risk = {
+    ...riskContribution(symbols, riskyW, cov),
+    componentES95: u.series ? componentES(symbols, riskyW, u.series.returns) : null,
+    note: "สัดส่วนในพอร์ตเสี่ยง (ไม่รวมสินทรัพย์ปลอดความเสี่ยง) · σ ต่อปี · component ES เป็นรายงวด (รายวัน)",
+  };
+  let robust: ReturnType<typeof robustDiagnostics> | null = null;
+  if (p.robust && u.series) {
+    const N = u.periodsPerYear;
+    const S = u.series;
+    const bench = S.benchmark;
+    const muFromRows = (rows: number[]) => {
+      const sample = S.returns.map((s) => rows.map((t) => s[t]));
+      const hist = sample.map((s) => mean(s) * N);
+      const b = bench ? rows.map((t) => bench[t]) : null;
+      const capm = sample.map((s, i) => {
+        const beta = b ? calcBeta(s, b) : null;
+        return beta != null ? u.riskFree + beta * u.equityRiskPremium : hist[i];
+      });
+      let m = method === "historical" ? hist : method === "capm" ? capm : method === "blend" ? hist.map((h, i) => 0.5 * h + 0.5 * capm[i]) : hist;
+      if (method === "black_litterman" && p.blackLitterman) {
+        const sc = p.covMethod === "ledoit_wolf" ? ledoitWolf(sample).cov.map((row) => row.map((v) => v * N)) : estimateInputs(sample, N).cov;
+        const b2 = blackLitterman({ symbols, cov: sc, rf: u.riskFree, marketWeights: p.blackLitterman.marketWeights, riskAversion: p.blackLitterman.marketRiskAversion, marketPremium: u.equityRiskPremium, tau: p.blackLitterman.tau ?? 0.05, views: p.blackLitterman.views ?? [] });
+        if (b2.ok) m = b2.posterior;
+      }
+      return m.map((v, i) => p.overrides?.[symbols[i]] ?? v);
+    };
+    robust = robustDiagnostics({
+      series: S.returns,
+      periodsPerYear: N,
+      covMethod: p.covMethod ?? "sample",
+      muFromRows,
+      base: { symbols, ...constraints },
+      baseWeights: recommendedWeights,
+      baseMu: mu,
+      baseCov: cov,
+      draws: p.robust.bootstrap ?? 100,
+      returnShock: p.robust.returnShock ?? 0.02,
+      seed: p.robust.seed ?? 42,
+    });
+  }
   return {
     ok: true as const,
     period: { from: u.from, to: u.to, observations: u.observations },
     riskFree: u.riskFree,
     returnMethod: method,
     blackLitterman: bl,
+    risk,
+    robust,
     assets: u.assets.map((a, i) => ({ symbol: a.symbol, assetClass: a.assetClass, expectedReturn: mu[i], volatility: a.volatility, beta: a.beta })),
     skipped: u.skipped,
     objective: r.objective,

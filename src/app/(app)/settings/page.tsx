@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
-import { getSettings, getTargets } from "@/server/services/settings";
+import { getSettings, getTargets, getTradingCosts } from "@/server/services/settings";
 import { ActionForm } from "@/components/ActionForm";
 import { CopyBlock } from "@/components/CopyBlock";
 import { PageHeader, Section } from "@/components/ui";
-import { saveSettingsAction, saveTargetsAction } from "../actions";
+import { saveSettingsAction, saveTargetsAction, saveTradingCostsAction } from "../actions";
 import { ASSET_CLASSES } from "@/lib/finance/allocation";
 import { ASSET_CLASS_LABEL } from "@/lib/format";
 import { GPT_INSTRUCTIONS } from "@/lib/gpt-instructions";
@@ -11,7 +11,7 @@ import { MODEL_VERSION, marketInputProvenance } from "@/lib/governance";
 import Link from "next/link";
 
 export default async function SettingsPage() {
-  const [settings, targets, h] = await Promise.all([getSettings(), getTargets(), headers()]);
+  const [settings, targets, h, costs] = await Promise.all([getSettings(), getTargets(), headers(), getTradingCosts()]);
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span className={`ml-1 rounded px-1 text-[11px] ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}>{p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}</span>
@@ -90,6 +90,40 @@ export default async function SettingsPage() {
               ดูรายงานคุณภาพข้อมูล →
             </Link>
           </div>
+        </Section>
+
+        <Section title="ต้นทุนการซื้อขาย (ใช้กับข้อเสนอ rebalance)">
+          <ActionForm action={saveTradingCostsAction} className="space-y-3" resetOnSuccess={false}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {(
+                [
+                  ["commissionPct", "ค่าคอมมิชชัน (% ของมูลค่า)", costs.commissionPct, "0.001"],
+                  ["minCommission", "ค่าคอมขั้นต่ำ/รายการ (บาท)", costs.minCommission, "1"],
+                  ["vatPct", "VAT บนค่าคอม (%)", costs.vatPct, "0.1"],
+                  ["slippageBps", "Slippage / spread (bps)", costs.slippageBps, "1"],
+                  ["sellTaxPct", "ภาษีขาย (% ของมูลค่าขาย)", costs.sellTaxPct, "0.01"],
+                  ["minTradeValue", "มูลค่าซื้อขายขั้นต่ำ (บาท)", costs.minTradeValue, "100"],
+                ] as const
+              ).map(([name, label, v, step]) => (
+                <div key={name}>
+                  <label className="label">{label}</label>
+                  <input name={name} type="number" step={step} min={0} className="input" defaultValue={v} />
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="label">ขนาด lot (หน่วยต่อ lot) — ว่าง = 1 · หุ้นไทยกระดานหลัก 100 หุ้น</div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {(["thai_stock", "us_stock", "fund", "bond", "gold"] as const).map((c) => (
+                  <div key={c}>
+                    <label className="text-[11px] text-muted">{ASSET_CLASS_LABEL[c]}</label>
+                    <input name={`lot_${c}`} type="number" step="any" min={0} className="input" defaultValue={costs.lotSize[c] ?? ""} />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-muted">ค่าเริ่มต้นเป็น 0 — ใส่ตามโบรกเกอร์ของคุณ · ใช้คำนวณข้อเสนอเท่านั้น ไม่บันทึกรายการซื้อขายให้</p>
+          </ActionForm>
         </Section>
 
         <Section title="เป้าหมาย Asset allocation (%)">

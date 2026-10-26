@@ -5,6 +5,8 @@ import { bondSchema, multiStageRiToolInput, valuationInput } from "@/lib/valuati
 import { optimizeInput } from "./optimize-schema";
 import { financialYearSchema } from "@/lib/financials";
 import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
+import { rebalanceInput } from "./services/rebalance";
+import { stressInput } from "./services/stress";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -211,6 +213,23 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Recommendation") },
         },
       },
+      "/api/v1/portfolio/rebalance": {
+        post: {
+          operationId: "rebalancePortfolio",
+          summary: "Whole-lot buy/sell proposal after trading costs (never records transactions)",
+          description: "Targets: custom {symbol: weight} or the optimizer recommendation. Uses the cost model in Settings unless overridden.",
+          requestBody: body("RebalanceInput"),
+          responses: { "200": ok("Trades, costs, remaining cash, final weights, tracking error, violations") },
+        },
+      },
+      "/api/v1/portfolio/stress": {
+        post: {
+          operationId: "stressTestPortfolio",
+          summary: "Stress test current holdings (equity × beta, rates × duration, FX, specific, liquidity, correlation)",
+          requestBody: body("StressInput"),
+          responses: { "200": ok("P&L by asset and factor with assumptions") },
+        },
+      },
       "/api/v1/portfolio/mpt": {
         get: {
           operationId: "getPortfolioOptimization",
@@ -247,6 +266,8 @@ export function buildOpenApi(origin: string) {
           }),
         ),
         OptimizeInput: schema(optimizeInput),
+        RebalanceInput: schema(rebalanceInput),
+        StressInput: schema(stressInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
     },

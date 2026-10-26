@@ -7,7 +7,7 @@ import { createAsset, deleteAsset, updateAsset } from "@/server/services/assets"
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
-import { saveSettings, saveTargets } from "@/server/services/settings";
+import { saveSettings, saveTargets, saveTradingCosts } from "@/server/services/settings";
 import { updateAllPrices } from "@/server/services/price-updater";
 import { syncHistoricalPrices } from "@/server/services/price-sync";
 
@@ -156,6 +156,25 @@ export async function saveSettingsAction(_: ActionState, f: FormData): Promise<A
       erpAsOf: str(f, "erpAsOf") ?? null,
     });
     return done("บันทึกการตั้งค่าแล้ว");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveTradingCostsAction(_: ActionState, f: FormData): Promise<ActionState> {
+  try {
+    const lot = (k: string) => num(f, `lot_${k}`);
+    const classes = ["thai_stock", "us_stock", "fund", "bond", "gold"];
+    await saveTradingCosts({
+      commissionPct: num(f, "commissionPct") ?? 0,
+      minCommission: num(f, "minCommission") ?? 0,
+      vatPct: num(f, "vatPct") ?? 0,
+      slippageBps: num(f, "slippageBps") ?? 0,
+      sellTaxPct: num(f, "sellTaxPct") ?? 0,
+      minTradeValue: num(f, "minTradeValue") ?? 0,
+      lotSize: Object.fromEntries(classes.flatMap((c) => { const v = lot(c); return v != null && v > 0 ? [[c, v] as const] : []; })),
+    });
+    return done("บันทึกต้นทุนการซื้อขายแล้ว");
   } catch (e) {
     return fail(e);
   }

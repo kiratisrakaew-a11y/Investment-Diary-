@@ -8,6 +8,7 @@ import type { UniverseAsset } from "@/server/services/optimizer";
 import type { AssetClass } from "@/db/schema";
 import { applyTargetsAction } from "@/app/(app)/optimizer/actions";
 import { BulletChart } from "./charts";
+import { RebalancePanel } from "./RebalancePanel";
 import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
 
@@ -429,6 +430,7 @@ export function OptimizerClient({
               </p>
             </section>
           </div>
+          <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} />
         </>
       )}
     </div>

@@ -8,6 +8,7 @@ import {
   randomPortfolios,
 } from "@/lib/finance/mpt";
 import { constrainedFrontier } from "@/lib/finance/optimizer";
+import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
 import { asOf, buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
 import { simpleReturns } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
@@ -155,6 +156,11 @@ export async function getMptAnalysis(lookbackDays = 365 * 2) {
     riskFreeRate: rf,
     assets: usable.map((p, i) => ({ symbol: p.symbol, expectedReturn: mu[i], volatility: Math.sqrt(cov[i][i]) })),
     correlation: correlationMatrix(cov),
+    /** Risk decomposition of the current holdings (σ annual; component ES on periodic returns). */
+    risk: {
+      ...riskContribution(usable.map((p) => p.symbol), current.weights, cov),
+      componentES95: componentES(usable.map((p) => p.symbol), current.weights, series),
+    },
     current,
     minVariance: f.gmv,
     /** null when no long-only portfolio earns more than Rf. */
