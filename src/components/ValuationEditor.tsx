@@ -7,6 +7,8 @@ import { DEFAULT_DCF, dcf, dcfSensitivity, type DcfAssumptions } from "@/lib/fin
 import { evaluate, type ValuationInput } from "@/lib/valuation-schemas";
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
+import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
+import type { HistoryAssumptions } from "@/lib/financials";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
@@ -38,6 +40,7 @@ export function ValuationEditor({
   title: initialTitle,
   note: initialNote,
   defaults,
+  statements,
 }: {
   id?: number;
   symbol: string;
@@ -47,6 +50,7 @@ export function ValuationEditor({
   title?: string;
   note?: string;
   defaults: EditorDefaults;
+  statements: StatementsData;
 }) {
   const router = useRouter();
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -180,6 +184,14 @@ export function ValuationEditor({
     });
   }
 
+  function applyHistory(h: HistoryAssumptions) {
+    setDcfA((a) => ({ ...a, ...h.dcf }));
+    setDdm((a) => ({ ...a, ...h.ddm }));
+    setRi((a) => ({ ...a, ...h.ri }));
+    setMult((a) => ({ ...a, ...h.multiples }));
+    setMsg({ ok: true, text: "เติมสมมติฐานจากงบการเงินย้อนหลังแล้ว" });
+  }
+
   return (
     <div className="space-y-6">
       <div className="card grid gap-3 sm:grid-cols-4">
@@ -207,6 +219,8 @@ export function ValuationEditor({
           {msg && <span className={clsx("text-sm", msg.ok ? "text-pos" : "text-neg")}>{msg.text}</span>}
         </div>
       </div>
+
+      <FinancialStatementsPanel symbol={symbol} initial={statements} terminalGrowth={dcfA.terminalGrowth} onApply={applyHistory} />
 
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="card space-y-4 lg:col-span-3">

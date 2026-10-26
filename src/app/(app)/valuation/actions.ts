@@ -6,6 +6,8 @@ import { fetchFundamentals, type Fundamentals } from "@/lib/prices/yahoo";
 import type { ValuationInput } from "@/lib/valuation-schemas";
 import { getAssetBySymbol } from "@/server/services/assets";
 import { deleteValuation, saveValuation } from "@/server/services/valuations";
+import { deleteYear, getStatementsWithMeta, saveYears } from "@/server/services/statements";
+import type { FinancialYear } from "@/lib/financials";
 
 export async function saveValuationAction(payload: {
   id?: number;
@@ -37,4 +39,21 @@ export async function fetchFundamentalsAction(symbol: string): Promise<{ ok: tru
   } catch (e) {
     return { ok: false, error: `ดึงข้อมูลจาก Yahoo (${yahoo}) ไม่สำเร็จ: ${(e as Error).message}` };
   }
+}
+
+export async function saveStatementYearAction(symbol: string, year: FinancialYear) {
+  try {
+    await saveYears(symbol, [year], { preferIncoming: true });
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function deleteStatementYearAction(symbol: string, fiscalYear: number) {
+  await deleteYear(symbol, fiscalYear);
+}
+
+export async function loadStatementsAction(symbol: string) {
+  return getStatementsWithMeta(symbol);
 }
