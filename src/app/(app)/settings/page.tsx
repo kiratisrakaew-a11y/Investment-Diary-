@@ -151,7 +151,7 @@ export default async function SettingsPage() {
           <p className="text-xs text-muted">
             เครื่องมือ: add_note, search_notes, record_transaction, list_transactions, add_asset, list_assets, update_price, get_portfolio_summary,
             get_allocation, get_performance_metrics, get_portfolio_optimization, value_security, save_valuation, list_valuations, analyze_bond,
-            get_bond_holdings, get_investment_universe, optimize_portfolio
+            get_bond_holdings, get_investment_universe, optimize_portfolio, rebalance_portfolio, stress_test_portfolio, sync_historical_prices, import_prices
           </p>
         </div>
       </Section>
