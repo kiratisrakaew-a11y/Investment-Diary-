@@ -59,7 +59,7 @@ Decisions taken with the owner:
 
 `drizzle/0004_pr1_conventions.sql` only adds three `settings` columns with defaults (`strict`, `start_of_day`, `price_index`). No UPDATE/DELETE; transactions, prices and notes are untouched. Legacy inconsistencies are reported at read time (data-quality panel on dashboard / holdings), not corrected in the database.
 
-Deploy: run `npm run db:migrate` with `DATABASE_URL` set to the production (Neon) database **before** the new build goes live — `npm run build` does not migrate, and the app reads the new settings columns on every page.
+Deploy: Vercel now runs `vercel-build` (`npm run db:migrate && next build`), so the Neon database is migrated before each build goes live. Manual alternative: `DATABASE_URL=<neon url> npm run db:migrate`.
 
 ## 6. Verification (actual results)
 
