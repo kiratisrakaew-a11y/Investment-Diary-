@@ -5,6 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { MODEL_VERSION } from "@/lib/governance";
 import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
 import { createAsset, getAssetBySymbol, listAssets } from "./services/assets";
 import { createNote, listNotes } from "./services/notes";
@@ -34,9 +35,20 @@ function safe<A>(fn: (args: A) => Promise<unknown>) {
   };
 }
 
+/** Formula version + deployed commit, so clients (and people) can tell which build they are talking to. */
+export function serverVersion() {
+  return `${MODEL_VERSION}+${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}`;
+}
+
+/** Names of the tools the current build registers. */
+export function mcpToolNames(): string[] {
+  const s = createMcpServer() as unknown as { _registeredTools?: Record<string, unknown> };
+  return Object.keys(s._registeredTools ?? {}).sort();
+}
+
 export function createMcpServer() {
   const server = new McpServer(
-    { name: "investment-diary", version: "1.0.0" },
+    { name: "investment-diary", version: serverVersion() },
     {
       instructions:
         "Personal investment diary (base currency THB). Use add_note to record ideas, theses, reviews and lessons " +
@@ -320,6 +332,16 @@ export function createMcpServer() {
     safe(async ({ symbol, currency, years }) =>
       saveYears(symbol, years.map((y) => ({ ...emptyYear(y.fiscalYear), ...y })), { source: "claude", currency }),
     ),
+  );
+
+  server.registerTool(
+    "get_server_info",
+    {
+      title: "Server version and tools",
+      description: "Which build of Investment Diary is live (formula version, commit) and the tools it offers. Use it to check whether a newly added tool exists before saying it is unavailable.",
+      annotations: { readOnlyHint: true },
+    },
+    safe(async () => ({ version: serverVersion(), commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null, tools: Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools).sort() })),
   );
 
   return server;
