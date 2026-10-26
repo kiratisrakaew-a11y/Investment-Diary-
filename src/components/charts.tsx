@@ -1,0 +1,148 @@
+"use client";
+
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Scatter,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtThb } from "@/lib/format";
+import type { AssetClass } from "@/db/schema";
+
+const axis = { stroke: "var(--muted)", fontSize: 11, tickLine: false, axisLine: false } as const;
+const tooltipStyle = {
+  contentStyle: { background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" },
+  labelStyle: { color: "var(--muted)" },
+};
+const compactThb = (v: number) => (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : `${v}`);
+const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+
+export function AllocationDonut({ rows }: { rows: { assetClass: AssetClass; value: number; actualPct: number }[] }) {
+  const data = rows.filter((r) => r.value > 0);
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <PieChart>
+        <Pie data={data} dataKey="value" nameKey="assetClass" innerRadius="58%" outerRadius="92%" paddingAngle={1} stroke="var(--panel)" strokeWidth={2} isAnimationActive={false}>
+          {data.map((r) => (
+            <Cell key={r.assetClass} fill={ASSET_CLASS_COLOR[r.assetClass]} />
+          ))}
+        </Pie>
+        <Legend
+          wrapperStyle={{ fontSize: 12 }}
+          formatter={(v) => <span style={{ color: "var(--text)" }}>{ASSET_CLASS_LABEL[v as AssetClass]}</span>}
+        />
+        <Tooltip
+          {...tooltipStyle}
+          formatter={(v, _n, item) => [`${fmtThb(Number(v))} (${(item.payload as { actualPct: number }).actualPct.toFixed(1)}%)`, ASSET_CLASS_LABEL[(item.payload as { assetClass: AssetClass }).assetClass]]}
+        />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Growth of 1 THB: portfolio (TWR) vs benchmark — indexed to a common base, one axis. */
+export function GrowthChart({ data, benchmark }: { data: { date: string; portfolio: number; benchmark: number | null }[]; benchmark?: string }) {
+  const rows = data.map((d) => ({ date: d.date, portfolio: d.portfolio - 1, benchmark: d.benchmark == null ? null : d.benchmark - 1 }));
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} tickFormatter={pct} width={44} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        {benchmark && <Line type="monotone" dataKey="benchmark" name={benchmark} stroke="var(--series-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function ValueChart({ data }: { data: { date: string; value: number; contributed: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} tickFormatter={compactThb} width={48} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtThb(Number(v)), n]} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Area type="monotone" dataKey="value" name="มูลค่าพอร์ต" stroke="var(--series-1)" fill="var(--series-1)" fillOpacity={0.12} strokeWidth={2} isAnimationActive={false} />
+        <Line type="stepAfter" dataKey="contributed" name="เงินลงทุนสุทธิ" stroke="var(--series-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function PriceChart({ data, currency }: { data: { date: string; close: number }[]; currency: string }) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} domain={["auto", "auto"]} width={56} />
+        <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()} ${currency}`, "ราคา"]} />
+        <Line type="monotone" dataKey="close" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+type Pt = { volatility: number; expectedReturn: number };
+
+/** Risk/return plane: random portfolios, efficient frontier, CML and key portfolios. */
+export function FrontierChart({
+  cloud,
+  frontier,
+  assets,
+  current,
+  tangency,
+  minVariance,
+  cml,
+}: {
+  cloud: Pt[];
+  frontier: Pt[];
+  assets: (Pt & { symbol: string })[];
+  current: Pt;
+  tangency: Pt;
+  minVariance: Pt;
+  cml: { intercept: number; slope: number } | null;
+}) {
+  const maxVol = Math.max(...assets.map((a) => a.volatility), current.volatility, tangency.volatility) * 1.1;
+  const cmlLine = cml ? [0, maxVol].map((v) => ({ volatility: v, expectedReturn: cml.intercept + cml.slope * v })) : [];
+  const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
+  return (
+    <ResponsiveContainer width="100%" height={360}>
+      <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
+        <CartesianGrid stroke="var(--grid)" />
+        <XAxis type="number" dataKey="volatility" name="ความเสี่ยง (σ)" {...axis} tickFormatter={pct} domain={[0, maxVol]} label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 11, fill: "var(--muted)" }} />
+        <YAxis type="number" dataKey="expectedReturn" name="ผลตอบแทนคาดหวัง" {...axis} tickFormatter={pct} width={48} domain={["auto", "auto"]} />
+        <Tooltip
+          {...tooltipStyle}
+          cursor={{ strokeDasharray: "3 3" }}
+          formatter={(v, n) => [fmt(Number(v)), n === "volatility" ? "σ" : n === "expectedReturn" ? "E[R]" : n]}
+          labelFormatter={() => ""}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+        <Scatter name="พอร์ตสุ่ม" data={cloud} fill="var(--muted)" fillOpacity={0.18} shape="circle" legendType="circle" isAnimationActive={false} />
+        <Line name="Efficient frontier" data={frontier} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        {cml && <Line name="Capital Market Line" data={cmlLine} dataKey="expectedReturn" stroke="var(--series-3)" strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />}
+        <Scatter name="สินทรัพย์รายตัว" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
+        <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />
+        <Scatter name="Max Sharpe" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />
+        <Scatter name="Min variance" data={[minVariance]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
