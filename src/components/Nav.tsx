@@ -9,7 +9,11 @@ const LINKS = [
   { href: "/journal", label: "บันทึก" },
   { href: "/holdings", label: "สินทรัพย์" },
   { href: "/transactions", label: "รายการ" },
-  { href: "/analytics", label: "วิเคราะห์" },
+  { href: "/analytics", label: "ผลการดำเนินงาน" },
+  { href: "/valuation", label: "ประเมินมูลค่า" },
+  { href: "/bonds", label: "พันธบัตร" },
+  { href: "/optimizer", label: "จัดพอร์ต" },
+  { href: "/advisor", label: "AI ที่ปรึกษา" },
   { href: "/settings", label: "ตั้งค่า" },
 ];
 
@@ -17,7 +21,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
   const path = usePathname();
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-panel/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-2">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2">
         <Link href="/" className="shrink-0 font-semibold text-accent">
           📒 Diary
         </Link>

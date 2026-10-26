@@ -146,3 +146,81 @@ export function FrontierChart({
     </ResponsiveContainer>
   );
 }
+
+type Pt2 = { volatility: number; expectedReturn: number };
+
+/**
+ * The Markowitz "bullet": minimum-variance set in risk/return space. Upper arm
+ * (solid) is efficient, lower arm (dashed) inefficient. Shows both the
+ * short-sales-allowed hyperbola and the constrained (e.g. long-only) set.
+ */
+export function BulletChart({
+  unconstrained,
+  constrained,
+  assets,
+  current,
+  recommended,
+  gmv,
+  tangency,
+  rf,
+}: {
+  unconstrained: (Pt2 & { efficient: boolean })[];
+  constrained: (Pt2 & { efficient: boolean })[];
+  assets: (Pt2 & { symbol: string })[];
+  current: Pt2 | null;
+  recommended: Pt2;
+  gmv: Pt2;
+  tangency: Pt2;
+  rf: number;
+}) {
+  const maxVol = Math.max(...assets.map((a) => a.volatility), ...constrained.map((p) => p.volatility), recommended.volatility, current?.volatility ?? 0) * 1.15;
+  // Keep the short-sales hyperbola to a return band around the assets so the bullet shape stays readable.
+  const rets = assets.map((a) => a.expectedReturn);
+  const band = Math.max(Math.max(...rets) - Math.min(...rets), 0.02) * 0.35;
+  const lo = Math.min(...rets) - band;
+  const hi = Math.max(...rets) + band;
+  unconstrained = unconstrained.filter((p) => p.expectedReturn >= lo && p.expectedReturn <= hi);
+  const clip = (pts: (Pt2 & { efficient: boolean })[], eff: boolean) => pts.filter((p) => p.efficient === eff && p.volatility <= maxVol);
+  // Join the two arms at the GMV point so the curve is continuous.
+  const arm = (pts: (Pt2 & { efficient: boolean })[], eff: boolean, join: Pt2) => {
+    const a = clip(pts, eff).map(({ volatility, expectedReturn }) => ({ volatility, expectedReturn }));
+    return eff ? [join, ...a] : [...a, join];
+  };
+  const slope = tangency.volatility > 0 ? (tangency.expectedReturn - rf) / tangency.volatility : 0;
+  const cml = [
+    { volatility: 0, expectedReturn: rf },
+    { volatility: maxVol, expectedReturn: rf + slope * maxVol },
+  ];
+  const uncGmv = unconstrained.reduce((m, p) => (p.volatility < m.volatility ? p : m), unconstrained[0] ?? gmv);
+  const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
+  return (
+    <ResponsiveContainer width="100%" height={420}>
+      <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
+        <CartesianGrid stroke="var(--grid)" />
+        <XAxis type="number" dataKey="volatility" {...axis} tickFormatter={pct} domain={[0, maxVol]} allowDataOverflow label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 11, fill: "var(--muted)" }} />
+        <YAxis type="number" dataKey="expectedReturn" {...axis} tickFormatter={pct} width={48} domain={["auto", "auto"]} allowDataOverflow />
+        <Tooltip
+          {...tooltipStyle}
+          cursor={{ strokeDasharray: "3 3" }}
+          formatter={(v, n) => [fmt(Number(v)), n === "volatility" ? "σ" : n === "expectedReturn" ? "E[R]" : String(n)]}
+          labelFormatter={() => ""}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+        {unconstrained.length > 0 && (
+          <>
+            <Line name="Frontier (ขายชอร์ตได้)" data={arm(unconstrained, true, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line name="ส่วนไม่มีประสิทธิภาพ (ขายชอร์ตได้)" data={arm(unconstrained, false, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} legendType="none" />
+          </>
+        )}
+        <Line name="Efficient frontier (ตามข้อจำกัด)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        <Line name="ส่วนไม่มีประสิทธิภาพ" data={arm(constrained, false, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
+        <Line name="Capital Market Line" data={cml} dataKey="expectedReturn" stroke="var(--series-3)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
+        <Scatter name="สินทรัพย์" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
+        {current && <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />}
+        <Scatter name="Min variance" data={[gmv]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
+        <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />
+        <Scatter name="แนะนำ" data={[recommended]} fill="var(--series-6)" stroke="var(--panel)" strokeWidth={2} shape="square" isAnimationActive={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}

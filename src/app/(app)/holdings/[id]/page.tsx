@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAsset, listAssets } from "@/server/services/assets";
 import { priceHistoryFor } from "@/server/services/prices";
@@ -30,7 +31,15 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       <PageHeader
         title={`${asset.symbol} · ${asset.name}`}
         subtitle={`${ASSET_CLASS_LABEL[asset.assetClass]} · ${asset.currency} · ราคา: ${asset.priceSource}${asset.providerSymbol ? ` (${asset.providerSymbol})` : ""}${asset.couponRate ? ` · คูปอง ${asset.couponRate}%` : ""}${asset.maturityDate ? ` · ครบกำหนด ${asset.maturityDate}` : ""}`}
-        action={<ConfirmButton onConfirm={deleteAssetAction.bind(null, id)} label="ลบสินทรัพย์" message="ลบสินทรัพย์นี้พร้อมรายการและราคาทั้งหมด?" />}
+        action={
+          <div className="flex items-center gap-3">
+            {(asset.assetClass === "thai_stock" || asset.assetClass === "us_stock") && (
+              <Link href={`/valuation/new?symbol=${asset.symbol}`} className="btn-ghost">ประเมินมูลค่า</Link>
+            )}
+            {asset.assetClass === "bond" && <Link href="/bonds" className="btn-ghost">คำนวณ YTM</Link>}
+            <ConfirmButton onConfirm={deleteAssetAction.bind(null, id)} label="ลบสินทรัพย์" message="ลบสินทรัพย์นี้พร้อมรายการและราคาทั้งหมด?" />
+          </div>
+        }
       />
       {pos && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

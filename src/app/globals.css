@@ -92,3 +92,8 @@ body {
 .recharts-legend-item-text {
   color: var(--text) !important;
 }
+
+.advisor-md table { @apply my-2 w-full text-xs; }
+.advisor-md th { @apply border-b border-border px-2 py-1 text-left font-medium text-muted; }
+.advisor-md td { @apply border-b border-border/60 px-2 py-1; }
+.advisor-md strong { @apply font-semibold; }

@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { getPortfolioSummary } from "@/server/services/portfolio";
 import { listAssets } from "@/server/services/assets";
+import { latestValuationBySymbol } from "@/server/services/valuations";
 import { AddAssetForm, AddPriceForm } from "@/components/AssetForms";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
 export default async function HoldingsPage() {
-  const [summary, assets] = await Promise.all([getPortfolioSummary(), listAssets()]);
+  const [summary, assets, vals] = await Promise.all([getPortfolioSummary(), listAssets(), latestValuationBySymbol()]);
   const open = summary.positions.filter((p) => p.quantity > 0);
   const closed = summary.positions.filter((p) => p.quantity === 0);
   const untouched = assets.filter((a) => !summary.positions.some((p) => p.assetId === a.id));
@@ -33,6 +34,7 @@ export default async function HoldingsPage() {
                   <th className="num">กำไรยังไม่รับรู้</th>
                   <th className="num">รับรู้แล้ว + ปันผล</th>
                   <th className="num">น้ำหนัก</th>
+                  <th className="num">มูลค่าที่เหมาะสม</th>
                 </tr>
               </thead>
               <tbody>
@@ -59,6 +61,9 @@ export default async function HoldingsPage() {
                     </td>
                     <td className={`num ${signClass(p.realizedPnlThb + p.incomeThb)}`}>{fmtThb(p.realizedPnlThb + p.incomeThb)}</td>
                     <td className="num">{fmtPctRaw(p.weightPct)}</td>
+                    <td className="num">
+                      <ValuationCell v={vals.get(p.symbol)} price={p.lastPrice} symbol={p.symbol} cls={p.assetClass} />
+                    </td>
                   </tr>
                 ))}
                 <tr>
@@ -66,6 +71,7 @@ export default async function HoldingsPage() {
                   <td className="num">{fmtThb(summary.cashThb)}</td>
                   <td colSpan={2} />
                   <td className="num">{fmtPctRaw(summary.totalValueThb ? (summary.cashThb / summary.totalValueThb) * 100 : 0)}</td>
+                  <td />
                 </tr>
               </tbody>
               <tfoot>
@@ -73,7 +79,7 @@ export default async function HoldingsPage() {
                   <td colSpan={5}>รวม</td>
                   <td className="num">{fmtThb(summary.totalValueThb)}</td>
                   <td className={`num ${signClass(summary.totalPnlThb)}`} colSpan={2}>P&amp;L รวม {fmtThb(summary.totalPnlThb)}</td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
               </tfoot>
             </table>
@@ -103,4 +109,20 @@ export default async function HoldingsPage() {
       </div>
     </>
   );
+}
+
+function ValuationCell({ v, price, symbol, cls }: { v?: { id: number; intrinsicValue: number | null }; price: number | null; symbol: string; cls: string }) {
+  if (v?.intrinsicValue != null) {
+    const up = price ? v.intrinsicValue / price - 1 : null;
+    return (
+      <Link href={`/valuation/${v.id}`} className="hover:underline">
+        {fmtNum(v.intrinsicValue)}
+        <div className={`text-[11px] ${signClass(up)}`}>{up != null ? `${up >= 0 ? "+" : ""}${(up * 100).toFixed(1)}%` : ""}</div>
+      </Link>
+    );
+  }
+  if (cls === "thai_stock" || cls === "us_stock")
+    return <Link href={`/valuation/new?symbol=${symbol}`} className="text-xs text-accent">ประเมิน →</Link>;
+  if (cls === "bond") return <Link href="/bonds" className="text-xs text-accent">YTM →</Link>;
+  return <span className="text-muted">–</span>;
 }

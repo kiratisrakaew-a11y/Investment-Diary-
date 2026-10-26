@@ -121,7 +121,11 @@ export async function addPriceAction(_: ActionState, f: FormData): Promise<Actio
 
 export async function saveSettingsAction(_: ActionState, f: FormData): Promise<ActionState> {
   try {
-    await saveSettings({ riskFreeRate: num(f, "riskFreeRate") ?? 0, benchmarkSymbol: str(f, "benchmarkSymbol") ?? "^SET.BK" });
+    await saveSettings({
+      riskFreeRate: num(f, "riskFreeRate") ?? 0,
+      benchmarkSymbol: str(f, "benchmarkSymbol") ?? "^SET.BK",
+      equityRiskPremium: num(f, "equityRiskPremium"),
+    });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {
     return fail(e);

@@ -37,6 +37,15 @@ export const TX_TYPE_LABEL: Record<string, string> = {
   fee: "ค่าธรรมเนียม",
 };
 
+export const METHOD_LABEL: Record<string, string> = {
+  dcf_fcff: "DCF-FCFF",
+  dcf_fcfe: "DCF-FCFE",
+  ddm: "DDM",
+  residual_income: "Residual income",
+  multiples: "Multiples",
+  bond: "Bond",
+};
+
 const thb = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 });
 const dec = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 

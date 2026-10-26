@@ -24,6 +24,10 @@ export default async function SettingsPage() {
               <input name="riskFreeRate" type="number" step="0.01" className="input" defaultValue={settings.riskFreeRate} />
             </div>
             <div>
+              <label className="label">Equity risk premium (% ต่อปี) — ใช้คำนวณ Ke ด้วย CAPM และผลตอบแทนคาดหวังใน optimizer</label>
+              <input name="equityRiskPremium" type="number" step="0.1" className="input" defaultValue={settings.equityRiskPremium} />
+            </div>
+            <div>
               <label className="label">ดัชนีอ้างอิง (สัญลักษณ์ Yahoo) — ^SET.BK = SET Index, ^SET50.BK, ^GSPC = S&amp;P 500</label>
               <input name="benchmarkSymbol" className="input" defaultValue={settings.benchmarkSymbol} />
             </div>
@@ -54,7 +58,8 @@ export default async function SettingsPage() {
           <CopyBlock label="Claude Code" text={`claude mcp add --transport http investment-diary ${origin}/api/mcp --header "Authorization: Bearer YOUR_API_KEY"`} />
           <p className="text-xs text-muted">
             เครื่องมือ: add_note, search_notes, record_transaction, list_transactions, add_asset, list_assets, update_price, get_portfolio_summary,
-            get_allocation, get_performance_metrics, get_portfolio_optimization
+            get_allocation, get_performance_metrics, get_portfolio_optimization, value_security, save_valuation, list_valuations, analyze_bond,
+            get_bond_holdings, get_investment_universe, optimize_portfolio
           </p>
         </div>
       </Section>
