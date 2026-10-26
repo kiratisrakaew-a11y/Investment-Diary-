@@ -7,6 +7,7 @@ import { financialYearSchema } from "@/lib/financials";
 import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
 import { rebalanceInput } from "./services/rebalance";
 import { stressInput } from "./services/stress";
+import { recordSplitInput } from "./services/splits";
 import { backtestInput } from "./services/backtest";
 
 const schema = (s: z.ZodType) => {
@@ -66,6 +67,15 @@ export function buildOpenApi(origin: string) {
           summary: "Add an idea / thesis / review / lesson / market note to the diary",
           requestBody: body("NoteInput"),
           responses: { "200": ok("Created note") },
+        },
+      },
+      "/api/v1/transactions/split": {
+        post: {
+          operationId: "recordSplit",
+          summary: "Record a stock split / reverse split and repair stored prices (dryRun previews)",
+          description: "splitFrom:splitTo (1:2 = shares double). Units ×ratio, cost unchanged, no cash. Prices before the date are divided only if still at the old level.",
+          requestBody: body("RecordSplit"),
+          responses: { "200": ok("Transaction id and price repair result") },
         },
       },
       "/api/v1/transactions": {
@@ -277,6 +287,7 @@ export function buildOpenApi(origin: string) {
         OptimizeInput: schema(optimizeInput),
         RebalanceInput: schema(rebalanceInput),
         StressInput: schema(stressInput),
+        RecordSplit: schema(recordSplitInput.omit({ source: true })),
         BacktestInput: schema(backtestInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },

@@ -64,6 +64,13 @@
       "when": 1793022904957,
       "tag": "0008_phase4_trading_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793025914167,
+      "tag": "0009_split_tx_type",
+      "breakpoints": true
     }
   ]
 }

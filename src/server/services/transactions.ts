@@ -40,6 +40,13 @@ export async function createTransaction(input: TransactionInputT) {
     }
   }
   const date = data.date ?? today();
+  if (data.type === "split") {
+    // Ratio = new shares per old share; a split moves no cash.
+    data.quantity = data.splitFrom && data.splitTo ? data.splitTo / data.splitFrom : data.quantity;
+    data.price = 0;
+    data.fee = 0;
+    data.memo = data.memo ?? (data.splitFrom && data.splitTo ? `แตกพาร์ ${data.splitFrom}:${data.splitTo}` : `แตกพาร์ ×${data.quantity}`);
+  }
   // Ledger integrity: no oversell, valid numbers, and (strict policy) enough recorded cash.
   const [assets, existing, settings] = await Promise.all([listAssets(), allTransactions(), getSettings()]);
   validateNewTransaction(

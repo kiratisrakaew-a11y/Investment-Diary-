@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { Badge, Empty, PageHeader, Section } from "@/components/ui";
 import { addTransactionAction, deleteTransactionAction } from "../actions";
+import { SplitForm } from "@/components/SplitForm";
 import { TX_TYPE_LABEL, fmtNum, fmtQty, fmtThb } from "@/lib/format";
 import { today } from "@/lib/validation";
 
@@ -25,7 +26,7 @@ export default async function TransactionsPage() {
             <div>
               <label className="label">ประเภท</label>
               <select name="type" className="input">
-                {Object.entries(TX_TYPE_LABEL).map(([v, l]) => (
+                {Object.entries(TX_TYPE_LABEL).filter(([v]) => v !== "split").map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
               </select>
@@ -72,6 +73,13 @@ export default async function TransactionsPage() {
         </ActionForm>
       </Section>
 
+      <Section title="แตกพาร์ / รวมพาร์ (stock split)">
+        {assets.length ? <SplitForm symbols={assets.filter((a) => a.assetClass !== "cash").map((a) => a.symbol)} today={today()} /> : null}
+        <p className="mt-2 text-xs text-muted">
+          จำนวนหุ้นคูณตามอัตรา ต้นทุนรวมเท่าเดิม (ต้นทุนเฉลี่ยหาร) ไม่กระทบเงินสดและกำไรขาดทุน · รายการซื้อขายเก่าไม่ถูกแก้ · เศษหุ้นที่ได้เป็นเงินสด ให้บันทึกเป็น &quot;ขาย&quot; แยก
+        </p>
+      </Section>
+
       <Section title="ประวัติรายการ">
         {txs.length === 0 ? (
           <Empty>ยังไม่มีรายการ</Empty>
@@ -99,7 +107,7 @@ export default async function TransactionsPage() {
                       <td>{tx.date}</td>
                       <td>{TX_TYPE_LABEL[tx.type]}</td>
                       <td className="font-medium">{symbol ?? "เงินสด"}</td>
-                      <td className="num">{tx.quantity ? fmtQty(tx.quantity) : "–"}</td>
+                      <td className="num">{tx.type === "split" ? `×${fmtQty(tx.quantity)}` : tx.quantity ? fmtQty(tx.quantity) : "–"}</td>
                       <td className="num">
                         {fmtNum(tx.price)} <span className="text-xs text-muted">{currency ?? "THB"}</span>
                       </td>

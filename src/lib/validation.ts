@@ -1,7 +1,7 @@
 /** zod schemas shared by the UI server actions, the REST API and the MCP tools. */
 import { z } from "zod";
 
-const isoDate = z
+export const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
   .describe("Date in YYYY-MM-DD format");
@@ -41,9 +41,11 @@ export const assetInput = z.object({
 export const transactionInput = z
   .object({
     date: isoDate.optional().describe("Trade date (defaults to today)"),
-    type: z.enum(["buy", "sell", "dividend", "coupon", "deposit", "withdraw", "fee"]),
-    symbol: z.string().optional().describe("Asset symbol (required for buy/sell/dividend/coupon)"),
-    quantity: z.number().nonnegative().default(0).describe("Units / shares (buy & sell)"),
+    type: z.enum(["buy", "sell", "dividend", "coupon", "deposit", "withdraw", "fee", "split"]),
+    symbol: z.string().optional().describe("Asset symbol (required for buy/sell/dividend/coupon/split)"),
+    quantity: z.number().nonnegative().default(0).describe("Units / shares (buy & sell); split: new shares per old share (2 = 1:2 split, 0.1 = 10:1 reverse)"),
+    splitFrom: z.number().positive().optional().describe("split only: old shares (e.g. 1 in a 1:2 split)"),
+    splitTo: z.number().positive().optional().describe("split only: new shares (e.g. 2 in a 1:2 split)"),
     price: z
       .number()
       .nonnegative()
@@ -54,12 +56,16 @@ export const transactionInput = z
     memo: z.string().max(1000).optional(),
     source: source.optional(),
   })
-  .refine((t) => !["buy", "sell", "dividend", "coupon"].includes(t.type) || !!t.symbol, {
+  .refine((t) => !["buy", "sell", "dividend", "coupon", "split"].includes(t.type) || !!t.symbol, {
     message: "symbol is required for this transaction type",
     path: ["symbol"],
   })
   .refine((t) => !["buy", "sell"].includes(t.type) || t.quantity > 0, {
     message: "quantity must be > 0 for buy/sell",
+    path: ["quantity"],
+  })
+  .refine((t) => t.type !== "split" || (t.splitFrom && t.splitTo ? t.splitTo / t.splitFrom : t.quantity) > 0, {
+    message: "split needs splitFrom and splitTo (or quantity = new shares per old share)",
     path: ["quantity"],
   });
 

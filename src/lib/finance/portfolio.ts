@@ -48,6 +48,7 @@ export type IssueCode =
   | "OVERSELL"
   | "INSUFFICIENT_CASH"
   | "INVALID_TX"
+  | "SPLIT_NO_HOLDING"
   | "DUPLICATE_TX"
   | "UNKNOWN_ASSET"
   | "STALE_PRICE"
@@ -204,7 +205,8 @@ export function validateFields(tx: TxInput, symbol?: string): LedgerIssue | null
   if (tx.price < 0) return bad("ราคา/จำนวนเงินต้องไม่ติดลบ");
   if (tx.fee < 0) return bad("ค่าธรรมเนียมต้องไม่ติดลบ");
   if (!(tx.fxRate > 0)) return bad("อัตราแลกเปลี่ยนต้องมากกว่า 0");
-  if ((tx.type === "buy" || tx.type === "sell" || tx.type === "dividend" || tx.type === "coupon") && tx.assetId == null) {
+  if (tx.type === "split" && !(tx.quantity > 0 && Math.abs(tx.quantity - 1) > 1e-12)) return bad("อัตราแตกพาร์ต้องมากกว่า 0 และไม่เท่ากับ 1");
+  if ((tx.type === "buy" || tx.type === "sell" || tx.type === "dividend" || tx.type === "coupon" || tx.type === "split") && tx.assetId == null) {
     return bad("ต้องระบุสินทรัพย์สำหรับรายการประเภทนี้");
   }
   return null;
@@ -301,6 +303,16 @@ function apply(state: State, tx: TxInput, symbols: Map<number, string>): { flow:
       state.cash += proceeds;
       break;
     }
+    case "split": {
+      // Corporate action: more (or fewer) shares, same total cost; no cash, no P&L.
+      const l = lot(tx.assetId!);
+      if (l.qty <= QTY_TOLERANCE) {
+        state.issues.push({ code: "SPLIT_NO_HOLDING", severity: "warning", date: tx.date, symbol, message: `แตกพาร์ ${symbol ?? ""} แต่ไม่มีหุ้นถืออยู่ ณ วันที่ ${tx.date} — ไม่มีผลกับจำนวนหุ้น` });
+      }
+      l.qty *= tx.quantity;
+      l.lastTxPrice = l.lastTxPrice / tx.quantity;
+      break;
+    }
     case "dividend":
     case "coupon": {
       const amt = tx.price * fx;
@@ -347,6 +359,7 @@ export function validateNewTransaction(assets: AssetInput[], existing: TxInput[]
     if (i.code === "OVERSELL") {
       throw new LedgerError({ ...i, severity: "error", message: `${i.message.split(" — ")[0]} ณ วันที่ ${i.date} — ไม่อนุญาตให้ขายเกินจำนวนที่ถือ (ยังไม่รองรับ short selling)` });
     }
+    if (i.code === "SPLIT_NO_HOLDING") throw new LedgerError({ ...i, severity: "error", message: `${i.message.split(" — ")[0]} — ตรวจวันที่หรือสินทรัพย์` });
     if (i.code === "INSUFFICIENT_CASH" && policy === "strict") {
       throw new LedgerError({
         ...i,

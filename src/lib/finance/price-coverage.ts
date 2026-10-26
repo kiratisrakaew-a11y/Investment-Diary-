@@ -132,7 +132,9 @@ export function corporateActionWarnings(
   for (const s of splits) {
     out.push(
       `${symbol}: split ${s.numerator}:${s.denominator} วันที่ ${s.date} — ราคา close จาก Yahoo ปรับตาม split แล้ว` +
-        (held ? " แต่จำนวนหุ้นในรายการซื้อขายยังไม่ถูกปรับ ให้ตรวจมูลค่าพอร์ตและบันทึกปรับจำนวนหุ้น" : ""),
+        (held
+          ? ` แต่จำนวนหุ้นยังไม่ถูกปรับ — บันทึก "แตกพาร์" ${s.denominator}:${s.numerator} (หน้ารายการ หรือ record_split) ระบบจะปรับจำนวนหุ้นและราคาย้อนหลังให้`
+          : ""),
     );
   }
   if (dividends.length) {
@@ -153,4 +155,62 @@ export async function withRetry<T>(fn: () => Promise<T>, o: { attempts: number; 
     }
   }
   throw last;
+}
+
+// ------------------------------------------------------------------ splits (corporate actions)
+
+export interface SplitRepairPlan {
+  /** unadjusted: stored prices before the date are at the old level and will be divided by the ratio. */
+  status: "unadjusted" | "already_adjusted" | "ambiguous" | "no_data";
+  observedRatio: number | null;
+  before: { date: string; close: number } | null;
+  after: { date: string; close: number } | null;
+  updates: { date: string; close: number; adjClose: number | null }[];
+  message: string;
+}
+
+/**
+ * Decide whether stored prices before a split date still sit at the pre-split level.
+ * Compares the last close before `date` with the first close on/after it: a gap near the ratio
+ * means unadjusted (divide earlier rows by the ratio); no gap means already adjusted (e.g. Yahoo
+ * re-sync). Idempotent: after a repair the gap disappears and the plan is empty.
+ */
+export function planSplitPriceRepair(rows: { date: string; close: number; adjClose: number | null }[], date: string, ratio: number): SplitRepairPlan {
+  const sorted = [...rows].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const before = [...sorted].reverse().find((r) => r.date < date) ?? null;
+  const after = sorted.find((r) => r.date >= date) ?? null;
+  const base = { before: before && { date: before.date, close: before.close }, after: after && { date: after.date, close: after.close } };
+  if (!before) return { status: "no_data", observedRatio: null, ...base, updates: [], message: "ไม่มีราคาก่อนวันแตกพาร์ — ไม่ต้องปรับ" };
+  if (!after) return { status: "no_data", observedRatio: null, ...base, updates: [], message: "ยังไม่มีราคาหลังวันแตกพาร์ — ดึงราคาหลังวันนั้นก่อนแล้วตรวจอีกครั้ง" };
+  const observed = before.close / after.close;
+  const dU = Math.abs(Math.log(observed / ratio));
+  const dA = Math.abs(Math.log(observed));
+  // Within ~±19% of the ratio (for 2×) counts as a match; anything in between is left to the user.
+  const margin = Math.abs(Math.log(ratio)) / 4;
+  if (dU < dA && dU < margin) {
+    const updates = sorted.filter((r) => r.date < date).map((r) => ({ date: r.date, close: r.close / ratio, adjClose: r.adjClose != null ? r.adjClose / ratio : null }));
+    return { status: "unadjusted", observedRatio: observed, ...base, updates, message: `ราคาก่อน ${date} ยังไม่ปรับ (ต่างกัน ${observed.toFixed(3)}×) — หารด้วย ${ratio} จำนวน ${updates.length} วัน` };
+  }
+  if (dA <= dU && dA < margin) return { status: "already_adjusted", observedRatio: observed, ...base, updates: [], message: "ราคาย้อนหลังปรับตามการแตกพาร์แล้ว — ไม่ต้องแก้" };
+  return { status: "ambiguous", observedRatio: observed, ...base, updates: [], message: `ราคาก่อน/หลังต่างกัน ${observed.toFixed(3)}× ไม่ตรงกับอัตรา ${ratio} หรือ 1 — ไม่แก้ให้อัตโนมัติ ตรวจราคาก่อน` };
+}
+
+const SPLIT_FACTORS = [2, 3, 4, 5, 10, 20, 1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 10, 1 / 20];
+
+/**
+ * Day-to-day price gaps that look like an unrecorded split (≈ 2×, 5×, 10×, 1/10× … within 8%).
+ * Exchanges' daily limits (SET ±30%) make such moves implausible as real returns.
+ */
+export function detectUnrecordedSplits(series: [string, number][], recordedSplitDates: string[], toleranceDays = 7) {
+  const out: { date: string; previousDate: string; factor: number; observed: number }[] = [];
+  const near = (d: string) => recordedSplitDates.some((s) => Math.abs(Date.parse(s) - Date.parse(d)) <= toleranceDays * 86_400_000);
+  for (let i = 1; i < series.length; i++) {
+    const [d0, p0] = series[i - 1];
+    const [d1, p1] = series[i];
+    if (!(p0 > 0 && p1 > 0)) continue;
+    const obs = p0 / p1;
+    const f = SPLIT_FACTORS.find((x) => Math.abs(Math.log(obs / x)) < 0.08);
+    if (f && !near(d1)) out.push({ date: d1, previousDate: d0, factor: f, observed: obs });
+  }
+  return out;
 }

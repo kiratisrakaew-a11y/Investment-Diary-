@@ -1,0 +1,1 @@
+ALTER TYPE "public"."tx_type" ADD VALUE 'split';

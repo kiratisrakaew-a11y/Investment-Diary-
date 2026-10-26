@@ -20,6 +20,7 @@ import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPr
 import { bondHoldings } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
+import { recordSplit, recordSplitInput } from "./services/splits";
 import { backtestInput, backtestPortfolio } from "./services/backtest";
 import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
@@ -108,7 +109,7 @@ export function createMcpServer() {
         "Record a buy, sell, dividend, coupon, deposit, withdraw or fee. For buy/sell give quantity and price per unit " +
         "in the asset's currency; for other types put the total amount in `price`. The asset must exist (add_asset). " +
         "Selling more than held is rejected (OVERSELL); under the default strict cash policy a buy/fee without enough cash is " +
-        "rejected (INSUFFICIENT_CASH) — record a deposit first.",
+        "rejected (INSUFFICIENT_CASH) — record a deposit first. For a stock split use record_split (it also repairs price history).",
       inputSchema: txShape,
     },
     safe(async (args) => createTransaction({ ...args, source: "claude" })),
@@ -184,6 +185,12 @@ export function createMcpServer() {
       inputSchema: importPricesInput.shape,
     },
     safe(async (x) => importPrices(x)),
+  );
+
+  server.registerTool(
+    "record_split",
+    { title: "Record stock split", description: "Record a stock split or reverse split (แตกพาร์ / รวมพาร์) for an asset the user holds: splitFrom:splitTo (1:2 doubles the shares, 10:1 reverse). Units are multiplied, total cost is unchanged (average cost divided), no cash or P&L. With adjustPrices (default) stored prices before the date are divided by the ratio only if they are still at the old level (checked; idempotent). Use dryRun first and record only when the user confirms the date and ratio.", inputSchema: recordSplitInput.omit({ source: true }).shape },
+    safe(async (x) => recordSplit({ ...x, source: "claude" })),
   );
 
   server.registerTool(

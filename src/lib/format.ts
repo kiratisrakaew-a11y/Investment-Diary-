@@ -35,6 +35,7 @@ export const TX_TYPE_LABEL: Record<string, string> = {
   deposit: "ฝากเงิน",
   withdraw: "ถอนเงิน",
   fee: "ค่าธรรมเนียม",
+  split: "แตกพาร์ / รวมพาร์",
 };
 
 export const METHOD_LABEL: Record<string, string> = {

@@ -30,6 +30,8 @@ export const txTypeEnum = pgEnum("tx_type", [
   "deposit",
   "withdraw",
   "fee",
+  /** Stock split / reverse split: quantity = new shares per old share; price = 0. */
+  "split",
 ]);
 export const noteTypeEnum = pgEnum("note_type", ["idea", "thesis", "review", "lesson", "market"]);
 export const noteSourceEnum = pgEnum("note_source", ["web", "claude", "chatgpt", "api"]);

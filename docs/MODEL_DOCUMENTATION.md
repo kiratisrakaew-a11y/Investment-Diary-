@@ -13,6 +13,7 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 | Cash policy | `strict` (default): a buy or fee without enough cash is rejected. `infer_with_warning`: the shortfall becomes an explicit inferred external deposit. Legacy rows are never rewritten; shortfalls are shown as inferred deposits |
 | Valuation | Last market price as of the date. Stale limits: stocks and gold 7 days, funds 10, bonds 30. With no market price the trade price is used and flagged. USD needs USDTHB; FX is never set to 1. A missing rate is flagged |
 | Reconciliation | NAV = cash + Σ qty × price × FX; position and cash weights sum to 100% |
+| Split / reverse split | Transaction type `split` (migration 0009); quantity = new shares per old share (1:2 → 2; 10:1 → 0.1). Units × ratio, total cost unchanged (average ÷ ratio), no cash flow and no P&L. Earlier transactions are not rewritten. Recording one with no shares held is rejected; the same split twice is rejected. Cash for fractional shares is recorded as a separate sell |
 
 ## 1b. Market data — `src/lib/prices/yahoo.ts`, `src/server/services/price-sync.ts`
 
@@ -29,6 +30,12 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
   - Dates: ISO, day-first `DD/MM/YYYY`, Buddhist-era years (> 2400 → −543), Excel serials, month names. Thousands separators are accepted.
   - At most 50,000 rows. Lines that cannot be read are reported with their line number; future dates are skipped; for a date given twice the last row wins (with a warning). Unknown symbols are reported, not created.
   - Same keep/overwrite and dry-run rules as the sync. The web page always previews (dry run) before saving.
+- Split price repair (`planSplitPriceRepair`, `record_split` / `POST /api/v1/transactions/split`, transactions page): compares the last close before the ex-date with the first close on/after it.
+  - Within ±¼·|ln ratio| of the ratio (about ±19% for 2×): stored rows before the date (close and adj_close) are divided by the ratio.
+  - Near 1: already adjusted (e.g. a Yahoo re-sync); nothing is changed.
+  - In between: ambiguous; the user decides.
+  - Idempotent; touches only that asset's prices; dry run first.
+- Unrecorded splits: the data-quality check "แตกพาร์" flags day-to-day gaps within 8% of 2, 3, 4, 5, 10, 20 or their inverses on held assets with no split within ±7 days. These moves are impossible under SET's ±30% daily limit. Yahoo split events from a sync point to the same fix.
 - The daily updater `updateAllPrices` uses the same functions incrementally (it re-fetches the last 5 days with overwrite).
 
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`

@@ -144,6 +144,8 @@ export interface DataQualityInput {
   bonds: { symbol: string; conventionsSet: boolean }[];
   /** Prices stored in the last `lookbackDays` per held asset (optimizer needs ≥ HISTORY_MIN_OBS). */
   history?: { symbol: string; observations: number; lookbackDays: number }[];
+  /** Price gaps that look like a split with no split transaction (detectUnrecordedSplits). */
+  splits?: { symbol: string; date: string; factor: number }[];
 }
 
 /** Minimum daily prices in the look-back window for an asset to enter the optimizer (matches loadUniverse). */
@@ -208,6 +210,18 @@ export function assessDataQuality(d: DataQualityInput) {
       `ราคาย้อนหลังไม่พอสำหรับจัดพอร์ต (ต้อง ≥ ${HISTORY_MIN_OBS} วันใน ${d.history[0]?.lookbackDays ?? 365} วัน): ${short.map((h) => `${h.symbol} (${h.observations})`).join(", ")} — ใช้ sync_historical_prices`,
       "สินทรัพย์ที่ถือมีราคาย้อนหลังพอสำหรับจัดพอร์ต",
       "/holdings",
+    );
+  }
+
+  if (d.splits) {
+    const label = (f: number) => (f >= 1 ? `1:${+f.toFixed(2)}` : `${+(1 / f).toFixed(2)}:1`);
+    add(
+      "แตกพาร์",
+      d.splits.length > 0,
+      "error",
+      `ราคากระโดดเหมือนแตกพาร์แต่ยังไม่ได้บันทึก: ${d.splits.map((s) => `${s.symbol} ${s.date} (≈${label(s.factor)})`).join(", ")} — บันทึก "แตกพาร์" ที่หน้ารายการ แล้วให้ระบบปรับราคาย้อนหลัง`,
+      "ไม่พบการแตกพาร์ที่ยังไม่บันทึก",
+      "/transactions",
     );
   }
 
