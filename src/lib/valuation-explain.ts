@@ -10,6 +10,7 @@ import {
   hModel,
   justifiedPBV,
   justifiedPE,
+  multiStageResidualIncome,
   multiplesValuation,
   residualIncome,
   scenarioAnalysis,
@@ -17,7 +18,7 @@ import {
   type DcfAssumptions,
   type InputMeta,
 } from "./finance/valuation";
-import type { ValuationInput } from "./valuation-schemas";
+import { riTerminal, type ValuationInput } from "./valuation-schemas";
 import { rateScaleWarnings } from "./rate-scale";
 
 export type Unit = "%" | "x" | "money" | "perShare" | "years" | "text" | "factor";
@@ -472,7 +473,103 @@ function explainDdm(a: Ddm): Explanation {
   return { method: "ddm", title: METHOD_TITLE.ddm, value: v, price: a.currentPrice, upside: upsideOf(v, a.currentPrice), assumptions, steps, table, warnings };
 }
 
+function explainRiMulti(a: Ri): Explanation {
+  const { ke, step, assumptions: keA } = keSteps(a);
+  const terminal = riTerminal(a);
+  const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: a.forecast ?? [], terminal });
+  const n = m.years.length;
+  const last = m.years[n - 1];
+  const steps: Step[] = [
+    step,
+    {
+      label: `PV ของ residual income ${n} ปี`,
+      formula: "Σ (Eₜ − Ke × Bₜ₋₁) ÷ (1 + Ke)ᵗ",
+      substitution: m.years.map((y) => fmtM(y.pv, 3)).join(" + "),
+      result: m.pvResidualIncome,
+      unit: "perShare",
+    },
+  ];
+  if (terminal.method !== "none" && last) {
+    const roeT = terminal.roe ?? last.roe;
+    steps.push({
+      label: `Residual income ปีที่ ${n + 1}`,
+      formula: "RIₙ₊₁ = (ROE ระยะยาว − Ke) × Bₙ",
+      substitution: `(${fmtP(roeT)} − ${fmtP(ke)}) × ${fmtM(last.bookValueEnd, 2)}`,
+      result: m.residualIncomeNext,
+      unit: "perShare",
+    });
+    steps.push(
+      terminal.method === "perpetuity"
+        ? {
+            label: "Continuing value (โตต่อเนื่อง)",
+            formula: "CV = RIₙ₊₁ ÷ (Ke − g)",
+            substitution: `${fmtM(m.residualIncomeNext, 3)} ÷ (${fmtP(ke)} − ${fmtP(terminal.growth)})`,
+            result: m.terminalValue,
+            unit: "perShare",
+          }
+        : {
+            label: "Continuing value (ค่อย ๆ ลดลง, persistence ω)",
+            formula: "CV = RIₙ₊₁ ÷ (1 + Ke − ω)",
+            substitution: `${fmtM(m.residualIncomeNext, 3)} ÷ (1 + ${fmtP(ke)} − ${terminal.persistence})`,
+            result: m.terminalValue,
+            unit: "perShare",
+          },
+    );
+    steps.push({ label: "PV ของ continuing value", formula: `CV ÷ (1 + Ke)^${n}`, substitution: `${fmtM(m.terminalValue, 3)} ÷ (1 + ${fmtP(ke)})^${n}`, result: m.pvTerminalValue, unit: "perShare" });
+  }
+  steps.push({
+    label: "มูลค่าที่เหมาะสม",
+    formula: "V₀ = B₀ + PV(RI) + PV(CV)",
+    substitution: `${fmtM(a.bookValuePerShare, 2)} + ${fmtM(m.pvResidualIncome, 3)} + ${fmtM(m.pvTerminalValue ?? 0, 3)}`,
+    result: m.value,
+    unit: "perShare",
+  });
+  steps.push({ label: "P/BV ที่ได้ / P/BV ตลาด", formula: "V₀ ÷ B₀ และ ราคา ÷ B₀", substitution: `${fmtX(m.value != null ? m.value / a.bookValuePerShare : null)} / ${fmtX(a.currentPrice / a.bookValuePerShare)}`, result: m.value != null ? m.value / a.bookValuePerShare : null, unit: "x" });
+  steps.push({ label: "Upside / Downside", formula: "Value ÷ ราคา − 1", substitution: `${fmtM(m.value, 2)} ÷ ${fmtM(a.currentPrice, 2)} − 1`, result: upsideOf(m.value, a.currentPrice), unit: "%" });
+  const warnings = [...m.errors.map((e) => `❌ ${e}`), ...m.warnings];
+  sanity(m.value, a.currentPrice, warnings);
+  return {
+    method: "residual_income",
+    title: "Residual Income — หลายช่วง (ประมาณการรายปี)",
+    value: m.value,
+    price: a.currentPrice,
+    upside: upsideOf(m.value, a.currentPrice),
+    assumptions: [
+      { group: "ราคา", label: "ราคาปัจจุบัน", value: a.currentPrice, unit: "perShare" },
+      ...keA,
+      { group: "ส่วนของผู้ถือหุ้น", label: "Book value ต่อหุ้นเริ่มต้น (B₀)", value: a.bookValuePerShare, unit: "perShare" },
+      { group: "ส่วนของผู้ถือหุ้น", label: "Payout ratio พื้นฐาน", value: a.payoutRatio, unit: "%" },
+      { group: "ส่วนของผู้ถือหุ้น", label: "จำนวนปีประมาณการ", value: n, unit: "years" },
+      {
+        group: "Continuing value",
+        label: "วิธี",
+        value: terminal.method === "none" ? "RI = 0 หลังช่วงประมาณการ" : terminal.method === "perpetuity" ? "โตต่อเนื่อง (perpetuity)" : `Persistence ω = ${terminal.persistence}`,
+        unit: "text",
+      },
+      ...(terminal.method === "perpetuity" ? [{ group: "Continuing value", label: "Growth ระยะยาว (g)", value: terminal.growth, unit: "%" as Unit }] : []),
+      ...(terminal.method !== "none" ? [{ group: "Continuing value", label: "ROE ระยะยาว", value: terminal.roe ?? last?.roe ?? null, unit: "%" as Unit, note: terminal.roe == null ? "ใช้ ROE ปีสุดท้าย" : undefined }] : []),
+    ],
+    steps,
+    table: {
+      columns: m.years.map((y) => `ปี ${y.year}`),
+      rows: [
+        { label: "Book value ต้นปี", values: m.years.map((y) => y.bookValueStart), unit: "perShare" },
+        { label: "ROE", values: m.years.map((y) => y.roe), unit: "%" },
+        { label: "กำไรต่อหุ้น (E)", values: m.years.map((y) => y.earnings), unit: "perShare" },
+        { label: "เงินปันผล (D)", values: m.years.map((y) => y.dividends), unit: "perShare" },
+        { label: "Book value ปลายปี", values: m.years.map((y) => y.bookValueEnd), unit: "perShare" },
+        { label: "− Ke × B ต้นปี", values: m.years.map((y) => y.equityCharge), unit: "perShare" },
+        { label: "Residual income", values: m.years.map((y) => y.residualIncome), unit: "perShare", strong: true },
+        { label: "Discount factor", values: m.years.map((y) => y.discountFactor), unit: "factor" },
+        { label: "Present value", values: m.years.map((y) => y.pv), unit: "perShare", strong: true },
+      ],
+    },
+    warnings: [...new Set(warnings)],
+  };
+}
+
 function explainRi(a: Ri): Explanation {
+  if (a.forecast?.length) return explainRiMulti(a);
   const { ke, step, assumptions: keA } = keSteps(a);
   const warnings: string[] = [];
   const value = residualIncome(a.bookValuePerShare, a.roe, ke, a.terminalGrowth);

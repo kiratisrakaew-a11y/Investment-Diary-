@@ -43,7 +43,7 @@ export function createMcpServer() {
         "on the timeline; record_transaction for trades (add_asset first for new symbols); update_price for manual " +
         "prices/NAVs; and get_* tools to read holdings, asset allocation and risk-adjusted performance " +
         "(TWR, XIRR, Sharpe, Sortino, Beta, Jensen's alpha, Treynor, efficient frontier). value_security runs DCF (FCFF/FCFE), DDM, " +
-        "residual income and multiples; analyze_bond gives YTM/duration; optimize_portfolio recommends weights. Dates are YYYY-MM-DD.",
+        "residual income (single-stage, or multi-stage with yearly ROE/EPS/payout/book value forecasts and a perpetuity, persistence or no continuing value) and multiples; analyze_bond gives YTM/duration; optimize_portfolio recommends weights. Dates are YYYY-MM-DD.",
     },
   );
 

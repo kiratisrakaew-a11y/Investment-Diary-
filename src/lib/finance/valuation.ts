@@ -605,6 +605,94 @@ export function residualIncome(bookValuePerShare: number, roe: number, ke: numbe
   return ke > g ? bookValuePerShare + ((roe - ke) * bookValuePerShare) / (ke - g) : NaN;
 }
 
+export interface RiForecastYear {
+  /** ROE on opening book value (decimal). Ignored when `eps` is given. */
+  roe?: number;
+  /** Earnings per share for the year; overrides ROE × opening book value. */
+  eps?: number;
+  /** Dividend payout ratio (decimal); defaults to the base payout. */
+  payoutRatio?: number;
+  /** Stated book value per share at year end; overrides clean surplus (the gap is flagged). */
+  bookValueEnd?: number;
+}
+
+export type RiTerminal =
+  | { method: "none" }
+  | { method: "perpetuity"; growth: number; roe?: number }
+  | { method: "persistence"; persistence: number; roe?: number };
+
+export interface RiYear {
+  year: number;
+  bookValueStart: number;
+  roe: number;
+  earnings: number;
+  dividends: number;
+  bookValueEnd: number;
+  equityCharge: number;
+  residualIncome: number;
+  discountFactor: number;
+  pv: number;
+}
+
+/**
+ * Multi-stage residual income: V₀ = B₀ + Σ RIₜ/(1+Ke)ᵗ + PV(continuing value), RIₜ = Eₜ − Ke·Bₜ₋₁,
+ * with clean-surplus book values Bₜ = Bₜ₋₁ + Eₜ − Dₜ unless a stated book value is given.
+ * Continuing value at year n: none (RI = 0), perpetuity RIₙ₊₁/(Ke − g) with RIₙ₊₁ = (ROE − Ke)·Bₙ,
+ * or persistence RIₙ₊₁/(1 + Ke − ω).
+ */
+export function multiStageResidualIncome(i: { bookValuePerShare: number; ke: number; forecast: RiForecastYear[]; terminal: RiTerminal; payoutRatio?: number }) {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const { ke } = i;
+  if (!(i.bookValuePerShare > 0)) errors.push("Book value ต่อหุ้นเริ่มต้นต้องมากกว่า 0");
+  if (!i.forecast.length) errors.push("ต้องมีประมาณการอย่างน้อย 1 ปี");
+  if (!(ke > -1)) errors.push("Ke ไม่ถูกต้อง");
+  const years: RiYear[] = [];
+  let b = i.bookValuePerShare;
+  i.forecast.forEach((f, k) => {
+    if (f.eps == null && f.roe == null) errors.push(`ปีที่ ${k + 1}: ต้องระบุ ROE หรือ EPS`);
+    const earnings = f.eps ?? (f.roe ?? 0) * b;
+    const payout = f.payoutRatio ?? i.payoutRatio ?? 0;
+    const dividends = earnings * payout;
+    const clean = b + earnings - dividends;
+    const end = f.bookValueEnd ?? clean;
+    if (f.bookValueEnd != null && Math.abs(f.bookValueEnd - clean) > 1e-6 * Math.max(1, Math.abs(clean))) {
+      warnings.push(`ปีที่ ${k + 1}: Book value ที่ระบุ (${end.toFixed(2)}) ต่างจาก clean surplus B + E − D (${clean.toFixed(2)}) — มีรายการนอกกำไร/ทุนเพิ่ม ทำให้ RI อาจนับไม่ครบหรือซ้ำ`);
+    }
+    if (end <= 0) errors.push(`ปีที่ ${k + 1}: Book value ปลายปีติดลบหรือเป็นศูนย์`);
+    const equityCharge = ke * b;
+    const ri = earnings - equityCharge;
+    const df = 1 / (1 + ke) ** (k + 1);
+    years.push({ year: k + 1, bookValueStart: b, roe: b !== 0 ? earnings / b : NaN, earnings, dividends, bookValueEnd: end, equityCharge, residualIncome: ri, discountFactor: df, pv: ri * df });
+    b = end;
+  });
+  const n = years.length;
+  const last = years[n - 1];
+  const t = i.terminal;
+  let riNext: number | null = null;
+  let tv = 0;
+  if (t.method !== "none" && last) {
+    const roeT = t.roe ?? last.roe;
+    riNext = (roeT - ke) * b;
+    if (t.method === "perpetuity") {
+      if (!(ke > t.growth)) errors.push(`Ke (${(ke * 100).toFixed(2)}%) ต้องมากกว่า growth ระยะยาว (${(t.growth * 100).toFixed(2)}%)`);
+      tv = riNext / (ke - t.growth);
+      const sustainable = roeT * (1 - (i.forecast[n - 1].payoutRatio ?? i.payoutRatio ?? 0));
+      if (t.growth > sustainable + 1e-9) warnings.push(`Growth ระยะยาว ${(t.growth * 100).toFixed(2)}% สูงกว่าที่ ROE × retention รองรับ (${(sustainable * 100).toFixed(2)}%)`);
+    } else {
+      if (!(t.persistence >= 0 && t.persistence <= 1)) errors.push("Persistence factor ต้องอยู่ระหว่าง 0 ถึง 1");
+      tv = riNext / (1 + ke - t.persistence);
+    }
+    if (roeT > ke + 0.08 && t.method === "perpetuity") warnings.push(`ROE ระยะยาว ${(roeT * 100).toFixed(1)}% สูงกว่า Ke มากตลอดไป — พิจารณาใช้ persistence (ค่อย ๆ ลดลงสู่ Ke)`);
+  }
+  const pvRi = years.reduce((a, y) => a + y.pv, 0);
+  const pvTv = n ? tv / (1 + ke) ** n : 0;
+  const value = errors.length ? null : i.bookValuePerShare + pvRi + pvTv;
+  const total = value != null ? value - i.bookValuePerShare : null;
+  if (total != null && total !== 0 && Math.abs(pvTv / total) > 0.7 && t.method !== "none") warnings.push("Continuing value มากกว่า 70% ของมูลค่าส่วนเกิน book value — ผลลัพธ์อ่อนไหวต่อสมมติฐานระยะยาว");
+  return { years, residualIncomeNext: riNext, terminalValue: errors.length ? null : tv, pvResidualIncome: pvRi, pvTerminalValue: errors.length ? null : pvTv, value, errors, warnings };
+}
+
 /** Justified (fundamental) trailing P/E = payout·(1+g) / (Ke − g). */
 export function justifiedPE(payoutRatio: number, ke: number, g: number): number {
   return ke > g ? (payoutRatio * (1 + g)) / (ke - g) : NaN;

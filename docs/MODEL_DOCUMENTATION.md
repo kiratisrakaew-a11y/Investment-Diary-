@@ -44,6 +44,7 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - Scenarios: Bear/Base/Bull overrides whose probabilities must sum to 1. Output is the expected value, range and σ.
 - Reverse DCF: a constant growth rate is found by scanning and bisecting, with status `ok`, `no_root` or `multiple_roots`.
 - DDM (Gordon, two-stage, H-model), residual income and justified multiples return no value when Ke ≤ g. Multiples record whether they are trailing or forward.
+- Residual income, multi-stage: yearly ROE or EPS, payout and optional stated book value; RIₜ = Eₜ − Ke·Bₜ₋₁ with clean surplus Bₜ = Bₜ₋₁ + E − D (a stated book value overrides it and the gap is flagged). Continuing value: perpetuity RIₙ₊₁/(Ke − g), persistence RIₙ₊₁/(1 + Ke − ω), or none. With constant ROE and g = ROE × retention it equals the single-stage formula (tested).
 
 ## 4. Optimizer — `optimizer.ts`, `recommend.ts`, `mpt.ts`
 

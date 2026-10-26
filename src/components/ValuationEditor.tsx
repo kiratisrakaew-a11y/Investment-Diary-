@@ -433,10 +433,12 @@ export function ValuationEditor({
             </Group>
           )}
 
+          {method === "residual_income" && <RiForecastEditor ri={ri} setRi={setRi} />}
+
           {method === "residual_income" && (
             <Group title="ส่วนของผู้ถือหุ้น">
               <NumField label="Book value ต่อหุ้น" value={ri.bookValuePerShare} onChange={(v) => setRi((a) => ({ ...a, bookValuePerShare: v ?? 0 }))} />
-              <NumField label="ROE ที่ยั่งยืน" pct value={ri.roe} onChange={(v) => setRi((a) => ({ ...a, roe: v ?? 0 }))} />
+              {!ri.forecast?.length && <NumField label="ROE ที่ยั่งยืน" pct value={ri.roe} onChange={(v) => setRi((a) => ({ ...a, roe: v ?? 0 }))} />}
               <NumField label="Payout ratio" pct value={ri.payoutRatio} onChange={(v) => setRi((a) => ({ ...a, payoutRatio: v ?? 0 }))} />
               <NumField label="Growth ระยะยาว" pct value={ri.terminalGrowth} onChange={(v) => setRi((a) => ({ ...a, terminalGrowth: v ?? 0 }))} hint="g = ROE × (1 − payout)" />
               <div className="flex items-end pb-2 text-xs text-muted">g ยั่งยืน = {fmtPct(ri.roe * (1 - ri.payoutRatio))}</div>
@@ -606,7 +608,15 @@ function Details({ method, details }: { method: Method; details: Record<string, 
           <KV k="Dividend yield" v={fmtPct(n("dividendYield"))} />
         </>
       )}
-      {method === "residual_income" && (
+      {method === "residual_income" && details.model === "multi_stage" && (
+        <>
+          <KV k="Cost of equity (Ke)" v={fmtPct(n("costOfEquity"))} />
+          <KV k="PV ของ residual income ช่วงประมาณการ" v={fmtNum(n("pvResidualIncome"))} />
+          <KV k="PV ของ continuing value" v={fmtNum(n("pvTerminalValue"))} />
+          <KV k="P/BV ที่ได้ / P/BV ตลาด" v={`${fmtNum(n("impliedPBV"))} / ${fmtNum(n("marketPBV"))}`} />
+        </>
+      )}
+      {method === "residual_income" && details.model !== "multi_stage" && (
         <>
           <KV k="Cost of equity (Ke)" v={fmtPct(n("costOfEquity"))} />
           <KV k="Justified P/BV = (ROE−g)/(Ke−g)" v={fmtNum(n("justifiedPBV"))} />
@@ -665,6 +675,118 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
       })}
       <div className="text-right text-[11px] text-muted">เส้นตั้ง = ราคาปัจจุบัน {fmtNum(price)}</div>
     </div>
+  );
+}
+
+type RiRow = NonNullable<Ri["forecast"]>[number];
+
+/** Yearly ROE / payout / book value forecast for the multi-stage residual income model. */
+function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.SetStateAction<Ri>> }) {
+  const rows = ri.forecast ?? [];
+  const on = rows.length > 0;
+  const setRow = (i: number, patch: Partial<RiRow>) =>
+    setRi((a) => ({ ...a, forecast: (a.forecast ?? []).map((r, j) => (j === i ? clean({ ...r, ...patch }) : r)) }));
+  const clean = (r: RiRow) => Object.fromEntries(Object.entries(r).filter(([, v]) => v != null)) as RiRow;
+  // Starting set: ROE fades linearly from the current ROE to Ke-ish long-run level over 5 years.
+  const seed = (): RiRow[] => Array.from({ length: 5 }, (_, i) => ({ roe: ri.roe + ((0.1 - ri.roe) * i) / 5, payoutRatio: ri.payoutRatio }));
+  return (
+    <fieldset className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Residual income หลายช่วง (ประมาณการรายปี)</legend>
+        <Toggle label="ใช้ประมาณการรายปี" checked={on} onChange={(v) => setRi((a) => ({ ...a, forecast: v ? seed() : undefined }))} />
+      </div>
+      {!on ? (
+        <p className="text-xs text-muted">ปิดอยู่ = ใช้สูตรช่วงเดียว V₀ = B₀ + (ROE − Ke)B₀ ÷ (Ke − g) · เปิดเพื่อใส่ ROE / payout / Book value รายปี แล้วเลือก continuing value</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="table text-xs">
+              <thead>
+                <tr>
+                  <th>ปี</th>
+                  <th className="num">ROE (%)</th>
+                  <th className="num">หรือ EPS</th>
+                  <th className="num">Payout (%)</th>
+                  <th className="num">BV ปลายปี (ถ้ามี)</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={`${i}-${rows.length}`}>
+                    <td>{i + 1}</td>
+                    <td className="num">
+                      <CellInput value={r.roe} scale={100} onChange={(v) => setRow(i, { roe: v ?? undefined })} />
+                    </td>
+                    <td className="num">
+                      <CellInput value={r.eps} onChange={(v) => setRow(i, { eps: v ?? undefined })} />
+                    </td>
+                    <td className="num">
+                      <CellInput value={r.payoutRatio} scale={100} placeholder={fmtPct(ri.payoutRatio, 0)} onChange={(v) => setRow(i, { payoutRatio: v ?? undefined })} />
+                    </td>
+                    <td className="num">
+                      <CellInput value={r.bookValueEnd} placeholder="clean surplus" onChange={(v) => setRow(i, { bookValueEnd: v ?? undefined })} />
+                    </td>
+                    <td>
+                      <button type="button" className="text-xs text-muted hover:text-neg" onClick={() => setRi((a) => ({ ...a, forecast: (a.forecast ?? []).filter((_, j) => j !== i) }))}>
+                        ลบ
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            className="btn-ghost text-xs"
+            onClick={() => setRi((a) => ({ ...a, forecast: [...(a.forecast ?? []), { ...(a.forecast?.[a.forecast.length - 1] ?? { roe: a.roe }), bookValueEnd: undefined }].map(clean) }))}
+            disabled={rows.length >= 30}
+          >
+            + เพิ่มปี
+          </button>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <SelectField
+              label="Continuing value หลังช่วงประมาณการ"
+              value={ri.terminalMethod ?? "perpetuity"}
+              options={[
+                { value: "perpetuity", label: "โตต่อเนื่อง RI ÷ (Ke − g)" },
+                { value: "persistence", label: "ค่อย ๆ ลดลง RI ÷ (1 + Ke − ω)" },
+                { value: "none", label: "ไม่มี (RI = 0)" },
+              ]}
+              onChange={(v) => setRi((a) => ({ ...a, terminalMethod: v }))}
+            />
+            {(ri.terminalMethod ?? "perpetuity") !== "none" && (
+              <NumField label="ROE ระยะยาว (ว่าง = ปีสุดท้าย)" pct nullable value={ri.terminalRoe ?? null} onChange={(v) => setRi((a) => ({ ...a, terminalRoe: v ?? undefined }))} />
+            )}
+            {ri.terminalMethod === "persistence" && (
+              <NumField label="Persistence ω (0–1)" value={ri.persistence ?? 0.6} onChange={(v) => setRi((a) => ({ ...a, persistence: Math.min(1, Math.max(0, v ?? 0.6)) }))} />
+            )}
+          </div>
+          <p className="text-xs text-muted">
+            RIₜ = Eₜ − Ke × Bₜ₋₁ · Bₜ = Bₜ₋₁ + E − D (clean surplus) เว้นแต่ใส่ BV ปลายปีเอง · Growth ระยะยาว (g) อยู่ในช่องด้านล่าง ใช้กับแบบโตต่อเนื่อง
+          </p>
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+function CellInput({ value, onChange, scale = 1, placeholder }: { value: number | undefined; onChange: (v: number | null) => void; scale?: number; placeholder?: string }) {
+  const [text, setText] = useState(value == null ? "" : String(Number((value * scale).toFixed(6))));
+  return (
+    <input
+      className="input w-24 py-1 text-right text-xs tabular-nums"
+      inputMode="decimal"
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => {
+        setText(e.target.value);
+        if (e.target.value.trim() === "") return onChange(null);
+        const n = Number(e.target.value);
+        if (Number.isFinite(n)) onChange(n / scale);
+      }}
+    />
   );
 }
 

@@ -13,6 +13,7 @@ import {
   impliedGrowthDetailed,
   justifiedPBV,
   justifiedPE,
+  multiStageResidualIncome,
   multiplesValuation,
   residualIncome,
   scenarioAnalysis,
@@ -103,7 +104,25 @@ export const residualIncomeSchema = z.object({
   beta: z.number(),
   equityRiskPremium: rate("Equity risk premium"),
   extraPremium: rate("Additional premium").default(0),
-  terminalGrowth: rate("Long-run growth (often ROE × retention)"),
+  terminalGrowth: rate("Long-run growth (often ROE × retention); used by the perpetuity continuing value"),
+  forecast: z
+    .array(
+      z.object({
+        roe: rate("ROE on opening book value for this year").optional(),
+        eps: z.number().optional().describe("EPS for this year (overrides ROE × opening book value)"),
+        payoutRatio: rate("Payout ratio this year (defaults to payoutRatio)").optional(),
+        bookValueEnd: z.number().optional().describe("Stated year-end book value per share (overrides clean surplus)"),
+      }),
+    )
+    .max(30)
+    .optional()
+    .describe("Multi-stage: yearly forecasts, year 1 first. Omit for the single-stage model"),
+  terminalMethod: z
+    .enum(["perpetuity", "persistence", "none"])
+    .optional()
+    .describe("Default perpetuity. Continuing value after the forecast (multi-stage): perpetuity RI(n+1)/(Ke−g), persistence RI(n+1)/(1+Ke−ω), or none (RI = 0)"),
+  terminalRoe: rate("ROE after the forecast (defaults to the last forecast year)").optional(),
+  persistence: z.number().min(0).max(1).optional().describe("ω for the persistence continuing value, default 0.6 (0 = RI disappears, 1 = no fade)"),
   inputMeta: inputMetaSchema,
 });
 
@@ -160,6 +179,16 @@ export interface EvaluationSummary {
   price: number | null;
   upside: number | null;
   details: Record<string, unknown>;
+}
+
+/** Continuing value spec for the multi-stage residual-income model. */
+export function riTerminal(a: { terminalMethod?: "perpetuity" | "persistence" | "none"; terminalGrowth: number; terminalRoe?: number; persistence?: number }) {
+  const m = a.terminalMethod ?? "perpetuity";
+  return m === "none"
+    ? ({ method: "none" } as const)
+    : m === "persistence"
+      ? ({ method: "persistence", persistence: a.persistence ?? 0.6, roe: a.terminalRoe } as const)
+      : ({ method: "perpetuity", growth: a.terminalGrowth, roe: a.terminalRoe } as const);
 }
 
 const upsideOf = (v: number, p: number) => (p > 0 && Number.isFinite(v) ? v / p - 1 : null);
@@ -237,6 +266,27 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
     case "residual_income": {
       const a = input.assumptions;
       const ke = costOfEquity(a.riskFree, a.beta, a.equityRiskPremium, a.extraPremium);
+      if (a.forecast?.length) {
+        const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: a.forecast, terminal: riTerminal(a) });
+        return {
+          value: m.value,
+          price: a.currentPrice,
+          upside: m.value != null ? upsideOf(m.value, a.currentPrice) : null,
+          details: {
+            model: "multi_stage",
+            costOfEquity: ke,
+            years: m.years,
+            pvResidualIncome: m.pvResidualIncome,
+            residualIncomeNext: m.residualIncomeNext,
+            terminalValue: m.terminalValue,
+            pvTerminalValue: m.pvTerminalValue,
+            impliedPBV: m.value != null ? m.value / a.bookValuePerShare : null,
+            marketPBV: a.currentPrice / a.bookValuePerShare,
+            errors: m.errors.map((message) => ({ code: "INVALID_INPUT", message })),
+            warnings: m.warnings,
+          },
+        };
+      }
       const value = residualIncome(a.bookValuePerShare, a.roe, ke, a.terminalGrowth);
       return {
         value: finite(value),
