@@ -13,6 +13,7 @@ import { fetchFundamentals } from "@/lib/prices/yahoo";
 import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
+import { syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
@@ -54,6 +55,13 @@ function tools() {
       description: "Actual vs. target asset allocation by asset class with drift and rebalance amounts (THB).",
       inputSchema: z.object({}),
       run: async () => json({ ...(await getAllocation()), targets: await getTargets() }),
+    }),
+    betaZodTool({
+      name: "sync_historical_prices",
+      description:
+        "Backfill daily prices for existing assets over a date range (default 365 days) plus benchmark and USDTHB. Use dryRun first; never creates assets — ask the user to add unknown symbols.",
+      inputSchema: syncHistoricalPricesInput,
+      run: async (x) => json(await syncHistoricalPrices(x)),
     }),
     betaZodTool({
       name: "get_data_quality",

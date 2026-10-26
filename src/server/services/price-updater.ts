@@ -1,12 +1,9 @@
 import { desc, eq, max } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { fetchDailyCloses } from "@/lib/prices/yahoo";
-import { fetchRecentFundNavs } from "@/lib/prices/sec-th";
-import { THAI_GOLD_SYMBOL, thaiGoldPrice } from "@/lib/prices/gold";
-import { asOf } from "@/lib/finance/portfolio";
+import { today } from "@/lib/validation";
 import { listAssets } from "./assets";
 import { getSettings } from "./settings";
-import { loadFxHistory, upsertBenchmark, upsertFx, upsertPrice } from "./prices";
+import { dbDeps, syncAssetSeries, syncMarketSeries, type SeriesResult } from "./price-sync";
 
 const DEFAULT_HISTORY_DAYS = 365 * 3;
 
@@ -35,62 +32,39 @@ export interface UpdateResult {
   error?: string;
 }
 
+const toResult = (r: SeriesResult): UpdateResult =>
+  r.status === "ok" || r.status === "no_data" ? { symbol: r.symbol, ok: true, rows: r.fetched } : { symbol: r.symbol, ok: false, error: r.message };
+
+/**
+ * Incremental daily update of USDTHB, the benchmark and every non-manual asset, through the same
+ * sync functions as `syncHistoricalPrices` (overwriting the recent window to pick up corrections).
+ */
 export async function updateAllPrices(): Promise<UpdateResult[]> {
   const results: UpdateResult[] = [];
   const db = getDb();
+  const to = today();
+  const opts = (from: string) => ({ range: { from: from > to ? to : from, to }, priceType: "close" as const, overwrite: true, dryRun: false });
 
   // 1. USD/THB
-  try {
-    const [last] = await db
-      .select({ d: schema.fxRates.date })
-      .from(schema.fxRates)
-      .orderBy(desc(schema.fxRates.date))
-      .limit(1);
-    const rows = await fetchDailyCloses("THB=X", fromDate(last?.d ?? null));
-    for (const r of rows) await upsertFx(r.date, r.close);
-    results.push({ symbol: "USDTHB", ok: true, rows: rows.length });
-  } catch (e) {
-    results.push({ symbol: "USDTHB", ok: false, error: (e as Error).message });
-  }
+  const [lastFx] = await db.select({ d: schema.fxRates.date }).from(schema.fxRates).orderBy(desc(schema.fxRates.date)).limit(1);
+  results.push(toResult(await syncMarketSeries(dbDeps, "fx:USDTHB", "USDTHB", "THB=X", opts(fromDate(lastFx?.d ?? null)))));
 
   // 2. Benchmark
   const settings = await getSettings();
-  try {
-    const [last] = await db
-      .select({ d: max(schema.benchmarkPrices.date) })
-      .from(schema.benchmarkPrices)
-      .where(eq(schema.benchmarkPrices.symbol, settings.benchmarkSymbol));
-    const rows = await fetchDailyCloses(settings.benchmarkSymbol, fromDate(last?.d ?? null));
-    for (const r of rows) await upsertBenchmark(settings.benchmarkSymbol, r.date, r.close);
-    results.push({ symbol: settings.benchmarkSymbol, ok: true, rows: rows.length });
-  } catch (e) {
-    results.push({ symbol: settings.benchmarkSymbol, ok: false, error: (e as Error).message });
-  }
+  const [lastBench] = await db
+    .select({ d: max(schema.benchmarkPrices.date) })
+    .from(schema.benchmarkPrices)
+    .where(eq(schema.benchmarkPrices.symbol, settings.benchmarkSymbol));
+  const b = settings.benchmarkSymbol;
+  results.push(toResult(await syncMarketSeries(dbDeps, `bench:${b}`, b, b, opts(fromDate(lastBench?.d ?? null)))));
 
   // 3. Assets
-  const fx = await loadFxHistory();
   for (const a of await listAssets()) {
     if (a.priceSource === "manual") continue;
-    try {
-      const from = fromDate(await lastPriceDate(a.id));
-      let rows: { date: string; close: number }[] = [];
-      if (a.priceSource === "sec_th") {
-        if (!a.providerSymbol) throw new Error("providerSymbol (SEC proj_id) is required");
-        rows = await fetchRecentFundNavs(a.providerSymbol, (await lastPriceDate(a.id)) ? 7 : 30);
-      } else if (a.providerSymbol?.toUpperCase() === THAI_GOLD_SYMBOL) {
-        const gold = await fetchDailyCloses("GC=F", from);
-        rows = gold.flatMap((g) => {
-          const rate = asOf(fx, g.date);
-          return rate ? [{ date: g.date, close: thaiGoldPrice(g.close, rate) }] : [];
-        });
-      } else {
-        rows = await fetchDailyCloses(a.providerSymbol || a.symbol, from);
-      }
-      for (const r of rows) await upsertPrice(a.id, r.date, r.close);
-      results.push({ symbol: a.symbol, ok: true, rows: rows.length });
-    } catch (e) {
-      results.push({ symbol: a.symbol, ok: false, error: (e as Error).message });
-    }
+    const last = await lastPriceDate(a.id);
+    // Fund NAVs come one day per request: only the last week (or month on first run).
+    const from = a.priceSource === "sec_th" ? daysAgo(last ? 7 : 30) : fromDate(last);
+    results.push(toResult(await syncAssetSeries(dbDeps, a, opts(from), false)));
   }
   return results;
 }

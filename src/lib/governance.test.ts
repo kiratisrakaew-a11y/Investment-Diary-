@@ -123,3 +123,26 @@ describe("F2 portfolio bonds use their stored conventions", () => {
     expect(d.assumed.length).toBe(2);
   });
 });
+
+describe("Roadmap phase 1: price-history check", () => {
+  it("flags held assets below the optimizer's minimum history", () => {
+    const r = assessDataQuality({
+      provenance: marketInputProvenance({ ...settings, rfSource: "ThaiBMA", rfAsOf: "2026-10-24", erpSource: "Damodaran", erpAsOf: "2026-01-05" }),
+      positions: [],
+      reconciliation: { navMatches: true, inferredContributionsThb: 0 },
+      ledgerIssues: [],
+      benchmark: { symbol: "^SET.BK", lastDate: "2026-10-24", kind: "total_return" },
+      today: "2026-10-26",
+      valuations: [],
+      bonds: [],
+      history: [
+        { symbol: "PTT", observations: 240, lookbackDays: 365 },
+        { symbol: "KBANK", observations: 12, lookbackDays: 365 },
+      ],
+    });
+    const h = r.checks.find((c) => c.area === "ประวัติราคา")!;
+    expect(h.status).toBe("warn");
+    expect(h.message).toContain("KBANK (12)");
+    expect(h.message).not.toContain("PTT");
+  });
+});

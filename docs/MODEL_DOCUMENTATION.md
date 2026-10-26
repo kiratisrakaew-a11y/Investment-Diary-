@@ -14,6 +14,18 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 | Valuation | Last market price as of the date. Stale limits: stocks and gold 7 days, funds 10, bonds 30. With no market price the trade price is used and flagged. USD needs USDTHB; FX is never set to 1. A missing rate is flagged |
 | Reconciliation | NAV = cash + Σ qty × price × FX; position and cash weights sum to 100% |
 
+## 1b. Market data — `src/lib/prices/yahoo.ts`, `src/server/services/price-sync.ts`
+
+- `prices.close` is the provider close. For Yahoo this is split-adjusted but **not** dividend-adjusted (unchanged meaning since the first version). `prices.adj_close` (nullable, migration 0006) is the split- and dividend-adjusted series. It is stored only when syncing with `priceType: "adjusted_close"`; Yahoo rescales it retroactively after each new dividend.
+- `syncHistoricalPrices` (MCP `sync_historical_prices`, `POST /api/v1/prices/sync`, holdings page) covers a date range (default 365 days, at most 3,660 days, at most 50 symbols) for assets already in the app. It also syncs the benchmark and USDTHB.
+  - `overwriteExisting=false` never changes stored values, but it fills missing adjusted values. `dryRun` reports without writing.
+  - Writes are idempotent because of the unique (asset, date) index.
+  - Retries 3 times with exponential backoff. Results are per symbol, so one failure does not stop the others.
+  - Unknown symbols are reported, not created. Manual assets are unsupported. SEC fund NAVs are fetched one day per request, so ranges are limited to 400 days or fewer.
+  - Splits and dividends in the range are reported as warnings. Holdings are not adjusted for splits (no split transaction type yet).
+  - After a sync it reports coverage (observations, largest gap, staleness) and optimizer eligibility from `loadUniverse` (the whole universe, filtered to the requested symbols).
+- The daily updater `updateAllPrices` uses the same functions incrementally (it re-fetches the last 5 days with overwrite).
+
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`
 
 | Measure | Formula / rule |

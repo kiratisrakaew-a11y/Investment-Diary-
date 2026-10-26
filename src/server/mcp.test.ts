@@ -8,6 +8,7 @@ describe("MCP build info", () => {
     expect(names).toContain("multi_stage_residual_income");
     expect(names).toContain("save_valuation");
     expect(names).toContain("get_server_info");
+    expect(names).toContain("sync_historical_prices");
   });
   it("version carries the formula version and commit", () => {
     expect(serverVersion().startsWith(MODEL_VERSION)).toBe(true);

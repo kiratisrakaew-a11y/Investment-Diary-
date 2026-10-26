@@ -142,7 +142,12 @@ export interface DataQualityInput {
   today: string;
   valuations: { id: number; symbol: string; modelVersion?: string }[];
   bonds: { symbol: string; conventionsSet: boolean }[];
+  /** Prices stored in the last `lookbackDays` per held asset (optimizer needs ≥ HISTORY_MIN_OBS). */
+  history?: { symbol: string; observations: number; lookbackDays: number }[];
 }
+
+/** Minimum daily prices in the look-back window for an asset to enter the optimizer (matches loadUniverse). */
+export const HISTORY_MIN_OBS = 60;
 
 /** One list of everything that can make a number on screen unreliable, with where to fix it. */
 export function assessDataQuality(d: DataQualityInput) {
@@ -193,6 +198,18 @@ export function assessDataQuality(d: DataQualityInput) {
   add("Valuation", old.length > 0, "warn", `${old.length} รายการบันทึกด้วยสูตรเวอร์ชันก่อน (${[...new Set(old.map((v) => v.symbol))].join(", ")}) — เปิดแล้วบันทึกใหม่เพื่ออัปเดต`, "ทุก valuation ใช้สูตรเวอร์ชันปัจจุบัน", "/valuation");
   const bondsMissing = d.bonds.filter((b) => !b.conventionsSet);
   add("พันธบัตร", bondsMissing.length > 0, "warn", `ยังไม่ระบุความถี่คูปอง/day count: ${bondsMissing.map((b) => b.symbol).join(", ")} — ใช้ค่าสมมติ ทุก 6 เดือน ACT/ACT`, "พันธบัตรทุกตัวระบุเงื่อนไขแล้ว", "/holdings");
+
+  if (d.history) {
+    const short = d.history.filter((h) => h.observations < HISTORY_MIN_OBS);
+    add(
+      "ประวัติราคา",
+      short.length > 0,
+      "warn",
+      `ราคาย้อนหลังไม่พอสำหรับจัดพอร์ต (ต้อง ≥ ${HISTORY_MIN_OBS} วันใน ${d.history[0]?.lookbackDays ?? 365} วัน): ${short.map((h) => `${h.symbol} (${h.observations})`).join(", ")} — ใช้ sync_historical_prices`,
+      "สินทรัพย์ที่ถือมีราคาย้อนหลังพอสำหรับจัดพอร์ต",
+      "/holdings",
+    );
+  }
 
   const status: "ok" | "warnings" | "errors" = checks.some((c) => c.status === "error") ? "errors" : checks.some((c) => c.status === "warn") ? "warnings" : "ok";
   return { status, checks, modelVersion: MODEL_VERSION };

@@ -4,6 +4,7 @@ import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/valid
 import { bondSchema, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { financialYearSchema } from "@/lib/financials";
+import { syncHistoricalPricesInput } from "./services/price-sync";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -99,6 +100,16 @@ export function buildOpenApi(origin: string) {
           summary: "Set the closing price / NAV of an asset for a date",
           requestBody: body("PriceInput"),
           responses: { "200": ok("Saved price") },
+        },
+      },
+      "/api/v1/prices/sync": {
+        post: {
+          operationId: "syncHistoricalPrices",
+          summary: "Backfill / refresh daily prices for existing assets over a date range (plus benchmark and USDTHB)",
+          description:
+            "Default last 365 days, keeps stored prices (overwriteExisting false). dryRun reports without writing. Unknown symbols are reported, not created — add the asset first.",
+          requestBody: body("SyncHistoricalPrices"),
+          responses: { "200": ok("Per-asset inserted/updated counts, coverage, corporate-action warnings and optimizer eligibility") },
         },
       },
       "/api/v1/portfolio/summary": {
@@ -206,6 +217,7 @@ export function buildOpenApi(origin: string) {
         AssetInput: schema(assetInput),
         PriceInput: schema(priceInput),
         ValuationInput: schema(valuationInput),
+        SyncHistoricalPrices: schema(syncHistoricalPricesInput),
         MultiStageResidualIncome: schema(multiStageRiToolInput),
         SaveValuation: schema(
           z.object({

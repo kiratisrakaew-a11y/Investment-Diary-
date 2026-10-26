@@ -9,6 +9,7 @@ import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
 import { saveSettings, saveTargets } from "@/server/services/settings";
 import { updateAllPrices } from "@/server/services/price-updater";
+import { syncHistoricalPrices } from "@/server/services/price-sync";
 
 export type ActionState = { ok?: boolean; error?: string; message?: string } | null;
 
@@ -165,6 +166,35 @@ export async function saveTargetsAction(_: ActionState, f: FormData): Promise<Ac
     const classes: AssetClass[] = ["thai_stock", "us_stock", "bond", "fund", "gold", "cash"];
     await saveTargets(Object.fromEntries(classes.map((c) => [c, num(f, c) ?? 0])));
     return done("บันทึกเป้าหมายแล้ว");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Historical price backfill from the holdings page (same service as sync_historical_prices). */
+export async function syncHistoryAction(_: ActionState, f: FormData): Promise<ActionState> {
+  try {
+    const symbols = (str(f, "symbols") ?? "").split(/[\s,]+/).filter(Boolean);
+    const r = await syncHistoricalPrices({
+      symbols,
+      startDate: str(f, "startDate"),
+      endDate: str(f, "endDate"),
+      lookbackDays: str(f, "startDate") ? undefined : num(f, "lookbackDays"),
+      priceType: f.get("adjusted") ? "adjusted_close" : "close",
+      overwriteExisting: !!f.get("overwrite"),
+      dryRun: !!f.get("dryRun"),
+    });
+    if (!r.dryRun) revalidatePath("/", "layout");
+    const by = (s: string) => r.results.filter((x) => x.status === s).map((x) => (x.message && s !== "ok" ? `${x.symbol} (${x.message})` : x.symbol));
+    const parts = [
+      `${r.dryRun ? "[ทดลอง ไม่บันทึก] " : ""}${r.range.from} → ${r.range.to}: สำเร็จ ${r.summary.ok}/${r.summary.requested} · เพิ่ม ${r.summary.inserted} แถว · อัปเดต ${r.summary.updated}`,
+      by("unknown_asset").length && `ไม่พบ: ${by("unknown_asset").join(", ")}`,
+      by("unsupported").length && `ไม่รองรับ: ${by("unsupported").join(", ")}`,
+      by("error").length && `ผิดพลาด: ${by("error").join(", ")}`,
+      r.eligibility && `จัดพอร์ตได้: ${r.eligibility.eligible.join(", ") || "–"}${r.eligibility.skipped.length ? ` · ยังไม่พอ: ${r.eligibility.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}` : ""}`,
+      ...r.results.flatMap((x) => x.warnings),
+    ].filter(Boolean);
+    return r.summary.failed || r.summary.ok === 0 ? { ok: false, error: parts.join(" | ") } : done(parts.join(" | "));
   } catch (e) {
     return fail(e);
   }

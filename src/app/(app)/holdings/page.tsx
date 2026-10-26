@@ -3,6 +3,8 @@ import { getPortfolioSummary } from "@/server/services/portfolio";
 import { listAssets } from "@/server/services/assets";
 import { latestValuationBySymbol } from "@/server/services/valuations";
 import { AddAssetForm, AddPriceForm } from "@/components/AssetForms";
+import { ActionForm } from "@/components/ActionForm";
+import { syncHistoryAction } from "../actions";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { DataQualityPanel } from "@/components/DataQuality";
@@ -131,6 +133,41 @@ export default async function HoldingsPage() {
           {assets.length ? <AddPriceForm assets={assets} /> : <Empty>เพิ่มสินทรัพย์ก่อน</Empty>}
         </Section>
       </div>
+
+      <Section title="ดึงราคาย้อนหลัง (Historical sync)">
+        <ActionForm action={syncHistoryAction} className="grid gap-3 sm:grid-cols-6" resetOnSuccess={false} submitLabel="ดึงราคา">
+          <div className="sm:col-span-3">
+            <label className="label">สัญลักษณ์ (คั่นด้วยจุลภาค) — ต้องเพิ่มเป็นสินทรัพย์แล้ว</label>
+            <input name="symbols" className="input" placeholder="BBL, AP" defaultValue={assets.filter((a) => a.priceSource !== "manual").map((a) => a.symbol).join(", ")} />
+          </div>
+          <div>
+            <label className="label">ย้อนหลัง (วัน)</label>
+            <input name="lookbackDays" type="number" min={1} max={3660} className="input" defaultValue={365} />
+          </div>
+          <div>
+            <label className="label">หรือ ตั้งแต่</label>
+            <input name="startDate" type="date" className="input" />
+          </div>
+          <div>
+            <label className="label">ถึง</label>
+            <input name="endDate" type="date" className="input" />
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-6">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="dryRun" defaultChecked className="accent-[var(--accent)]" /> ทดลองก่อน (ไม่บันทึก)
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="overwrite" className="accent-[var(--accent)]" /> เขียนทับราคาที่มีอยู่
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="adjusted" className="accent-[var(--accent)]" /> เก็บราคาปรับปันผล (adjusted) แยกด้วย
+            </label>
+          </div>
+        </ActionForm>
+        <p className="mt-2 text-xs text-muted">
+          ดึงจาก Yahoo (หุ้น/ทอง/ดัชนี/USDTHB) และ ก.ล.ต. (NAV กองทุน ≤ {400} วัน) · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีในรายการจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ sync_historical_prices ได้เหมือนกัน
+        </p>
+      </Section>
     </>
   );
 }

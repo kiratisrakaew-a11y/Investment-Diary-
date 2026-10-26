@@ -101,7 +101,10 @@ export const prices = pgTable(
       .notNull()
       .references(() => assets.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
+    /** Provider close: for Yahoo this is split-adjusted but not dividend-adjusted. */
     close: doublePrecision("close").notNull(),
+    /** Split- and dividend-adjusted close (total-return series); null unless synced with priceType adjusted_close. */
+    adjClose: doublePrecision("adj_close"),
   },
   (t) => [uniqueIndex("prices_asset_date_uq").on(t.assetId, t.date)],
 );
@@ -114,6 +117,7 @@ export const benchmarkPrices = pgTable(
     symbol: text("symbol").notNull(),
     date: date("date").notNull(),
     close: doublePrecision("close").notNull(),
+    adjClose: doublePrecision("adj_close"),
   },
   (t) => [uniqueIndex("bench_symbol_date_uq").on(t.symbol, t.date)],
 );

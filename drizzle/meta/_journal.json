@@ -43,6 +43,13 @@
       "when": 1793002200452,
       "tag": "0005_pr5_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793017686184,
+      "tag": "0006_phase1_adj_close",
+      "breakpoints": true
     }
   ]
 }

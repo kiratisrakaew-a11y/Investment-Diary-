@@ -16,6 +16,7 @@ import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/l
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
+import { syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { bondHoldings } from "./services/bonds";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
@@ -152,6 +153,20 @@ export function createMcpServer() {
       inputSchema: priceInput.shape,
     },
     safe(async (args) => recordPrice(args)),
+  );
+
+  server.registerTool(
+    "sync_historical_prices",
+    {
+      title: "Sync historical prices",
+      description:
+        "Backfill or refresh daily prices for assets already in the app (Yahoo for stocks/indices/gold, SEC NAV for Thai funds ≤ 400 days) over a date range " +
+        "(default last 365 days), plus the benchmark and USDTHB. overwriteExisting=false keeps stored prices; dryRun=true only reports. " +
+        "Unknown symbols are reported, not created — call add_asset first (Thai stocks: providerSymbol SYMBOL.BK). " +
+        "Returns per-asset inserted/updated counts, coverage, split/dividend warnings and optimizer eligibility.",
+      inputSchema: syncHistoricalPricesInput.shape,
+    },
+    safe(async (x) => syncHistoricalPrices(x)),
   );
 
   server.registerTool(
