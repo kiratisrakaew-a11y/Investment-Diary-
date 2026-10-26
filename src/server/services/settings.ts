@@ -4,10 +4,10 @@ import type { AssetClass } from "@/db/schema";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
-  return row ?? { id: 1, riskFreeRate: 2.0, benchmarkSymbol: "^SET.BK", baseCurrency: "THB" as const };
+  return row ?? { id: 1, riskFreeRate: 2.0, benchmarkSymbol: "^SET.BK", equityRiskPremium: 6.0, baseCurrency: "THB" as const };
 }
 
-export async function saveSettings(input: { riskFreeRate: number; benchmarkSymbol: string }) {
+export async function saveSettings(input: { riskFreeRate: number; benchmarkSymbol: string; equityRiskPremium?: number }) {
   const data = settingsInput.parse(input);
   await getDb()
     .insert(schema.settings)

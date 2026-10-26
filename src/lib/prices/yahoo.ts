@@ -30,3 +30,43 @@ export async function searchSymbols(query: string) {
       type: "quoteType" in q ? q.quoteType : undefined,
     }));
 }
+
+export interface Fundamentals {
+  currency?: string;
+  price?: number;
+  /** Monetary values are in millions of the reporting currency; shares in millions. */
+  revenue?: number;
+  ebitda?: number;
+  operatingMargin?: number;
+  totalDebt?: number;
+  totalCash?: number;
+  sharesOutstanding?: number;
+  beta?: number;
+  trailingEps?: number;
+  bookValuePerShare?: number;
+  dividendPerShare?: number;
+  payoutRatio?: number;
+  returnOnEquity?: number;
+}
+
+/** Best-effort fundamentals snapshot from Yahoo Finance's quoteSummary (unofficial, may be incomplete). */
+export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
+  const r = await yf.quoteSummary(symbol, { modules: ["price", "summaryDetail", "defaultKeyStatistics", "financialData"] });
+  const m = (v: number | undefined) => (v == null ? undefined : v / 1e6);
+  return {
+    currency: r.price?.currency ?? undefined,
+    price: r.financialData?.currentPrice ?? r.price?.regularMarketPrice ?? undefined,
+    revenue: m(r.financialData?.totalRevenue),
+    ebitda: m(r.financialData?.ebitda),
+    operatingMargin: r.financialData?.operatingMargins,
+    totalDebt: m(r.financialData?.totalDebt),
+    totalCash: m(r.financialData?.totalCash),
+    sharesOutstanding: m(r.defaultKeyStatistics?.sharesOutstanding),
+    beta: r.summaryDetail?.beta ?? r.defaultKeyStatistics?.beta,
+    trailingEps: r.defaultKeyStatistics?.trailingEps,
+    bookValuePerShare: r.defaultKeyStatistics?.bookValue,
+    dividendPerShare: r.summaryDetail?.dividendRate,
+    payoutRatio: r.summaryDetail?.payoutRatio,
+    returnOnEquity: r.financialData?.returnOnEquity,
+  };
+}

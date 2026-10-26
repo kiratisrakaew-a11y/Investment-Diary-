@@ -70,6 +70,7 @@ export const priceInput = z.object({
 export const settingsInput = z.object({
   riskFreeRate: z.number().min(-5).max(50).describe("Annual risk-free rate in %, e.g. Thai 1Y govt bond yield"),
   benchmarkSymbol: z.string().min(1),
+  equityRiskPremium: z.number().min(0).max(30).default(6).describe("Expected equity risk premium in %"),
 });
 
 export const targetsInput = z.record(assetClass, z.number().min(0).max(100));

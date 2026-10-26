@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "equity_risk_premium" double precision DEFAULT 6 NOT NULL;

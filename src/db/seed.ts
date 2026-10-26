@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { getDb, schema } from "./index";
+import { DEFAULT_DCF, dcf } from "../lib/finance/valuation";
 
 const db = getDb();
 const reset = process.argv.includes("--reset");
@@ -18,7 +19,7 @@ if (count > 0 && !reset) {
 }
 if (reset) {
   await db.execute(
-    sql`truncate transactions, notes, prices, benchmark_prices, fx_rates, allocation_targets, settings, assets restart identity cascade`,
+    sql`truncate valuations, advisor_threads, transactions, notes, prices, benchmark_prices, fx_rates, allocation_targets, settings, assets restart identity cascade`,
   );
 }
 
@@ -65,7 +66,7 @@ const series: Record<string, number[]> = {
   AAPL: path(170, 0.14, 0.28, 0.3),
   GOLD: path(33000, 0.1, 0.14, -0.05),
   "K-FIXED": path(12.5, 0.025, 0.02, 0),
-  LB29DA: path(1010, 0.024, 0.04, -0.1),
+  LB29DA: path(1000, -0.005, 0.025, -0.1),
 };
 const setIndex = path(1450, 0.04, 0.16, 1);
 const fx = path(35.5, 0, 0.06, -0.2);
@@ -161,7 +162,47 @@ await db.insert(schema.allocationTargets).values([
   { assetClass: "gold", targetPct: 10 },
   { assetClass: "cash", targetPct: 5 },
 ]);
-await db.insert(schema.settings).values({ id: 1, riskFreeRate: 1.9, benchmarkSymbol: "^SET.BK" });
+await db.insert(schema.settings).values({ id: 1, riskFreeRate: 1.9, benchmarkSymbol: "^SET.BK", equityRiskPremium: 6.5 });
+
+// A sample DCF so the valuation page has something to open (THB million, million shares).
+const pttPrice = series.PTT[series.PTT.length - 1];
+const dcfAssumptions = {
+  ...DEFAULT_DCF,
+  revenue0: 3_100_000,
+  years: 5,
+  growthStart: 0.03,
+  growthEnd: 0.02,
+  terminalGrowth: 0.015,
+  ebitMarginStart: 0.05,
+  ebitMarginEnd: 0.053,
+  taxRate: 0.22,
+  daPct: 0.04,
+  capexPct: 0.05,
+  nwcPct: 0.03,
+  debt: 1_100_000,
+  cash: 450_000,
+  otherClaims: 380_000,
+  sharesOutstanding: 28_563,
+  currentPrice: pttPrice,
+  riskFree: 0.019,
+  beta: 1.1,
+  equityRiskPremium: 0.065,
+  costOfDebt: 0.035,
+  targetDebtWeight: 0.4,
+};
+const r = dcf(dcfAssumptions, "fcff");
+await db.insert(schema.valuations).values({
+  assetId: id.PTT,
+  symbol: "PTT",
+  date: dates[dates.length - 1],
+  method: "dcf_fcff",
+  title: "Base case (ตัวอย่าง)",
+  assumptions: dcfAssumptions,
+  result: { value: r.valuePerShare, price: pttPrice, upside: r.upside },
+  intrinsicValue: r.valuePerShare,
+  priceAtValuation: pttPrice,
+  note: "ตัวเลขตัวอย่างเพื่อสาธิต — แก้ไขให้ตรงกับงบการเงินล่าสุด",
+});
 
 console.log(`Seeded ${assets.length} assets, ${priceRows.length} prices, ${dates.length} days.`);
 process.exit(0);

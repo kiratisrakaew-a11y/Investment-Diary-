@@ -9,6 +9,7 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const assetClassEnum = pgEnum("asset_class", [
@@ -134,10 +135,54 @@ export const settings = pgTable("settings", {
   /** Annual risk-free rate in percent (e.g. Thai 1Y government bond yield). */
   riskFreeRate: doublePrecision("risk_free_rate").notNull().default(2.0),
   benchmarkSymbol: text("benchmark_symbol").notNull().default("^SET.BK"),
+  /** Expected equity risk premium (%) used for CAPM expected returns and cost of equity. */
+  equityRiskPremium: doublePrecision("equity_risk_premium").notNull().default(6.0),
   baseCurrency: currencyEnum("base_currency").notNull().default("THB"),
 });
 
+export const valuationMethodEnum = pgEnum("valuation_method", [
+  "dcf_fcff",
+  "dcf_fcfe",
+  "ddm",
+  "residual_income",
+  "multiples",
+  "bond",
+]);
+
+/** A saved valuation: the full assumption set plus headline results, versioned by date. */
+export const valuations = pgTable(
+  "valuations",
+  {
+    id: serial("id").primaryKey(),
+    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    symbol: text("symbol").notNull(),
+    date: date("date").notNull(),
+    method: valuationMethodEnum("method").notNull(),
+    title: text("title").notNull().default(""),
+    assumptions: jsonb("assumptions").notNull(),
+    /** Headline outputs: { value, price, upside, ... } */
+    result: jsonb("result").notNull(),
+    intrinsicValue: doublePrecision("intrinsic_value"),
+    priceAtValuation: doublePrecision("price_at_valuation"),
+    note: text("note").notNull().default(""),
+    source: noteSourceEnum("source").notNull().default("web"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("valuations_symbol_idx").on(t.symbol)],
+);
+
+/** In-app AI advisor conversations (text turns only). */
+export const advisorThreads = pgTable("advisor_threads", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  messages: jsonb("messages").$type<{ role: "user" | "assistant"; content: string }[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export type Asset = typeof assets.$inferSelect;
+export type Valuation = typeof valuations.$inferSelect;
+export type ValuationMethod = (typeof valuationMethodEnum.enumValues)[number];
 export type Note = typeof notes.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Price = typeof prices.$inferSelect;
