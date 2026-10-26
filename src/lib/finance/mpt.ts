@@ -130,7 +130,7 @@ export function maxSharpePortfolio(mu: number[], cov: Matrix, rf: number): Portf
   let pd = at(d);
   for (let i = 0; i < 40; i++) {
     // Ties go left: beyond some λ the optimizer sits at the max-return corner (flat Sharpe).
-    if (score(pc) >= score(pd)) {
+    if (score(pc) >= score(pd) - 1e-9) {
       hi = d;
       d = c;
       pd = pc;
