@@ -171,6 +171,37 @@ export const valuations = pgTable(
   (t) => [index("valuations_symbol_idx").on(t.symbol)],
 );
 
+/** Historical financial statements, one row per company and fiscal year (values in millions). */
+export const financialStatements = pgTable(
+  "financial_statements",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    fiscalYear: integer("fiscal_year").notNull(),
+    currency: text("currency").notNull().default("THB"),
+    data: jsonb("data").$type<Record<string, number | null>>().notNull(),
+    sourceFile: text("source_file"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("fin_symbol_year_uq").on(t.symbol, t.fiscalYear)],
+);
+
+/** Audit trail of statement files read by AI (the files themselves are not stored). */
+export const statementUploads = pgTable("statement_uploads", {
+  id: serial("id").primaryKey(),
+  symbol: text("symbol").notNull(),
+  filename: text("filename").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  status: text("status").notNull(),
+  yearsFound: integer("years_found").array().notNull().default([]),
+  unitDetected: text("unit_detected"),
+  notes: text("notes").notNull().default(""),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 /** In-app AI advisor conversations (text turns only). */
 export const advisorThreads = pgTable("advisor_threads", {
   id: serial("id").primaryKey(),
