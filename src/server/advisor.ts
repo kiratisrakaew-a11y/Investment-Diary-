@@ -114,7 +114,8 @@ function tools() {
     betaZodTool({
       name: "value_security",
       description:
-        "Run a valuation model and return intrinsic value, upside and details. method: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond. " +
+        "Run a valuation model and return intrinsic value, upside and details. method: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond | sotp. " +
+        "sotp = sum of the parts: segments [{name, role division|subsidiary|associate|investment, ownership, fx, source: model (an existing model above) | multiple | market | manual (with source), netDebt?, debtAt?}] + parent sharesOutstanding, netDebt (netDebtBasis consolidated|holdco), minorityInterest?, nonOperatingAssets, otherClaims, eliminations, holdingDiscount. Returns the EV-to-equity reconciliation, waterfall, sensitivity and double-counting errors/warnings. " +
         "DCF monetary inputs share one unit (e.g. THB million and million shares).",
       inputSchema: z.object({ valuation: valuationInput }),
       run: async ({ valuation }) => json(evaluate(valuation)),

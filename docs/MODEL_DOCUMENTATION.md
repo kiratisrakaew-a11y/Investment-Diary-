@@ -63,6 +63,21 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - DDM (Gordon, two-stage, H-model), residual income and justified multiples return no value when Ke ≤ g. Multiples record whether they are trailing or forward.
 - Residual income, multi-stage (`model: "multi_stage"`, rows in `forecast` or parallel `roeForecast` / `epsForecast` / `payoutForecast` / `bookValueForecast`; `multi_stage` without yearly data is an error): yearly ROE or EPS, payout and optional stated book value; RIₜ = Eₜ − Ke·Bₜ₋₁ with clean surplus Bₜ = Bₜ₋₁ + E − D (a stated book value overrides it and the gap is flagged). Continuing value: perpetuity RIₙ₊₁/(Ke − g), persistence RIₙ₊₁/(1 + Ke − ω), or none. With constant ROE and g = ROE × retention it equals the single-stage formula (tested).
 
+## 3b. Sum of the parts — `src/lib/finance/sotp.ts`, `method: "sotp"` in `valuation-schemas.ts`
+
+- Each segment is valued 100% in its own currency by one of: an existing model (`dcf_fcff` EV or equity, `dcf_fcfe` equity, `ddm` / `residual_income` per share × segment shares, `multiples` per share × shares), metric × multiple (EV or equity), market price × shares, or a manual value that must name its source. It is then converted with `fx`.
+- Roles: `division` (100%, part of the parent), `subsidiary` (consolidated), `associate` (equity method), `investment`.
+- Debt treatment per segment (`debtAt`):
+  - `parent` (default for a consolidated EV with a consolidated parent net debt): the EV is counted at 100%; the group's consolidated net debt and minority interest are deducted at the parent.
+  - `segment`: equity₁₀₀ = EV − own net debt; attributable = ownership × equity₁₀₀.
+  - When a consolidated segment carries its own net debt and the parent figure is consolidated, that net debt is added back to the parent figure so it is deducted once.
+- Equity = Σ attributable − holding discount × (all segments or investments only) + non-operating assets − net debt (after add-backs) − minority interest − other claims − intercompany eliminations. Value per share = equity ÷ parent shares.
+- Minority interest: given, or derived as (1 − ownership) × (EV − segment net debt) for partly owned segments counted at 100% EV.
+- Double-counting controls:
+  - Errors (no value): the same entity twice, a segment also listed as a non-operating investment, a consolidated equity value whose net debt cannot be removed from consolidated net debt, an EV of a non-consolidated segment without its own debt, an EV bridged at a holdco net debt that excludes its debt, a partly owned EV segment without minorities, a division under 100%, a failing sub-model.
+  - Warnings: cash listed as a non-operating asset, minorities deducted for subsidiaries already counted at their ownership share, sub-model debt ignored under the parent treatment, control-vs-role mismatch, segment WACC using market weights.
+- Output: segment table, waterfall, EV-to-equity reconciliation (difference must be 0), sensitivity (each segment ±10%, holding discount 0–40%). Saved valuations keep the assumptions plus the segment results and reconciliation at save time; reopening recalculates with the current engine.
+
 ## 4. Optimizer — `optimizer.ts`, `recommend.ts`, `mpt.ts`
 
 - Inputs: THB returns on dates where every asset has a price. μ = arithmetic mean × N. The covariance is the sample estimate or Ledoit–Wolf shrinkage. Both are checked for PSD (eigenvalue clipping with a warning) and conditioning.

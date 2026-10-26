@@ -8,7 +8,7 @@ import { SavedValuationList } from "@/components/SavedValuationList";
 import { PageHeader, Section, Stat } from "@/components/ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
 
-const ALL_METHODS = ["dcf_fcff", "dcf_fcfe", "ddm", "residual_income", "multiples"];
+const ALL_METHODS = ["dcf_fcff", "dcf_fcfe", "ddm", "residual_income", "multiples", "sotp"];
 
 export default async function StockValuationPage({ params }: { params: Promise<{ symbol: string }> }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase();
@@ -35,6 +35,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
               </Link>
             )}
             <Link href={`/valuation/new?symbol=${symbol}`} className="btn-ghost">+ valuation ใหม่</Link>
+            <Link href={`/valuation/new?symbol=${symbol}&method=sotp`} className="btn-ghost">+ SOTP</Link>
           </div>
         }
       />

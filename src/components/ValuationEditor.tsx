@@ -234,6 +234,7 @@ export function ValuationEditor({
     if (!r.ok) return setMsg({ ok: false, text: r.error });
     const v = r.valuation;
     if (v.method === "bond") return setMsg({ ok: false, text: "ไฟล์นี้เป็นพันธบัตร — นำเข้าในหน้าพันธบัตรไม่ได้ในตอนนี้" });
+    if (v.method === "sotp") return setMsg({ ok: false, text: "ไฟล์นี้เป็น SOTP — เปิดหน้า SOTP (วิธีประเมิน: Sum of the parts) แล้วนำเข้าที่นั่น" });
     if (v.method === "dcf_fcff" || v.method === "dcf_fcfe") setDcfA((a) => ({ ...a, ...(v.assumptions as Partial<DcfAssumptions>) }));
     else if (v.method === "ddm") setDdm((a) => ({ ...a, ...v.assumptions }));
     else if (v.method === "residual_income") setRi((a) => ({ ...a, ...v.assumptions }));

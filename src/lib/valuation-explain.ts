@@ -61,6 +61,7 @@ export const METHOD_TITLE: Record<ValuationInput["method"], string> = {
   dcf_fcfe: "DCF – Free Cash Flow to Equity (คิดลดด้วย Ke)",
   ddm: "Dividend Discount Model",
   residual_income: "Residual Income / Justified P/BV",
+  sotp: "Sum of the parts (SOTP)",
   multiples: "Relative multiples",
   bond: "Bond pricing",
 };

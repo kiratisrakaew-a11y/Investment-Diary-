@@ -167,6 +167,7 @@ export const valuationMethodEnum = pgEnum("valuation_method", [
   "residual_income",
   "multiples",
   "bond",
+  "sotp",
 ]);
 
 /** A saved valuation: the full assumption set plus headline results, versioned by date. */

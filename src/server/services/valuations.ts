@@ -54,7 +54,9 @@ export async function saveValuation(input: SaveValuationInput) {
       upside: summary.upside,
       modelVersion: MODEL_VERSION,
       savedAt: new Date().toISOString(),
-      warnings: (summary.details.sanityWarnings as string[] | undefined) ?? [],
+      warnings: [...((summary.details.sanityWarnings as string[] | undefined) ?? []), ...(parsed.method === "sotp" ? (summary.details.warnings as string[]) : [])],
+      // SOTP: segment results and the EV-to-equity bridge as computed at save time.
+      ...(parsed.method === "sotp" ? sotpSnapshot(summary.details) : {}),
     },
     intrinsicValue: summary.value,
     priceAtValuation: summary.price,
@@ -68,6 +70,15 @@ export async function saveValuation(input: SaveValuationInput) {
   }
   const [row] = await db.insert(schema.valuations).values(values).returning();
   return { valuation: row, summary };
+}
+
+function sotpSnapshot(d: Record<string, unknown>) {
+  const segments = (d.segments as { name: string; role: string; method: string; basis: string; ownership: number; value: number | null; equity100: number | null; attributable: number | null; source?: string }[]) ?? [];
+  return {
+    segments: segments.map((s) => ({ name: s.name, role: s.role, method: s.method, basis: s.basis, ownership: s.ownership, value: s.value, equity100: s.equity100, attributable: s.attributable, source: s.source ?? null })),
+    reconciliation: d.reconciliation ?? null,
+    valueUnit: d.valueUnit ?? null,
+  };
 }
 
 /** Multi-stage residual income from the flat tool input; saves it when `save` is true. */

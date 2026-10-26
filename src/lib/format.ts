@@ -44,6 +44,7 @@ export const METHOD_LABEL: Record<string, string> = {
   residual_income: "Residual income",
   multiples: "Multiples",
   bond: "Bond",
+  sotp: "SOTP",
 };
 
 const thb = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 });

@@ -250,7 +250,8 @@ export function createMcpServer() {
     {
       title: "Value a stock / bond",
       description:
-        "Run a valuation model with explicit assumptions: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond. " +
+        "Run a valuation model with explicit assumptions: dcf_fcff | dcf_fcfe | ddm | residual_income | multiples | bond | sotp. " +
+        "sotp = sum of the parts: segments [{name, role division|subsidiary|associate|investment, ownership, fx, source: model (an existing model above) | multiple | market | manual (with source), netDebt?, debtAt?}] + parent sharesOutstanding, netDebt (netDebtBasis consolidated|holdco), minorityInterest?, nonOperatingAssets, otherClaims, eliminations, holdingDiscount. Returns the EV-to-equity reconciliation, waterfall, sensitivity and double-counting errors/warnings. " +
         "residual_income supports model: multi_stage with yearly roeForecast / bookValueForecast — the simpler multi_stage_residual_income tool does the same. " +
         "Returns intrinsic value per share, upside vs. price, WACC/Ke, terminal value share, reverse-DCF growth and a WACC×g sensitivity grid. Rates are decimals.",
       inputSchema: { valuation: valuationInput },
@@ -264,7 +265,7 @@ export function createMcpServer() {
     {
       title: "Save valuation",
       description:
-        "Save a valuation (method + assumptions) to the app so it appears on the Valuation page. For multi-stage residual income use multi_stage_residual_income with save: true (or residual_income with model: multi_stage).",
+        "Save a valuation (method + assumptions) to the app so it appears on the Valuation page. For multi-stage residual income use multi_stage_residual_income with save: true (or residual_income with model: multi_stage). SOTP: method sotp (same input as value_security).",
       inputSchema: { symbol: z.string(), title: z.string().optional(), note: z.string().optional(), valuation: valuationInput },
     },
     safe(async (v) => saveValuation({ ...v, source: "claude" })),

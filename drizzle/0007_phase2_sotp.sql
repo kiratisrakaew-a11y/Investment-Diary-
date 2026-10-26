@@ -1,0 +1,1 @@
+ALTER TYPE "public"."valuation_method" ADD VALUE 'sotp';

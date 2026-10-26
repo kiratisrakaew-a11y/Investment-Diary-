@@ -21,6 +21,7 @@ import {
   twoStageDdm,
   type DcfAssumptions,
 } from "./finance/valuation";
+import { sotp, type MeasuredSegment } from "./finance/sotp";
 import { analyticsFromPrice, analyticsFromYield, horizonReturn, keyRateDurations, priceFromCurve, yieldToWorst, zSpread } from "./finance/bonds";
 import { explainValuation, formatValue } from "./valuation-explain";
 
@@ -171,13 +172,83 @@ export const bondSchema = z.object({
   rating: z.string().optional().describe("Credit rating with agency and date, e.g. 'AA- (TRIS, 2026-05)'"),
 });
 
-export const valuationInput = z.discriminatedUnion("method", [
+/** The stock models a SOTP segment can be valued with (the same engine as a standalone valuation). */
+export const segmentModelInput = z.discriminatedUnion("method", [
   z.object({ method: z.literal("dcf_fcff"), assumptions: dcfSchema }),
   z.object({ method: z.literal("dcf_fcfe"), assumptions: dcfSchema }),
   z.object({ method: z.literal("ddm"), assumptions: ddmSchema }),
   z.object({ method: z.literal("residual_income"), assumptions: residualIncomeSchema }),
   z.object({ method: z.literal("multiples"), assumptions: multiplesSchema }),
+]);
+
+const lineItem = z.object({ name: z.string().min(1), value: z.number() });
+
+export const sotpSegmentSchema = z.object({
+  name: z.string().min(1).describe("Segment / company name"),
+  entity: z.string().optional().describe("Ticker or company id — the same entity counted twice is an error"),
+  role: z
+    .enum(["division", "subsidiary", "associate", "investment"])
+    .describe("division = business line of the parent (100%); subsidiary = consolidated company; associate = associate / JV (equity method); investment = other stake"),
+  ownership: z.number().gt(0).max(1).default(1).describe("Parent's effective ownership (decimal)"),
+  fx: z.number().positive().default(1).describe("Parent currency per 1 unit of the segment's currency"),
+  source: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("model"),
+      valuation: segmentModelInput.describe("An existing valuation model for this segment. Amounts in the parent's value unit (e.g. THB million)"),
+      basis: z.enum(["enterprise", "equity"]).optional().describe("dcf_fcff only: enterprise value (default) or equity value"),
+      shares: z.number().positive().optional().describe("DDM / residual income: shares of the segment entity (value = per-share value × shares)"),
+    }),
+    z.object({
+      type: z.literal("multiple"),
+      metric: z.number().describe("e.g. EBITDA or earnings of the segment"),
+      multiple: z.number().describe("e.g. EV/EBITDA or P/E"),
+      metricLabel: z.string().default("EBITDA"),
+      basis: z.enum(["enterprise", "equity"]).default("enterprise").describe("enterprise for EV multiples, equity for P/E or P/BV"),
+      source: z.string().optional().describe("Where the multiple comes from (peers, date)"),
+    }),
+    z.object({
+      type: z.literal("market"),
+      price: z.number().positive().describe("Share price of the listed entity"),
+      shares: z.number().positive().describe("Total shares of the entity (100%), same scale as values"),
+      asOf: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("manual"),
+      value: z.number().describe("100% value of the entity"),
+      basis: z.enum(["enterprise", "equity"]).default("equity"),
+      source: z.string().min(1).describe("Required: where the value was verified (report, appraisal, date)"),
+      asOf: z.string().optional(),
+    }),
+  ]),
+  netDebt: z.number().optional().describe("Segment's own net debt + other claims (debt − cash). Taken from the DCF / multiples inputs when omitted"),
+  debtAt: z
+    .enum(["segment", "parent"])
+    .optional()
+    .describe("Where the segment's debt is deducted: segment (EV − own net debt, × ownership) or parent (EV at 100%; consolidated net debt and minorities deducted at the parent). Default: parent for a consolidated EV, else segment"),
+  inParentNetDebt: z.boolean().optional().describe("Whether the segment's debt and cash are in the parent net debt figure. Default: consolidated segments when netDebtBasis = consolidated"),
+  note: z.string().optional(),
+});
+
+export const sotpSchema = z.object({
+  sharesOutstanding: money("Parent shares outstanding, same scale as values (e.g. million shares)"),
+  currentPrice: money("Current share price of the parent"),
+  valueUnit: z.string().optional().describe("Unit of all amounts, e.g. THB million"),
+  segments: z.array(sotpSegmentSchema).min(1).max(30),
+  netDebt: money("Parent net debt = debt − cash (consolidated or holdco, per netDebtBasis)").default(0),
+  netDebtBasis: z.enum(["consolidated", "holdco"]).default("consolidated").describe("consolidated = group figure incl. subsidiaries; holdco = parent company only"),
+  minorityInterest: z.number().min(0).optional().describe("Non-controlling interests of consolidated segments counted at 100% EV. Omit to derive (1 − ownership) × (EV − segment net debt)"),
+  nonOperatingAssets: z.array(lineItem.extend({ entity: z.string().optional(), source: z.string().optional() })).max(30).default([]).describe("Added: land, listed stakes not modelled as segments, excess cash not in net debt"),
+  otherClaims: z.array(lineItem).max(30).default([]).describe("Deducted: preferred, pensions, provisions"),
+  eliminations: z.array(lineItem).max(30).default([]).describe("Deducted: intercompany value counted in more than one segment"),
+  holdingDiscount: z.number().min(0).max(0.9).default(0).describe("Holding-company discount (decimal)"),
+  holdingDiscountBase: z.enum(["all_segments", "investments_only"]).default("all_segments").describe("Apply the discount to all segments or only to subsidiaries / associates / investments"),
+  inputMeta: inputMetaSchema,
+});
+
+export const valuationInput = z.discriminatedUnion("method", [
+  ...segmentModelInput.options,
   z.object({ method: z.literal("bond"), assumptions: bondSchema }),
+  z.object({ method: z.literal("sotp"), assumptions: sotpSchema }),
 ]);
 export type ValuationInput = z.infer<typeof valuationInput>;
 
@@ -351,6 +422,16 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
         },
       };
     }
+    case "sotp": {
+      const a = input.assumptions;
+      const r = sotp(a.segments.map(measureSegment), a);
+      return {
+        value: r.valuePerShare,
+        price: a.currentPrice,
+        upside: r.upside,
+        details: { ...r, valueUnit: a.valueUnit ?? null, warnings: r.warnings.map((w) => w.message), warningDetails: r.warnings },
+      };
+    }
     case "bond": {
       const a = input.assumptions;
       const spec = {
@@ -393,6 +474,53 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
           credit: { issuer: a.issuer ?? null, rating: a.rating ?? null, note: "Yield รวมค่าชดเชยความเสี่ยงด้านเครดิตและสภาพคล่อง — ไม่ใช่ผลตอบแทนปลอดความเสี่ยง" },
         },
       };
+    }
+  }
+}
+
+type SotpSegment = z.infer<typeof sotpSegmentSchema>;
+
+/** Value one SOTP segment (100%, in its own currency) with the existing models. */
+export function measureSegment(s: SotpSegment): MeasuredSegment {
+  const base = { name: s.name, entity: s.entity, role: s.role, ownership: s.ownership, fx: s.fx, debtAt: s.debtAt, inParentNetDebt: s.inParentNetDebt };
+  const src = s.source;
+  const out = (m: Pick<MeasuredSegment, "method" | "basis" | "value" | "ownNetDebt"> & { errors?: string[]; warnings?: string[]; source?: string }): MeasuredSegment => ({
+    ...base,
+    ...m,
+    ownNetDebt: s.netDebt ?? m.ownNetDebt,
+    errors: m.errors ?? [],
+    warnings: m.warnings ?? [],
+  });
+  if (src.type === "market") return out({ method: "market", basis: "equity", value: src.price * src.shares, ownNetDebt: null, source: `ราคาตลาด ${src.price} × ${src.shares} หุ้น${src.asOf ? ` (${src.asOf})` : ""}` });
+  if (src.type === "manual") return out({ method: "manual", basis: src.basis, value: src.value, ownNetDebt: null, source: `${src.source}${src.asOf ? ` (${src.asOf})` : ""}` });
+  if (src.type === "multiple")
+    return out({ method: "multiple", basis: src.basis, value: src.metric * src.multiple, ownNetDebt: null, source: `${src.metricLabel} ${src.metric} × ${src.multiple}${src.source ? ` — ${src.source}` : ""}` });
+
+  const v = src.valuation;
+  const r = evaluateCore(v);
+  const d = r.details as { enterpriseValue?: number | null; equityValue?: number | null; errors?: { message: string }[]; warnings?: string[] };
+  const errors = (d.errors ?? []).map((e) => e.message);
+  const warnings = [...(d.warnings ?? [])];
+  switch (v.method) {
+    case "dcf_fcff": {
+      const a = v.assumptions;
+      if (a.targetDebtWeight == null) warnings.push("WACC ของส่วนงานใช้น้ำหนักตามมูลค่าตลาด (ราคา × หุ้น ในโมเดลย่อย) — ควรกำหนด target D/(D+E) ของส่วนงาน");
+      const basis = src.basis ?? "enterprise";
+      const ev = d.enterpriseValue ?? null;
+      return out({ method: v.method, basis, value: basis === "enterprise" ? ev : (d.equityValue ?? null), ownNetDebt: a.debt - a.cash + a.otherClaims, errors, warnings });
+    }
+    case "dcf_fcfe": {
+      const a = v.assumptions;
+      return out({ method: v.method, basis: "equity", value: d.equityValue ?? null, ownNetDebt: a.debt - a.cash, errors, warnings });
+    }
+    case "multiples": {
+      const a = v.assumptions;
+      return out({ method: v.method, basis: "equity", value: r.value != null ? r.value * a.sharesOutstanding : null, ownNetDebt: a.netDebt, errors, warnings });
+    }
+    default: {
+      if (!src.shares) errors.push(`${v.method === "ddm" ? "DDM" : "Residual income"} ให้มูลค่าต่อหุ้น — ต้องระบุจำนวนหุ้นของส่วนงาน (shares)`);
+      if (r.value == null && !errors.length) errors.push("คำนวณมูลค่าไม่ได้ — ตรวจว่า Ke > growth");
+      return out({ method: v.method, basis: "equity", value: r.value != null && src.shares ? r.value * src.shares : null, ownNetDebt: null, errors, warnings });
     }
   }
 }
