@@ -20,7 +20,7 @@ import {
   twoStageDdm,
   type DcfAssumptions,
 } from "./finance/valuation";
-import { analyticsFromPrice, analyticsFromYield, yieldToCall } from "./finance/bonds";
+import { analyticsFromPrice, analyticsFromYield, horizonReturn, keyRateDurations, priceFromCurve, yieldToWorst, zSpread } from "./finance/bonds";
 import { explainValuation, formatValue } from "./valuation-explain";
 
 const rate = (d: string) => z.number().min(-1).max(5).describe(`${d} (decimal, 0.05 = 5%)`);
@@ -127,8 +127,21 @@ export const bondSchema = z.object({
   frequency: z.union([z.literal(1), z.literal(2), z.literal(4), z.literal(12)]).default(2),
   cleanPrice: z.number().optional().describe("Clean price per 100 face — give this to solve for YTM"),
   ytm: rate("Yield to maturity — give this to solve for price").optional(),
-  callDate: z.string().optional(),
+  callDate: z.string().optional().describe("Single call date (legacy; prefer callSchedule)"),
   callPrice: z.number().optional(),
+  callSchedule: z.array(z.object({ date: z.string(), price: z.number() })).max(40).optional().describe("Call dates and prices per 100 — gives yield to each call and yield to worst"),
+  issueDate: z.string().optional(),
+  firstCouponDate: z.string().optional().describe("For an irregular (short/long) first coupon; must lie on the coupon cycle counted back from maturity"),
+  penultimateCouponDate: z.string().optional().describe("For an irregular last coupon period"),
+  dayCount: z.enum(["ACT/ACT-ICMA", "ACT/365F", "ACT/360", "30/360"]).default("ACT/ACT-ICMA").describe("Accrued-interest day count — use what the bond's terms specify"),
+  businessDay: z.enum(["unadjusted", "following", "modified_following"]).default("unadjusted").describe("Weekend roll of payment dates (no holiday calendar)"),
+  endOfMonth: z.boolean().optional(),
+  exCouponDays: z.number().int().min(0).max(31).default(0).describe("Calendar days before a coupon during which the bond trades ex-coupon"),
+  amortization: z.array(z.object({ date: z.string(), amount: z.number() })).max(40).optional().describe("Principal repaid per 100 face on coupon dates before maturity"),
+  zeroCurve: z.array(z.object({ years: z.number().positive(), rate: z.number() })).max(30).optional().describe("Zero (spot) rates, annually compounded — gives curve price, Z-spread and key-rate durations"),
+  horizon: z.object({ date: z.string(), reinvestRate: z.number(), exitYield: z.number().optional() }).optional().describe("Realized return if sold on `date`"),
+  issuer: z.string().optional(),
+  rating: z.string().optional().describe("Credit rating with agency and date, e.g. 'AA- (TRIS, 2026-05)'"),
 });
 
 export const valuationInput = z.discriminatedUnion("method", [
@@ -258,15 +271,45 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
     }
     case "bond": {
       const a = input.assumptions;
-      const spec = { settlement: a.settlement, maturity: a.maturity, couponRate: a.couponRate, frequency: a.frequency };
+      const spec = {
+        settlement: a.settlement,
+        maturity: a.maturity,
+        couponRate: a.couponRate,
+        frequency: a.frequency,
+        issueDate: a.issueDate,
+        firstCouponDate: a.firstCouponDate,
+        penultimateCouponDate: a.penultimateCouponDate,
+        dayCount: a.dayCount,
+        businessDay: a.businessDay,
+        endOfMonth: a.endOfMonth,
+        exCouponDays: a.exCouponDays,
+        amortization: a.amortization,
+      };
       const r = a.cleanPrice != null ? analyticsFromPrice(spec, a.cleanPrice) : analyticsFromYield(spec, a.ytm ?? a.couponRate);
-      const ytc = a.callDate && a.callPrice && a.cleanPrice != null ? yieldToCall(spec, a.cleanPrice, a.callDate, a.callPrice) : null;
+      const calls = [...(a.callSchedule ?? []), ...(a.callDate && a.callPrice ? [{ date: a.callDate, price: a.callPrice }] : [])];
+      const worst = calls.length ? yieldToWorst(spec, r.cleanPrice, calls) : null;
+      const curve = a.zeroCurve?.length
+        ? {
+            curvePrice: priceFromCurve(spec, a.zeroCurve).cleanPrice,
+            zSpread: zSpread(spec, r.cleanPrice, a.zeroCurve),
+            keyRateDurations: keyRateDurations(spec, a.zeroCurve, zSpread(spec, r.cleanPrice, a.zeroCurve)),
+          }
+        : null;
+      const horizon = a.horizon ? horizonReturn(spec, r.cleanPrice, { horizonDate: a.horizon.date, reinvestRate: a.horizon.reinvestRate, exitYield: a.horizon.exitYield }) : null;
       const { flows, ...rest } = r;
       return {
         value: r.cleanPrice,
         price: a.cleanPrice ?? null,
         upside: null,
-        details: { ...rest, yieldToCall: ytc, remainingCashFlows: flows.length },
+        details: {
+          ...rest,
+          yieldToCall: worst?.candidates.filter((c) => c.type === "call") ?? null,
+          yieldToWorst: worst && { yield: worst.yield, date: worst.worst.date, type: worst.worst.type },
+          curve,
+          horizon,
+          remainingCashFlows: flows.length,
+          credit: { issuer: a.issuer ?? null, rating: a.rating ?? null, note: "Yield รวมค่าชดเชยความเสี่ยงด้านเครดิตและสภาพคล่อง — ไม่ใช่ผลตอบแทนปลอดความเสี่ยง" },
+        },
       };
     }
   }

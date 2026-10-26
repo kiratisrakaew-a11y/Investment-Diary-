@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { SESSION_COOKIE, checkApiKey, verifySessionToken } from "@/lib/auth";
 import { LedgerError } from "@/lib/finance/portfolio";
 import { OptimizerError } from "@/lib/finance/optimizer";
+import { BondError } from "@/lib/finance/bonds";
 
 async function authorized(req: Request) {
   if (checkApiKey(req)) return true;
@@ -17,6 +18,9 @@ export function errorResponse(e: unknown) {
   }
   if (e instanceof LedgerError) {
     return NextResponse.json({ error: e.message, code: e.issue.code, issue: e.issue }, { status: 400 });
+  }
+  if (e instanceof BondError) {
+    return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });
   }
   if (e instanceof OptimizerError) {
     return NextResponse.json({ error: e.message, code: e.issue.code, suggestion: e.issue.suggestion }, { status: 400 });

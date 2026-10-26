@@ -11,7 +11,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
   const { settlement, bonds, portfolio } = await bondHoldings();
   return (
     <>
-      <PageHeader title="พันธบัตรและหุ้นกู้" subtitle="ราคา ↔ Yield to maturity, accrued interest, duration, convexity (Actual/Actual)" />
+      <PageHeader title="พันธบัตรและหุ้นกู้" subtitle="ราคา ↔ YTM / YTC / YTW, accrued interest ตาม day count ของตราสาร, duration, convexity, Z-spread และ horizon return" />
 
       <Section title="พันธบัตรในพอร์ต">
         {portfolio && (
@@ -77,6 +77,10 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                 ))}
               </tbody>
             </table>
+            <p className="mt-2 text-xs text-muted">
+              สมมติฐานสำหรับพันธบัตรในพอร์ต: จ่ายดอกเบี้ยทุก 6 เดือน, คูปองปกติ (ไม่มี stub), accrued แบบ ACT/ACT-ICMA, ชำระราคาวันนี้ — ถ้าตราสารจริงต่างจากนี้ให้ใช้เครื่องคิดด้านล่างตามเงื่อนไขของตราสาร ·
+              Yield รวมค่าชดเชยความเสี่ยงเครดิตและสภาพคล่อง ไม่ใช่ผลตอบแทนปลอดความเสี่ยง
+            </p>
           </div>
         )}
       </Section>
