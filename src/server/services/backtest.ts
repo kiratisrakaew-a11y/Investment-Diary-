@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { asOf } from "@/lib/finance/portfolio";
-import { backtest } from "@/lib/finance/backtest";
+import { asOf, asOfEntry } from "@/lib/finance/portfolio";
+import { assertSingleDividendTreatment, backtest, type DecisionProvider, type DividendCashflows } from "@/lib/finance/backtest";
+import { DIVIDEND_STRATEGY_IDS, backtestReadiness, resolveSettings, screenDividendStrategy, type DividendStrategyId, type StrategySettingsInput } from "@/lib/finance/dividend-strategies";
+import { dpsLatestBasis } from "@/lib/finance/dividend-metrics";
+import { candidatesAsOf, loadDividendData, strategySettingsOverride } from "./strategies";
 import { lotFor, tradingCostsSchema } from "@/lib/finance/rebalance";
 import { blackLittermanInput } from "../optimize-schema";
 import { listAssets } from "./assets";
@@ -10,7 +13,7 @@ import { getSettings, getTradingCosts } from "./settings";
 
 export const backtestInput = z
   .object({
-    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom"]).describe("Strategy to test"),
+    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom", ...DIVIDEND_STRATEGY_IDS]).describe("Strategy to test; dividend_* select by dividend metrics known at each decision date"),
     symbols: z.array(z.string()).max(30).optional().describe("Universe (default: every non-cash asset with prices)"),
     startDate: z.string().optional().describe("First date of data (YYYY-MM-DD); default = when all chosen assets have prices"),
     endDate: z.string().optional(),
@@ -30,6 +33,15 @@ export const backtestInput = z
       .enum(["price_return", "total_return"])
       .default("price_return")
       .describe("price_return = closes (dividends excluded); total_return = provider dividend-adjusted closes (dividends reinvested), requires full adj_close coverage"),
+    dividendSettings: strategySettingsOverride.optional().describe("dividend_* strategies: overrides on the preset (optimizer weighting is not available in backtests)"),
+    pointInTime: z
+      .enum(["strict", "illustrative_lookahead"])
+      .default("strict")
+      .describe("strict refuses (NOT_BACKTESTABLE_NO_ASOF_DATA) when needed statements have no publication date; illustrative_lookahead runs but is labelled biased"),
+    dividendCashflows: z.boolean().optional().describe("Simulate dividend cash events (entitlement on ex-date, cash on payment date). Always on for dividend_* strategies; requires price_return"),
+    reinvestDividends: z.boolean().default(true),
+    paymentLagDays: z.number().int().min(1).max(120).nullable().default(null).describe("Assumption for events without a payment date: pay = ex-date + N days. null = such events are not credited"),
+    withholding: z.record(z.string(), z.number().min(0).max(1)).default({ thai_stock: 0.1, fund: 0.1, us_stock: 0.15 }).describe("Default dividend withholding by asset class when an event has none (assumption)"),
   })
   .refine((v) => v.strategy !== "black_litterman" || v.blackLitterman, { message: "black_litterman requires blackLitterman.marketWeights", path: ["blackLitterman"] })
   .refine((v) => v.strategy !== "custom" || v.weights, { message: "custom requires weights", path: ["weights"] });
@@ -39,6 +51,10 @@ const PER_YEAR = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 } as cons
 /** Walk-forward backtest on stored prices. Read-only. */
 export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   const x = backtestInput.parse(input);
+  // Dividend strategies / cashflows: one economic treatment (tradable prices + cash events) — checked first.
+  const isDividend = (DIVIDEND_STRATEGY_IDS as readonly string[]).includes(x.strategy);
+  const withCash = isDividend || !!x.dividendCashflows;
+  assertSingleDividendTreatment(x.returnBasis, withCash);
   const [assets, prices, fx, settings, savedCosts] = await Promise.all([listAssets(), loadPriceHistory(), loadFxHistory(), getSettings(), getTradingCosts()]);
   const wanted = x.symbols?.length ? new Set(x.symbols.map((s) => s.toUpperCase())) : null;
   if (wanted) {
@@ -115,6 +131,65 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     if (unknown.length) throw new Error(`น้ำหนักของ ${unknown.join(", ")} ไม่อยู่ในชุดที่ทดสอบได้`);
   }
 
+  let decisionProvider: DecisionProvider | undefined;
+  let dividendCashflows: DividendCashflows | undefined;
+  const pitWarnings: string[] = [];
+  if (withCash) {
+    const data = await loadDividendData();
+    const assetOf = new Map(pool.map((a) => [a.symbol, a]));
+    if (isDividend) {
+      const overrides = (x.dividendSettings ?? {}) as Partial<StrategySettingsInput>;
+      const st = resolveSettings(x.strategy as DividendStrategyId, overrides);
+      if (st.weighting === "optimizer") throw new Error("น้ำหนักแบบ optimizer ใช้ใน backtest กลยุทธ์ปันผลไม่ได้ — เลือก equal หรือ score");
+      const ready = backtestReadiness({ settings: st, statementsBySymbol: Object.fromEntries(symbols.map((s) => [s, data.statements.get(s) ?? []])), mode: x.pointInTime });
+      if (!ready.ok) throw new Error(`${ready.code}: ${ready.detail}`);
+      pitWarnings.push(...ready.warnings);
+      decisionProvider = ({ cutoff }) => {
+        const cands = candidatesAsOf(data, symbols, cutoff, x.pointInTime, st.includeSpecial);
+        const d = screenDividendStrategy({ strategyId: x.strategy as DividendStrategyId, asOf: cutoff, candidates: cands, settings: overrides });
+        const w = symbols.map((s) => d.targetWeights[s] ?? 0);
+        return {
+          w,
+          selected: d.selected,
+          diagnostics: [...d.diagnostics, ...d.excluded.map((e) => `${e.symbol}: ${e.code}`)],
+          note: d.selected.length ? undefined : "ไม่มีหุ้นผ่านเกณฑ์ ณ วันตัดสินใจ — ถือเงินสด",
+        };
+      };
+    }
+    let noPay = 0;
+    let stock = 0;
+    const events: DividendCashflows["events"] = [];
+    for (const sym of symbols) {
+      const a = assetOf.get(sym)!;
+      for (const e of data.events.get(sym) ?? []) {
+        if (e.kind === "indicated_annual" || !e.exDate || e.exDate < dates[0] || e.exDate > dates[dates.length - 1]) continue;
+        if (e.cashOrStock === "stock") {
+          stock++;
+          continue;
+        }
+        const pay = e.paymentDate ?? (x.paymentLagDays != null ? new Date(Date.parse(e.exDate) + x.paymentLagDays * 86_400_000).toISOString().slice(0, 10) : null);
+        if (!pay) {
+          noPay++;
+          continue;
+        }
+        const fxRate = e.currency === "THB" ? 1 : e.currency === "USD" ? (asOfEntry(fx, pay)?.[1] ?? asOf(fx, e.exDate)) : null;
+        if (fxRate == null || e.currency !== a.currency) continue;
+        const gross = dpsLatestBasis(e, data.splits[sym] ?? []) * fxRate;
+        const wht = e.withholdingTaxRate ?? x.withholding[a.assetClass] ?? 0;
+        events.push({ symbol: sym, exDate: e.exDate, paymentDate: pay, grossPerUnitThb: gross, netPerUnitThb: gross * (1 - wht) });
+      }
+    }
+    const assumptions = [
+      `ภาษีหัก ณ ที่จ่าย (สมมติฐานเมื่อข้อมูลไม่ระบุ): ${Object.entries(x.withholding).map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(", ")}`,
+      "ปันผลสกุล USD แปลงเป็นบาทด้วย USDTHB ณ วันจ่าย",
+    ];
+    if (x.paymentLagDays != null) assumptions.push(`สมมติฐาน: เหตุการณ์ที่ไม่มีวันจ่าย ถือว่าจ่ายหลัง ex-date ${x.paymentLagDays} วัน (ไม่ใช่ข้อมูลจริง)`);
+    if (noPay) pitWarnings.push(`${noPay} เหตุการณ์ไม่มีวันจ่าย จึงไม่ถูกนับเป็นเงินสด — ตั้ง paymentLagDays เพื่อใช้สมมติฐานแทน`);
+    if (stock) pitWarnings.push(`ไม่จำลองปันผลเป็นหุ้น ${stock} ครั้ง`);
+    if (!events.length && !noPay) pitWarnings.push("ไม่มีเหตุการณ์ปันผลในช่วงนี้ — นำเข้าจาก Yahoo หรือบันทึกจากประกาศ SET ก่อน");
+    dividendCashflows = { events, reinvest: x.reinvestDividends, assumptions };
+  }
+
   const r = backtest({
     symbols,
     dates,
@@ -134,6 +209,8 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     costs,
     lots: Object.fromEntries(pool.map((a) => [a.symbol, lotFor(costs, a.assetClass, a.lotSize)])),
     useLots: x.useLots,
+    decisionProvider,
+    dividendCashflows,
   });
   if (!r.ok) throw new Error(r.error);
   return {
@@ -144,12 +221,23 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     costModel: costs,
     limitations: [
       "Survivorship bias: ใช้เฉพาะสินทรัพย์ที่อยู่ในแอปวันนี้ — หุ้นที่ถูกถอดหรือเลิกกิจการในอดีตไม่ถูกรวม ผลจึงอาจดีกว่าความเป็นจริง",
-      x.returnBasis === "total_return"
+      withCash
+        ? "ราคาเป็นราคาปิดซื้อขายได้ (ปรับ split แล้ว ไม่ปรับปันผล) + ปันผลเป็นเงินสดตามเหตุการณ์ — ปันผลนับครั้งเดียว; ดอกเบี้ยพันธบัตรไม่รวม"
+        : x.returnBasis === "total_return"
         ? "ผลตอบแทนรวม: ใช้ราคาปรับปันผลของผู้ให้ข้อมูล (ปันผลถูกนำไปลงทุนต่อ ณ วัน XD) — ระดับราคาถูกปรับย้อนหลังโดยผู้ให้ข้อมูล แต่อัตราผลตอบแทนแต่ละช่วงไม่ใช้ข้อมูลอนาคต; ไม่หักภาษีปันผล; พันธบัตร/กองทุนที่ไม่มี adj_close ถูกตัดออก"
         : "ราคาเป็นราคาปิดที่ไม่รวมเงินปันผล (Yahoo close ปรับ split แล้ว) — หุ้นปันผลสูงจะดูแย่กว่าผลตอบแทนรวมจริง; ดอกเบี้ยพันธบัตรไม่รวม (ราคาสะอาด)",
       `ดัชนีอ้างอิงเป็น${settings.benchmarkKind === "total_return" ? "ผลตอบแทนรวม" : "ดัชนีราคา (ไม่รวมปันผล)"}${x.returnBasis === "total_return" && settings.benchmarkKind !== "total_return" ? " — เทียบกับพอร์ตผลตอบแทนรวมจะได้เปรียบเกินจริง" : ""}`,
       ...(x.strategy === "black_litterman" ? ["Black–Litterman: น้ำหนักตลาดที่ใส่เป็นค่าปัจจุบันและใช้ทุกช่วงย้อนหลัง (ไม่ใช่ข้อมูล ณ วันนั้น) — เป็น look-ahead ในอินพุต"] : []),
-      "ซื้อขายที่ราคาปิดวันปรับพอร์ต ไม่มี market impact นอกจาก slippage ที่ตั้งไว้ · ไม่คิดภาษีเงินปันผล",
+      withCash
+        ? "ซื้อขายที่ราคาปิดวันปรับพอร์ต · ปันผลเป็นกระแสเงินสดจากเหตุการณ์ (หักภาษีตามสมมติฐาน) ไม่ใช่ราคาปรับปันผล"
+        : "ซื้อขายที่ราคาปิดวันปรับพอร์ต ไม่มี market impact นอกจาก slippage ที่ตั้งไว้ · ไม่คิดภาษีเงินปันผล",
+      ...(isDividend
+        ? [
+            `การตัดสินใจใช้เฉพาะข้อมูลที่รู้ ณ วันก่อนซื้อขาย (${x.pointInTime === "strict" ? "point-in-time เข้ม" : "โหมดภาพประกอบ มี look-ahead bias"}) · ผลเป็นการจำลอง ไม่ใช่ผลการลงทุนจริง`,
+            `ดัชนีอ้างอิง: ${settings.benchmarkKind === "total_return" ? "ผลตอบแทนรวม" : "ดัชนีราคา (ไม่รวมปันผล) — พอร์ตที่รวมปันผลจะดูดีกว่าดัชนีเกินจริง อย่าสรุปว่าชนะตลาดจากส่วนนี้"}`,
+          ]
+        : []),
+      ...pitWarnings,
       `ปฏิทินร่วม: ใช้เฉพาะวันที่ทุกสินทรัพย์มีราคา (${dates.length} วัน)${excluded.length ? ` · ไม่รวม ${excluded.map((e) => e.symbol).join(", ")}` : ""}`,
       "ผลในอดีตไม่รับประกันผลในอนาคต",
     ],

@@ -219,9 +219,54 @@ export const financialStatements = pgTable(
     currency: text("currency").notNull().default("THB"),
     data: jsonb("data").$type<Record<string, number | null>>().notNull(),
     sourceFile: text("source_file"),
+    /** Date the figures became public (annual report / SET filing); null = unknown → not usable point-in-time. */
+    publishedAt: date("published_at"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("fin_symbol_year_uq").on(t.symbol, t.fiscalYear)],
+);
+
+/**
+ * Issuer dividend events (announcements / ex-dates), separate from the investor's dividend receipts
+ * in `transactions`. Never written to the ledger. Unknown fields stay null.
+ */
+export const dividendEvents = pgTable(
+  "dividend_events",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    issuer: text("issuer"),
+    declarationDate: date("declaration_date"),
+    exDate: date("ex_date"),
+    recordDate: date("record_date"),
+    paymentDate: date("payment_date"),
+    /** Per share, in `currency`, on the share basis described by splitAdjustmentPolicy. */
+    dividendPerShare: doublePrecision("dividend_per_share").notNull(),
+    currency: text("currency").notNull().default("THB"),
+    /** cash | stock */
+    cashOrStock: text("cash_or_stock").notNull().default("cash"),
+    /** regular | special | indicated_annual (announced annual rate, not a payment) | unknown */
+    kind: text("kind").notNull().default("unknown"),
+    fiscalPeriod: text("fiscal_period"),
+    source: text("source").notNull(),
+    /** Stable id within the source (e.g. "PTT.BK:2025-08-20"); unique with source → idempotent upsert. */
+    sourceEventId: text("source_event_id").notNull(),
+    retrievedAt: timestamp("retrieved_at").defaultNow().notNull(),
+    /** First time the event was publicly known; null = unknown (not usable point-in-time). */
+    announcedAt: date("announced_at"),
+    /** verified | provider | unverified */
+    dataQualityStatus: text("data_quality_status").notNull().default("unverified"),
+    /** as_reported (share basis on the ex-date) | provider_split_adjusted (already on the latest basis) */
+    splitAdjustmentPolicy: text("split_adjustment_policy").notNull().default("as_reported"),
+    withholdingTaxRate: doublePrecision("withholding_tax_rate"),
+    withholdingSource: text("withholding_source"),
+    note: text("note"),
+    /** Previous values kept on correction: [{ at, values }]. */
+    revisions: jsonb("revisions").$type<{ at: string; values: Record<string, unknown> }[]>().notNull().default([]),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("div_source_event_uq").on(t.source, t.sourceEventId), index("div_symbol_ex_idx").on(t.symbol, t.exDate)],
 );
 
 /** Audit trail of statement files read by AI (the files themselves are not stored). */

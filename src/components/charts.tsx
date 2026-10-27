@@ -3,6 +3,8 @@
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   ComposedChart,
@@ -298,6 +300,40 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
         ))}
         <Area type="stepAfter" dataKey="เงินสด" stackId="w" stroke="var(--muted)" fill="var(--muted)" fillOpacity={0.25} isAnimationActive={false} />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+const INCOME_SERIES = [
+  { key: "received", name: "ได้รับแล้ว (บัญชี)", color: "var(--pos)" },
+  { key: "missing_confirmation", name: "ถึงกำหนดแต่ยังไม่บันทึก", color: "var(--warn)" },
+  { key: "announced", name: "ประกาศแล้ว", color: "var(--info)" },
+  { key: "estimated", name: "ประมาณการ", color: "var(--series-5)" },
+] as const;
+
+/** Monthly dividend income (THB, net of withholding) stacked by status. */
+export function IncomeChart({ data }: { data: { period: string; received: number; announced: number; missing_confirmation: number; estimated: number }[] }) {
+  const id = useId();
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          {INCOME_SERIES.map((sr) => (
+            <linearGradient key={sr.key} id={gid(id, sr.key)} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={sr.color} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={sr.color} stopOpacity={0.45} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="period" {...axis} minTickGap={16} />
+        <YAxis {...axis} tickFormatter={compactThb} width={48} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtThb(Number(v)), n]} cursor={{ fill: "var(--panel-2)" }} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {INCOME_SERIES.map((sr) => (
+          <Bar key={sr.key} dataKey={sr.key} name={sr.name} stackId="i" fill={`url(#${gid(id, sr.key)})`} isAnimationActive={false} />
+        ))}
+      </BarChart>
     </ResponsiveContainer>
   );
 }

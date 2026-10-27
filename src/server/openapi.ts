@@ -7,6 +7,8 @@ import { financialYearSchema } from "@/lib/financials";
 import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
 import { rebalanceInput } from "./services/rebalance";
 import { stressInput } from "./services/stress";
+import { dividendIncomeInput, screenDividendInput } from "./services/strategies";
+import { dividendEventInput } from "./services/dividends";
 import { recordSplitInput } from "./services/splits";
 import { backtestInput } from "./services/backtest";
 
@@ -258,6 +260,29 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Equity curve, drawdown, weights, trades, costs, metrics, limitations") },
         },
       },
+      "/api/v1/dividends/screen": {
+        post: {
+          operationId: "screenDividendStocks",
+          summary: "Dividend screener: presets, editable filters/weights, scores with factor contributions, exclusions, target weights",
+          requestBody: body("ScreenDividendInput"),
+          responses: { "200": ok("Strategy decision with metric profiles (status, methodology, provenance)") },
+        },
+      },
+      "/api/v1/dividends/income": {
+        post: {
+          operationId: "getDividendIncome",
+          summary: "Dividend income plan: announced / estimated / received / missing_confirmation by month, quarter and year",
+          requestBody: body("DividendIncomeInput"),
+          responses: { "200": ok("Income rows and totals") },
+        },
+      },
+      "/api/v1/dividends/events": {
+        get: { operationId: "listDividendEvents", summary: "Stored issuer dividend events (?symbols=PTT,SCC)", responses: { "200": ok("Events") } },
+        post: { operationId: "recordDividendEvents", summary: "Upsert issuer dividend events (not ledger receipts)", requestBody: body("DividendEvents"), responses: { "200": ok("Inserted / updated / unchanged") } },
+      },
+      "/api/v1/dividends/import": {
+        post: { operationId: "importDividendsFromYahoo", summary: "Store Yahoo dividend history as issuer events", responses: { "200": ok("Per-symbol results") } },
+      },
       "/api/v1/portfolio/stress": {
         post: {
           operationId: "stressTestPortfolio",
@@ -298,7 +323,7 @@ export function buildOpenApi(origin: string) {
           z.object({
             symbol: z.string(),
             currency: z.string().optional(),
-            years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int() })),
+            years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int(), publishedAt: z.string().optional().describe("Date the figures became public (YYYY-MM-DD)") })),
           }),
         ),
         OptimizeInput: schema(optimizeInput),
@@ -308,6 +333,9 @@ export function buildOpenApi(origin: string) {
         AssetProfile: schema(assetProfileInput),
         YieldCurve: schema(yieldCurveInput),
         BacktestInput: schema(backtestInput),
+        ScreenDividendInput: schema(screenDividendInput),
+        DividendIncomeInput: schema(dividendIncomeInput),
+        DividendEvents: schema(z.object({ events: z.array(dividendEventInput) })),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
     },

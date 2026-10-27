@@ -69,6 +69,8 @@ export interface SyncDeps {
   eligibility(symbols: string[], lookbackDays: number): Promise<{ lookbackDays: number; ok: boolean; reason?: string; eligible: string[]; skipped: { symbol: string; reason: string }[] }>;
   benchmarkSymbol(): Promise<string>;
   heldAssetIds(): Promise<Set<number>>;
+  /** Persist provider dividend events (issuer data, never the ledger). Optional so test doubles can omit it. */
+  saveDividendEvents?(symbol: string, provider: string, currency: string, dividends: DailyHistory["dividends"]): Promise<{ inserted: number; updated: number }>;
 }
 
 export type SyncStatus = "ok" | "no_data" | "unknown_asset" | "unsupported" | "error";
@@ -185,6 +187,10 @@ export async function syncAssetSeries(deps: SyncDeps, asset: AssetLike, o: Opts,
     const provider = asset.providerSymbol || asset.symbol;
     const history = await retry(deps, () => deps.fetchHistory(provider, o.range));
     const r = await applySeries(deps, key, asset.symbol, history, o, held, { source: "yahoo", providerSymbol: provider });
+    if (!o.dryRun && history.dividends.length && deps.saveDividendEvents) {
+      const d = await deps.saveDividendEvents(asset.symbol, provider, asset.currency ?? "THB", history.dividends);
+      if (d.inserted || d.updated) r.warnings.push(`${asset.symbol}: บันทึกเหตุการณ์ปันผลจาก Yahoo ${d.inserted} ใหม่ / ${d.updated} แก้ไข (ข้อมูลผู้ออก — ไม่ใช่รายการรับเงินในบัญชี)`);
+    }
     if (o.priceType === "adjusted_close" && r.status === "ok") {
       r.warnings.push(`${asset.symbol}: adjusted close ของ Yahoo ถูกปรับย้อนหลังทุกครั้งที่มีปันผลใหม่ — ควร sync ทั้งช่วงพร้อม overwriteExisting เพื่อให้ทั้งชุดอยู่บนฐานเดียวกัน`);
     }
@@ -383,6 +389,10 @@ function tableFor(key: string) {
 const CHUNK = 500;
 
 export const dbDeps: SyncDeps = {
+  saveDividendEvents: async (symbol, provider, currency, dividends) => {
+    const { upsertDividendEvents, yahooEvents } = await import("./dividends");
+    return upsertDividendEvents(yahooEvents(symbol, provider, currency, dividends));
+  },
   today: () => todayIso(),
   findAsset: (s) => getAssetBySymbol(s),
   fetchHistory: (p, r) => fetchDailyHistory(p, r),

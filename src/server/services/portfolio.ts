@@ -46,6 +46,14 @@ async function loadAll() {
   return { assets, assetInputs, txs, prices, fx, settings };
 }
 
+/** Units held at the end of each date (ledger replay, share basis of that date). */
+export async function holdingsAt(dates: string[]): Promise<Map<string, Map<string, number>>> {
+  const { assetInputs, txs, prices, fx } = await loadAll();
+  const out = new Map<string, Map<string, number>>();
+  for (const d of [...new Set(dates)]) out.set(d, new Map(buildSnapshot(assetInputs, txs, prices, fx, d).positions.map((p) => [p.symbol, p.quantity])));
+  return out;
+}
+
 export async function getPortfolioSummary(date = today()) {
   const { assetInputs, txs, prices, fx } = await loadAll();
   return buildSnapshot(assetInputs, txs, prices, fx, date);

@@ -115,6 +115,7 @@ export async function getStatementsWithMeta(symbol: string) {
   return {
     years: rows.map((r) => ({ ...emptyYear(r.fiscalYear), ...(r.data as Partial<FinancialYear>), fiscalYear: r.fiscalYear })),
     sources: Object.fromEntries(rows.map((r) => [r.fiscalYear, r.sourceFile])) as Record<number, string | null>,
+    publishedAt: Object.fromEntries(rows.map((r) => [r.fiscalYear, r.publishedAt])) as Record<number, string | null>,
     uploads,
   };
 }
@@ -124,7 +125,11 @@ function dataOf(y: FinancialYear) {
 }
 
 /** Upsert years for a symbol, merging with what is already stored. */
-export async function saveYears(symbol: string, incoming: FinancialYear[], opts: { source?: string; currency?: string; preferIncoming?: boolean } = {}) {
+export async function saveYears(
+  symbol: string,
+  incoming: FinancialYear[],
+  opts: { source?: string; currency?: string; preferIncoming?: boolean; /** fiscal year → date the figures became public */ publishedAt?: Record<number, string> } = {},
+) {
   const sym = symbol.trim().toUpperCase();
   const parsed = incoming.map((y) => financialYearSchema.parse(y));
   const merged = mergeYears(await getStatements(sym), parsed, opts.preferIncoming ?? true);
@@ -140,13 +145,20 @@ export async function saveYears(symbol: string, incoming: FinancialYear[], opts:
       data: dataOf(y),
       sourceFile: opts.source ?? null,
       updatedAt: new Date(),
+      ...(opts.publishedAt?.[y.fiscalYear] ? { publishedAt: opts.publishedAt[y.fiscalYear] } : {}),
     };
     await db
       .insert(schema.financialStatements)
       .values(values)
       .onConflictDoUpdate({
         target: [schema.financialStatements.symbol, schema.financialStatements.fiscalYear],
-        set: { data: values.data, currency: values.currency, updatedAt: values.updatedAt, ...(opts.source ? { sourceFile: opts.source } : {}) },
+        set: {
+          data: values.data,
+          currency: values.currency,
+          updatedAt: values.updatedAt,
+          ...(opts.source ? { sourceFile: opts.source } : {}),
+          ...(opts.publishedAt?.[y.fiscalYear] ? { publishedAt: opts.publishedAt[y.fiscalYear] } : {}),
+        },
       });
   }
   return getStatements(sym);

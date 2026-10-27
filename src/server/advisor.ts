@@ -19,6 +19,8 @@ import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
 import { recordSplit, recordSplitInput } from "./services/splits";
 import { backtestInput, backtestPortfolio } from "./services/backtest";
+import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, summarizeDividendScreen } from "./services/strategies";
+import { dividendEventInput, upsertDividendEvents } from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
@@ -38,6 +40,7 @@ Modern Portfolio Theory (efficient frontier, tangency, two-fund separation, comp
 - ดึงข้อมูลจริงด้วยเครื่องมือก่อนให้คำแนะนำ อย่าเดาตัวเลขพอร์ต ราคา หรือผลตอบแทน
 - การประเมินมูลค่า: ดูงบการเงินย้อนหลังด้วย get_financial_statements ก่อน (ถ้ามี) แล้วตั้งสมมติฐานจากแนวโน้ม 5 ปี ระบุสมมติฐานทุกตัวที่ใช้ (Rf, β, ERP, growth, margin ฯลฯ) และที่มา ถ้าข้อมูลไม่พอให้ถามผู้ใช้ หรือใช้ get_fundamentals แล้วบอกว่ามาจาก Yahoo
   ให้มูลค่าเป็นช่วงด้วย sensitivity และเทียบหลายวิธี อธิบาย margin of safety
+- ปันผล: screen_dividend_stocks คัดหุ้นปันผล (แจ้งสถานะข้อมูล/ข้อยกเว้นเสมอ ไม่เดา yield/วันที่) · get_dividend_income ปฏิทินรายได้ปันผล (แยกประกาศแล้ว/ประมาณการ/ได้รับจริง) · record_dividend_event บันทึกประกาศปันผลเมื่อผู้ใช้ให้ข้อมูล (ไม่ใช่รายการรับเงิน)
 - ปรับพอร์ต: rebalance_portfolio ให้ "ข้อเสนอ" จำนวนหุ้นตาม lot และต้นทุน (ไม่บันทึกรายการ) · stress_test_portfolio ทดสอบสถานการณ์ แจ้งสมมติฐานทุกครั้ง · backtest_portfolio ทดสอบกลยุทธ์ย้อนหลัง (walk-forward) แจ้งข้อจำกัด survivorship / ราคาไม่รวมปันผล
 - การจัดพอร์ต: ใช้ optimize_portfolio ระบุ objective, ข้อจำกัดน้ำหนัก และวิธีประมาณผลตอบแทนคาดหวังที่เลือก
   อธิบายข้อจำกัดของ MPT (estimation error, ข้อมูลในอดีต) และเสนอการปรับแบบค่อยเป็นค่อยไป
@@ -94,8 +97,30 @@ function tools() {
       run: async (x) => json(await stressTestPortfolio(x)),
     }),
     betaZodTool({
+      name: "screen_dividend_stocks",
+      description:
+        "Screen the app's stocks with a dividend preset (dividend_sustainable_income | dividend_growth | dividend_quality_total_return): TTM/forward yield, payout, FCF payout, coverage, DPS CAGR, consistency, quality — with status and provenance; editable filters/weights; scores, exclusions and target weights. Data known at asOf only. Read-only.",
+      inputSchema: screenDividendInput,
+      run: async (x) => json(summarizeDividendScreen(await screenDividendStocks(x))),
+    }),
+    betaZodTool({
+      name: "get_dividend_income",
+      description: "Dividend calendar for holdings: announced / estimated / received (ledger) / missing_confirmation, gross → withholding → net → THB, by month/quarter/year. Never records receipts.",
+      inputSchema: dividendIncomeInput,
+      run: async (x) => json(await getDividendIncome(x)),
+    }),
+    betaZodTool({
+      name: "record_dividend_event",
+      description: "Store issuer dividend announcements (ex/payment/record/declaration dates, DPS, kind, source). Issuer data only — not money received. Only when the user gives the data; never invent dates.",
+      inputSchema: z.object({ events: z.array(dividendEventInput).min(1).max(100) }),
+      run: async ({ events }) => {
+        const r = await upsertDividendEvents(events);
+        return json({ inserted: r.inserted, updated: r.updated, unchanged: r.unchanged });
+      },
+    }),
+    betaZodTool({
       name: "backtest_portfolio",
-      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom. Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
+      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend cash on payment dates; refuses NOT_BACKTESTABLE_NO_ASOF_DATA without statement publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
       inputSchema: backtestInput,
       run: async (x) => json(summarizeBacktest(await backtestPortfolio(x))),
     }),

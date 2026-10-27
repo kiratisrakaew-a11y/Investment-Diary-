@@ -17,8 +17,23 @@ import { beta as calcBeta } from "./risk";
 import { mean } from "./stats";
 import { computeMetrics, type PerformanceMetrics } from "./metrics";
 import { alignWithBenchmark } from "./return-series";
+import type { DividendStrategyId } from "./dividend-strategies";
 
-export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom";
+export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom" | DividendStrategyId;
+
+/** Target weights chosen by an external strategy using only data known at `cutoff` (the close before the trade date). */
+export type DecisionProvider = (ctx: { t: number; cutoff: string; tradeDate: string }) => { w: number[]; note?: string; selected?: string[]; diagnostics?: string[] } | { error: string };
+
+/**
+ * Dividend cash events on the tradable (latest-basis, THB) price series. Entitlement on the ex-date
+ * from units held at the previous close; cash on the payment date. Never combine with a dividend-adjusted
+ * price series (that would credit distributions twice) — the service enforces price_return.
+ */
+export interface DividendCashflows {
+  events: { symbol: string; exDate: string; paymentDate: string; grossPerUnitThb: number; netPerUnitThb: number }[];
+  reinvest: boolean;
+  assumptions: string[];
+}
 
 export interface BacktestInput {
   symbols: string[];
@@ -45,6 +60,9 @@ export interface BacktestInput {
   costs: TradingCosts;
   lots: Record<string, number>;
   useLots: boolean;
+  /** Required for dividend strategies; ignored by the built-in ones. */
+  decisionProvider?: DecisionProvider;
+  dividendCashflows?: DividendCashflows;
 }
 
 export interface BacktestResult {
@@ -61,6 +79,21 @@ export interface BacktestResult {
   metrics: PerformanceMetrics;
   methodology: string[];
   warnings: string[];
+  /** Present when dividend cashflows were simulated. */
+  dividends?: {
+    gross: number;
+    withholding: number;
+    netReceived: number;
+    receivableAtEnd: number;
+    reinvested: number;
+    events: number;
+    entitledEvents: number;
+    incomeReturn: number;
+    priceAndOtherReturn: number;
+    byYear: { year: string; net: number }[];
+  };
+  /** Present for provider strategies: what was selected at each decision. */
+  decisions?: { date: string; cutoff: string; selected: string[]; diagnostics: string[] }[];
 }
 
 const addCost = (a: CostBreakdown, b: CostBreakdown): CostBreakdown => ({
@@ -78,9 +111,13 @@ export function backtest(x: BacktestInput): BacktestResult {
   const fail = (error: string) => ({ ok: false, error }) as BacktestResult;
   if (n < 1) return fail("ต้องมีอย่างน้อย 1 สินทรัพย์");
   if (x.prices.some((p) => p.length !== T || p.some((v) => !(v > 0)))) return fail("ราคาไม่ครบหรือไม่ถูกต้องในบางวัน");
-  const needsWindow = !["buy_and_hold", "equal_weight", "custom"].includes(x.strategy);
+  const provider = x.decisionProvider;
+  const isProviderStrategy = x.strategy.startsWith("dividend_");
+  if (isProviderStrategy && !provider) return fail("กลยุทธ์ปันผลต้องมี decisionProvider");
+  const needsWindow = !isProviderStrategy && !["buy_and_hold", "equal_weight", "custom"].includes(x.strategy);
   // First trading index: the window needs `window` returns ending at price index start − 1.
-  const start = needsWindow ? x.window + 1 : 0;
+  // Provider strategies decide at t with data up to t − 1, so they start at index 1.
+  const start = needsWindow ? x.window + 1 : isProviderStrategy ? 1 : 0;
   if (needsWindow && n < 2) return fail("กลยุทธ์ที่ใช้ optimizer ต้องมีอย่างน้อย 2 สินทรัพย์");
   if (start >= T - 1) return fail(`ข้อมูล ${T} วัน ไม่พอสำหรับช่วงฝึก ${x.window} วัน + ช่วงทดสอบ`);
 
@@ -91,7 +128,8 @@ export function backtest(x: BacktestInput): BacktestResult {
   const yearsPer = (a: number, b: number) => (Date.parse(x.dates[b]) - Date.parse(x.dates[a])) / (365 * 86_400_000);
 
   /** Target weights decided at index t with data up to price t − 1 only. */
-  const decide = (t: number): { w: number[]; note?: string } | { error: string } => {
+  const decide = (t: number): { w: number[]; note?: string; selected?: string[]; diagnostics?: string[] } | { error: string } => {
+    if (isProviderStrategy) return provider!({ t, cutoff: x.dates[t - 1], tradeDate: x.dates[t] });
     if (x.strategy === "equal_weight") return { w: Array(n).fill(1 / n) };
     if (x.strategy === "custom" || x.strategy === "buy_and_hold") {
       const given = x.weights ? x.symbols.map((s) => x.weights![s] ?? x.weights![s.toUpperCase()] ?? 0) : Array(n).fill(1 / n);
@@ -158,13 +196,80 @@ export function backtest(x: BacktestInput): BacktestResult {
   const weights: BacktestResult["weights"] = [];
   const trades: BacktestResult["trades"] = [];
   const notes = new Map<string, number>();
+  const decisions: NonNullable<BacktestResult["decisions"]> = [];
+
+  // Dividend cashflows: index of the first trading date on/after the ex-date and the payment date.
+  const firstIdx = (d: string) => {
+    let lo = 0;
+    let hi = T;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (x.dates[m] < d) lo = m + 1;
+      else hi = m;
+    }
+    return lo;
+  };
+  const symIdx = new Map(x.symbols.map((s, i) => [s, i]));
+  const divEvents = (x.dividendCashflows?.events ?? [])
+    .map((e) => ({ ...e, i: symIdx.get(e.symbol) ?? -1, exIdx: firstIdx(e.exDate), payIdx: firstIdx(e.paymentDate) }))
+    .filter((e) => e.i >= 0 && e.exIdx > start && e.exIdx < T);
+  const exAt = new Map<number, typeof divEvents>();
+  for (const e of divEvents) exAt.set(e.exIdx, [...(exAt.get(e.exIdx) ?? []), e]);
+  let receivables: { payIdx: number; net: number; gross: number; year: string }[] = [];
+  const div = { gross: 0, withholding: 0, netReceived: 0, reinvested: 0, entitled: 0 };
+  const divByYear = new Map<string, number>();
+  let lastTarget: number[] | null = null;
 
   for (let t = start; t < T; t++) {
     if (t > start) cash *= (1 + x.rf) ** (Math.max(0, Date.parse(x.dates[t]) - Date.parse(x.dates[t - 1])) / (365 * 86_400_000));
+    // Entitlement: units held at the previous close (before any trade on the ex-date).
+    for (const e of exAt.get(t) ?? []) {
+      if (!(q[e.i] > 0)) continue;
+      div.entitled++;
+      receivables.push({ payIdx: e.payIdx, net: q[e.i] * e.netPerUnitThb, gross: q[e.i] * e.grossPerUnitThb, year: e.paymentDate.slice(0, 4) });
+    }
+    // Payment: receivable → cash; optional reinvestment toward the last target (buys only).
+    const due = receivables.filter((r) => r.payIdx <= t);
+    if (due.length) {
+      receivables = receivables.filter((r) => r.payIdx > t);
+      const paid = due.reduce((a, r) => a + r.net, 0);
+      cash += paid;
+      div.netReceived += paid;
+      div.gross += due.reduce((a, r) => a + r.gross, 0);
+      div.withholding += due.reduce((a, r) => a + r.gross - r.net, 0);
+      for (const r of due) divByYear.set(r.year, (divByYear.get(r.year) ?? 0) + r.net);
+      if (x.dividendCashflows?.reinvest && lastTarget && !isRebal.has(t)) {
+        const rr = rebalance({
+          assets: x.symbols.map((s, i) => ({ symbol: s, price: x.prices[i][t], quantity: q[i], lot: x.useLots ? (x.lots[s] ?? 1) : 1e-6, target: lastTarget![i] })),
+          cash,
+          extraCash: 0,
+          cashReserve: 0,
+          costs: x.costs,
+          objective: "track",
+          noTradeBand: 0,
+          allowSell: false,
+          cov: null,
+          fractional: !x.useLots,
+        });
+        if (rr.ok) {
+          for (const tr of rr.trades) {
+            if (tr.side !== "buy") continue;
+            trades.push({ date: x.dates[t], symbol: tr.symbol, side: tr.side, quantity: tr.quantity, price: tr.price ?? 0, value: tr.value, cost: tr.cost.total });
+            costSum = addCost(costSum, tr.cost);
+            traded += tr.value;
+            div.reinvested += tr.value;
+          }
+          q = rr.trades.map((tr) => tr.finalQuantity);
+          cash = rr.cash.end;
+        }
+      }
+    }
     if (isRebal.has(t)) {
       const d = decide(t);
       if ("error" in d) return fail(`${x.dates[t]}: ${d.error}`);
       if (d.note) notes.set(d.note, (notes.get(d.note) ?? 0) + 1);
+      if (isProviderStrategy) decisions.push({ date: x.dates[t], cutoff: x.dates[t - 1], selected: d.selected ?? x.symbols.filter((_, i) => d.w[i] > 0), diagnostics: d.diagnostics ?? [] });
+      lastTarget = d.w;
       const r = rebalance({
         assets: x.symbols.map((s, i) => ({ symbol: s, price: x.prices[i][t], quantity: q[i], lot: x.useLots ? (x.lots[s] ?? 1) : 1e-6, target: d.w[i] })),
         cash,
@@ -194,7 +299,8 @@ export function backtest(x: BacktestInput): BacktestResult {
         cash: cash / nav,
       });
     }
-    values.push({ date: x.dates[t], value: q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash });
+    // NAV includes dividends receivable (entitled on the ex-date, not yet paid).
+    values.push({ date: x.dates[t], value: q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash + receivables.reduce((a, r) => a + r.net, 0) });
   }
 
   const from = x.dates[start];
@@ -221,6 +327,22 @@ export function backtest(x: BacktestInput): BacktestResult {
   });
   const years = yearsPer(start, T - 1);
   for (const [k, c] of notes) warnings.push(`${k} (${c} ครั้ง)`);
+  const totalReturn = finalValue / x.initialCapital - 1;
+  const receivableAtEnd = receivables.reduce((a, r) => a + r.net, 0);
+  const dividends = x.dividendCashflows
+    ? {
+        gross: div.gross,
+        withholding: div.withholding,
+        netReceived: div.netReceived,
+        receivableAtEnd,
+        reinvested: div.reinvested,
+        events: divEvents.length,
+        entitledEvents: div.entitled,
+        incomeReturn: (div.netReceived + receivableAtEnd) / x.initialCapital,
+        priceAndOtherReturn: totalReturn - (div.netReceived + receivableAtEnd) / x.initialCapital,
+        byYear: [...divByYear.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([year, net]) => ({ year, net })),
+      }
+    : undefined;
   return {
     ok: true,
     strategy: x.strategy,
@@ -233,7 +355,9 @@ export function backtest(x: BacktestInput): BacktestResult {
     turnover: { total: traded / x.initialCapital, annualized: years > 0 ? traded / x.initialCapital / years : null, perRebalance: rebalanceIdx.length ? traded / x.initialCapital / rebalanceIdx.length : 0 },
     metrics,
     methodology: [
-      needsWindow
+      isProviderStrategy
+        ? `ปันผล (${x.strategy}): ณ วันปรับพอร์ต t คัดเลือกด้วยข้อมูลที่รู้ ณ สิ้นวัน t − 1 เท่านั้น (เหตุการณ์ปันผลที่ ex-date ผ่านแล้วหรือประกาศแล้ว, งบที่เผยแพร่แล้ว, ราคาถึง t − 1) → ซื้อขายที่ราคาปิดวัน t`
+        : needsWindow
         ? `Walk-forward: ณ วันปรับพอร์ต t ใช้ผลตอบแทน ${x.window} งวดล่าสุดที่จบก่อนวัน t (ไม่มีข้อมูลอนาคต) → ประมาณ μ (${x.returnMethod}${x.strategy === "black_litterman" ? " → Black–Litterman" : ""}) และ Σ (${x.covMethod}) → optimizer เดิม (QP) → ซื้อขายที่ราคาปิดวัน t`
         : x.strategy === "buy_and_hold"
           ? "Buy and hold: ซื้อตามน้ำหนักเริ่มต้นครั้งเดียว ไม่ปรับพอร์ต"
@@ -241,7 +365,24 @@ export function backtest(x: BacktestInput): BacktestResult {
       `ปรับพอร์ตทุก ${x.rebalanceEvery} งวด · ระหว่างรอบถือจำนวนหน่วยเท่าเดิม (น้ำหนักลอยตามราคา) · เงินสดได้ Rf ${(x.rf * 100).toFixed(2)}%`,
       `ต้นทุนตาม cost model (ค่าคอม/VAT/slippage/ภาษีขาย) ${x.useLots ? "และ lot จริง" : "ซื้อเศษหน่วยได้ (ไม่ปัด lot)"}`,
       "ตัวชี้วัดจาก computeMetrics ตัวเดียวกับหน้าผลการดำเนินงาน",
+      ...(x.dividendCashflows
+        ? [
+            "ปันผลเป็นกระแสเงินสด: สิทธิ์ ณ ex-date จากจำนวนหน่วยที่ถือ ณ ปิดวันก่อนหน้า (ซื้อวัน XD ไม่ได้สิทธิ์) → เงินเข้าวันจ่าย; ระหว่างนั้นนับเป็นลูกหนี้ใน NAV",
+            x.dividendCashflows.reinvest ? "นำปันผลไปซื้อเพิ่มตามน้ำหนักเป้าหมายล่าสุด (ซื้ออย่างเดียว มีต้นทุนซื้อขาย)" : "ปันผลพักเป็นเงินสด (ได้ Rf) จนถึงรอบปรับพอร์ตถัดไป",
+            "ราคาที่ใช้เป็นราคาปิดซื้อขายได้ (ไม่ปรับปันผล) จึงไม่นับปันผลซ้ำ",
+            ...x.dividendCashflows.assumptions,
+          ]
+        : []),
     ],
     warnings,
+    ...(dividends ? { dividends } : {}),
+    ...(isProviderStrategy ? { decisions } : {}),
   };
+}
+
+/** One economic treatment of dividends: a dividend-adjusted (total-return) price series must not also receive cash events. */
+export function assertSingleDividendTreatment(returnBasis: "price_return" | "total_return", cashflows: boolean) {
+  if (returnBasis === "total_return" && cashflows) {
+    throw new Error("ราคาปรับปันผล (total_return) รวมปันผลไว้แล้ว — ใช้ร่วมกับกระแสเงินสดปันผลไม่ได้ (จะนับซ้ำ) ใช้ price_return + เหตุการณ์ปันผลแทน");
+  }
 }

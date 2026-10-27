@@ -20,6 +20,9 @@ const STRATEGIES: { value: BacktestStrategy; label: string }[] = [
   { value: "black_litterman", label: "Black–Litterman (น้ำหนักตลาด + views)" },
   { value: "custom", label: "น้ำหนักที่กำหนดเอง (ปรับกลับทุกรอบ)" },
   { value: "buy_and_hold", label: "Buy and hold (ไม่ปรับ)" },
+  { value: "dividend_sustainable_income", label: "ปันผล: รายได้ที่ยั่งยืน" },
+  { value: "dividend_growth", label: "ปันผล: ปันผลเติบโต" },
+  { value: "dividend_quality_total_return", label: "ปันผล: คุณภาพ + ผลตอบแทนรวม" },
 ];
 const COMPARE: BacktestStrategy[] = ["buy_and_hold", "equal_weight", "min_variance", "max_sharpe"];
 
@@ -37,6 +40,10 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
   const [capital, setCapital] = useState(1_000_000);
   const [useCosts, setUseCosts] = useState(true);
   const [useLots, setUseLots] = useState(false);
+  const [pit, setPit] = useState<"strict" | "illustrative_lookahead">("strict");
+  const [reinvest, setReinvest] = useState(true);
+  const [lagDays, setLagDays] = useState<number | null>(null);
+  const [divCash, setDivCash] = useState(false);
   const [res, setRes] = useState<Response | null>(null);
   const [compare, setCompare] = useState<{ strategy: BacktestStrategy; r: Response | null; error?: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +66,9 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
       useLots,
       ...(s === "custom" || (s === "buy_and_hold" && Object.keys(w).length) ? { weights: w } : {}),
       ...(s === "black_litterman" ? { blackLitterman: { marketWeights: w, views: [] } } : {}),
+      ...(s.startsWith("dividend_") || divCash
+        ? { pointInTime: pit, reinvestDividends: reinvest, paymentLagDays: lagDays, ...(s.startsWith("dividend_") ? { dividendSettings: { maxWeight: maxW } } : { dividendCashflows: true }) }
+        : {}),
     };
   };
   const call = async (s: BacktestStrategy): Promise<Response> => {
@@ -147,6 +157,25 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
           </div>
           <Toggle label="หักต้นทุนการซื้อขาย (จากหน้าตั้งค่า)" checked={useCosts} onChange={setUseCosts} />
           <Toggle label="ซื้อขายเป็น lot (ไม่ซื้อเศษหน่วย)" checked={useLots} onChange={setUseLots} />
+          {!strategy.startsWith("dividend_") && <Toggle label="รวมเงินปันผลเป็นกระแสเงินสด (จากเหตุการณ์ปันผล)" checked={divCash} onChange={setDivCash} />}
+          {(strategy.startsWith("dividend_") || divCash) && (
+            <div className="space-y-3 rounded-xl border border-border bg-panel-2/50 p-3">
+              {strategy.startsWith("dividend_") && (
+                <SelectField
+                  label="ข้อมูลงบ ณ วันตัดสินใจ"
+                  value={pit}
+                  onChange={setPit}
+                  options={[
+                    { value: "strict", label: "เข้ม (point-in-time) — ต้องมีวันเผยแพร่งบ" },
+                    { value: "illustrative_lookahead", label: "ภาพประกอบ — มี look-ahead bias" },
+                  ]}
+                />
+              )}
+              <Toggle label="นำปันผลไปลงทุนต่อ ณ วันจ่าย" checked={reinvest} onChange={setReinvest} />
+              <NumField label="สมมติวันจ่าย = XD + N วัน (เมื่อไม่ทราบวันจ่าย)" nullable value={lagDays} onChange={(v) => setLagDays(v == null ? null : Math.max(1, Math.round(v)))} hint="ว่าง = ไม่นับปันผลที่ไม่มีวันจ่าย" />
+              <p className="text-[11px] text-muted">กลยุทธ์ปันผลใช้เกณฑ์ค่าเริ่มต้นของแต่ละแบบ (แก้ได้ในหน้า “ปันผล”) · น้ำหนักสูงสุด/ตัวใช้ค่าด้านบน</p>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             <button className="btn" onClick={run} disabled={pending || included.size < 1}>
               {pending ? "กำลังทดสอบ…" : "รัน backtest"}
@@ -282,6 +311,39 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
               hint="Backtest = จำลองว่าถ้าใช้กลยุทธ์นี้ในอดีตจะได้ผลอย่างไร (มี survivorship bias และไม่รับประกันอนาคต)"
             />
           </div>
+          {res.dividends && (
+            <section className="card">
+              <CardTitle
+                title="ปันผลในการจำลอง"
+                explain={{ data: compact({ ...res.dividends, ผลตอบแทนรวม: m.cumulativeReturn }), hint: "incomeReturn = ปันผลสุทธิ ÷ เงินเริ่มต้น; priceAndOtherReturn = ส่วนที่เหลือจากราคา ดอกเบี้ยเงินสด และต้นทุน" }}
+              />
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+                <Stat k="ปันผลก่อนภาษี" v={fmtThb(res.dividends.gross)} />
+                <Stat k="ภาษีหัก ณ ที่จ่าย" v={fmtThb(res.dividends.withholding)} />
+                <Stat k="ได้รับสุทธิ" v={fmtThb(res.dividends.netReceived)} tone="text-pos" />
+                <Stat k="ค้างรับ ณ วันสุดท้าย" v={fmtThb(res.dividends.receivableAtEnd)} />
+                <Stat k="ผลตอบแทนจากปันผล" v={fmtPct(res.dividends.incomeReturn, 2)} tone="text-pos" />
+                <Stat k="ส่วนจากราคาและอื่น ๆ" v={fmtPct(res.dividends.priceAndOtherReturn, 2)} tone={signClass(res.dividends.priceAndOtherReturn)} />
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                เหตุการณ์ในช่วง {res.dividends.events} ครั้ง · มีสิทธิ์ {res.dividends.entitledEvents} ครั้ง · นำไปลงทุนต่อ {fmtThb(res.dividends.reinvested)} ·{" "}
+                {res.dividends.byYear.map((y) => `${y.year}: ${fmtThb(y.net)}`).join(" · ")}
+              </p>
+              {res.decisions && (
+                <details className="mt-2 text-xs">
+                  <summary className="cursor-pointer text-muted">การคัดเลือกแต่ละรอบ ({res.decisions.length})</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {res.decisions.map((d) => (
+                      <li key={d.date}>
+                        <span className="tabular-nums">{d.date}</span> (ข้อมูลถึง {d.cutoff}): <b>{d.selected.join(", ") || "ถือเงินสด"}</b>
+                        {d.diagnostics.length > 0 && <span className="text-muted"> · {d.diagnostics.slice(0, 4).join(" · ")}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </section>
+          )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
             <Stat k={m.annualizationApplicable ? "ผลตอบแทนต่อปี (CAGR)" : "ผลตอบแทนสะสม"} v={fmtPct(m.annualizationApplicable ? m.annualizedReturn : m.cumulativeReturn, 2)} tone={signClass(m.cumulativeReturn)} />
             <Stat k="ความผันผวน" v={fmtPct(m.volatility, 1)} />

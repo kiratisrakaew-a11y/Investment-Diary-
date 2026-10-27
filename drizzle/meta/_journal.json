@@ -78,6 +78,13 @@
       "when": 1793068277507,
       "tag": "0010_v3_risk_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793072190340,
+      "tag": "0011_strategies_dividend_events",
+      "breakpoints": true
     }
   ]
 }

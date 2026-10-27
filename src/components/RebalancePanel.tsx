@@ -12,7 +12,7 @@ type Objective = "track" | "after_cost" | "min_cost" | "min_turnover";
 type Response = RebalanceResult & { disclaimer: string; costModel: { commissionPct: number; minCommission: number; vatPct: number; slippageBps: number; sellTaxPct: number } };
 
 /** Optimizer weights → editable targets → whole-lot trade proposal (never recorded). */
-export function RebalancePanel({ suggested, extraCash }: { suggested: { symbol: string; weight: number }[]; extraCash: number }) {
+export function RebalancePanel({ suggested, extraCash, sourceLabel = "optimizer" }: { suggested: { symbol: string; weight: number }[]; extraCash: number; sourceLabel?: string }) {
   const fromOptimizer = () => Object.fromEntries(suggested.map((s) => [s.symbol, s.weight]));
   const [weights, setWeights] = useState<Record<string, number | null>>(fromOptimizer);
   const [edited, setEdited] = useState(false);
@@ -67,11 +67,11 @@ export function RebalancePanel({ suggested, extraCash }: { suggested: { symbol: 
             setEdited(false);
           }}
         >
-          ↺ ใช้น้ำหนักจาก optimizer
+          ↺ ใช้น้ำหนักจาก {sourceLabel}
         </button>
       </div>
       <p className="text-xs text-muted">
-        น้ำหนักเริ่มจากผล optimizer — แก้ได้ทุกช่อง (เป็น % ของ มูลค่าสินทรัพย์ + เงินสด + เงินเพิ่ม − เงินสำรอง) · ส่วนที่เหลือคงเป็นเงินสด · สินทรัพย์ที่ถือแต่ไม่อยู่ในตารางจะคงไว้ ·
+        น้ำหนักเริ่มจากผล {sourceLabel} — แก้ได้ทุกช่อง (เป็น % ของ มูลค่าสินทรัพย์ + เงินสด + เงินเพิ่ม − เงินสำรอง) · ส่วนที่เหลือคงเป็นเงินสด · สินทรัพย์ที่ถือแต่ไม่อยู่ในตารางจะคงไว้ ·
         ใช้ต้นทุนจากหน้าตั้งค่า
       </p>
       <div className="grid gap-4 lg:grid-cols-3">
@@ -80,7 +80,7 @@ export function RebalancePanel({ suggested, extraCash }: { suggested: { symbol: 
             <thead>
               <tr>
                 <th>สินทรัพย์</th>
-                <th className="num">optimizer</th>
+                <th className="num">{sourceLabel}</th>
                 <th className="num w-28">เป้าหมาย (%)</th>
               </tr>
             </thead>
@@ -109,7 +109,7 @@ export function RebalancePanel({ suggested, extraCash }: { suggested: { symbol: 
               </tr>
             </tbody>
           </table>
-          {edited && <p className="mt-1 text-xs text-accent">แก้น้ำหนักเองแล้ว (ไม่ตาม optimizer)</p>}
+          {edited && <p className="mt-1 text-xs text-accent">แก้น้ำหนักเองแล้ว (ไม่ตาม {sourceLabel})</p>}
         </div>
         <div className="space-y-3 lg:col-span-2">
           <div className="grid gap-3 sm:grid-cols-3">

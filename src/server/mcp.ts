@@ -6,7 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MODEL_VERSION } from "@/lib/governance";
-import { assetInput, assetProfileInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
+import { assetInput, assetProfileInput, isoDate, noteInput, priceInput, transactionInput } from "@/lib/validation";
 import { createAsset, getAssetBySymbol, listAssets, updateAssetProfile } from "./services/assets";
 import { createNote, listNotes } from "./services/notes";
 import { recordPrice } from "./services/prices";
@@ -22,6 +22,8 @@ import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
 import { recordSplit, recordSplitInput } from "./services/splits";
 import { backtestInput, backtestPortfolio } from "./services/backtest";
+import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, summarizeDividendScreen } from "./services/strategies";
+import { dividendEventInput, listDividendEvents, upsertDividendEvents } from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
@@ -212,8 +214,61 @@ export function createMcpServer() {
   );
 
   server.registerTool(
+    "screen_dividend_stocks",
+    {
+      title: "Dividend screener",
+      description:
+        "Screen the app's stocks with a dividend strategy preset: dividend_sustainable_income | dividend_growth | dividend_quality_total_return. " +
+        "Computes TTM yield (regular/total), forward yield only from a declared rate, payout (DPS/EPS), FCF payout, coverage, DPS CAGR 3/5/10, consistency, yield vs own history, quality ratios — each with status/methodology/provenance; " +
+        "filters and factor weights are editable; returns scores with factor contributions, exclusions with reasons and target weights (equal / score / existing optimizer). Uses only data known at asOf. Read-only; includeProposal adds a rebalance proposal (never recorded).",
+      inputSchema: screenDividendInput.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (x) => summarizeDividendScreen(await screenDividendStocks(x))),
+  );
+
+  server.registerTool(
+    "get_dividend_income",
+    {
+      title: "Dividend income plan",
+      description:
+        "Dividend calendar for current holdings: announced (declared, not yet paid), estimated (last year's regular dividends +12 months), received (matched to a ledger dividend transaction) and missing_confirmation (due but no receipt). " +
+        "Gross → withholding → net → THB with FX date, by month/quarter/year. Ledger receipts are the money actually received; nothing is recorded automatically.",
+      inputSchema: dividendIncomeInput.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (x) => getDividendIncome(x)),
+  );
+
+  server.registerTool(
+    "record_dividend_event",
+    {
+      title: "Record dividend event",
+      description:
+        "Store issuer dividend announcements (e.g. from a SET filing): ex-date, payment/record/declaration dates, DPS, currency, cash/stock, regular/special/indicated_annual, source. " +
+        "This is issuer data, NOT money received (use record_transaction type dividend for that). Unknown dates stay empty — never infer an ex-date from a payment date. Idempotent by source + sourceEventId; corrections keep the previous values.",
+      inputSchema: { events: z.array(dividendEventInput).min(1).max(100) },
+    },
+    safe(async ({ events }) => {
+      const r = await upsertDividendEvents(events);
+      return { inserted: r.inserted, updated: r.updated, unchanged: r.unchanged, events: r.events.map((e) => ({ id: e.id, symbol: e.symbol, exDate: e.exDate, paymentDate: e.paymentDate, dividendPerShare: e.dividendPerShare, kind: e.kind, source: e.source })) };
+    }),
+  );
+
+  server.registerTool(
+    "list_dividend_events",
+    {
+      title: "List dividend events",
+      description: "Stored issuer dividend events (from Yahoo sync or recorded announcements) with dates, DPS, kind, source and revision history.",
+      inputSchema: { symbols: z.array(z.string()).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ symbols }) => listDividendEvents(symbols)),
+  );
+
+  server.registerTool(
     "backtest_portfolio",
-    { title: "Walk-forward backtest", description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom. Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).", inputSchema: backtestInput.shape, annotations: { readOnlyHint: true } },
+    { title: "Walk-forward backtest", description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).", inputSchema: backtestInput.shape, annotations: { readOnlyHint: true } },
     safe(async (x) => summarizeBacktest(await backtestPortfolio(x))),
   );
 
@@ -387,15 +442,20 @@ export function createMcpServer() {
       title: "Save financial statements",
       description:
         "Store historical statement figures for a company, one object per fiscal year (Gregorian). Monetary values in MILLIONS of currency, sharesOutstanding in millions, EPS/DPS per share. " +
-        "Use when the user gives you statements (PDF / Excel / pasted) so they appear in the app's valuation page. Existing years are merged (given fields overwrite).",
+        "Use when the user gives you statements (PDF / Excel / pasted) so they appear in the app's valuation page. Existing years are merged (given fields overwrite). " +
+        "publishedAt = date the figures became public (annual report / SET filing) — needed for point-in-time dividend backtests; leave it out when unknown.",
       inputSchema: {
         symbol: z.string(),
         currency: z.string().optional(),
-        years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int() })),
+        years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int(), publishedAt: isoDate.optional() })),
       },
     },
     safe(async ({ symbol, currency, years }) =>
-      saveYears(symbol, years.map((y) => ({ ...emptyYear(y.fiscalYear), ...y })), { source: "claude", currency }),
+      saveYears(
+        symbol,
+        years.map(({ publishedAt: _p, ...y }) => ({ ...emptyYear(y.fiscalYear), ...y })),
+        { source: "claude", currency, publishedAt: Object.fromEntries(years.filter((y) => y.publishedAt).map((y) => [y.fiscalYear, y.publishedAt!])) },
+      ),
     ),
   );
 
