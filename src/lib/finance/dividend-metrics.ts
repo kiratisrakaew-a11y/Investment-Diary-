@@ -52,6 +52,9 @@ export interface SplitInput {
 export interface FundamentalsYear {
   fiscalYear: number;
   publishedAt?: string | null;
+  /** Reporting currency of the statement row. */
+  currency?: string | null;
+  sharesOutstanding?: number | null;
   eps?: number | null;
   dps?: number | null;
   netIncome?: number | null;

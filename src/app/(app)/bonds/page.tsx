@@ -1,3 +1,4 @@
+import { BondLadderPanel } from "@/components/BondLadderPanel";
 import Link from "next/link";
 import { bondHoldings } from "@/server/services/bonds";
 import { BondCalculator } from "@/components/BondCalculator";
@@ -160,6 +161,9 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
           cleanPrice: sp.price ? Number(sp.price) : undefined,
         }}
       />
+      <Section title="บันไดพันธบัตร (Bond ladder)" subtitle="แบ่งเงินให้ครบกำหนดทยอยทุกปี · ใช้ engine ราคาและเครดิตเดิม · เป็นสถานการณ์ล่วงหน้า ไม่ใช่ผลในอดีต">
+        <BondLadderPanel />
+      </Section>
     </>
   );
 }

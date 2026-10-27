@@ -20,6 +20,7 @@ import {
   type StrategySettingsInput,
 } from "@/lib/finance/dividend-strategies";
 import { dividendIncomePlan } from "@/lib/finance/dividend-income";
+import { FACTOR_STRATEGY_IDS, screenFactorStrategy, type FactorInput, type FactorSettingsInput } from "@/lib/finance/factor-strategies";
 import { listAssets } from "./assets";
 import { loadFxHistory, loadPriceHistory } from "./prices";
 import { getPortfolioSummary, holdingsAt } from "./portfolio";
@@ -98,7 +99,7 @@ export async function loadDividendData(): Promise<DividendData> {
   const statements = new Map<string, FundamentalsYear[]>();
   for (const r of st) {
     const list = statements.get(r.symbol) ?? [];
-    list.push({ ...(r.data as Record<string, number | null>), fiscalYear: r.fiscalYear, publishedAt: r.publishedAt });
+    list.push({ ...(r.data as Record<string, number | null>), fiscalYear: r.fiscalYear, publishedAt: r.publishedAt, currency: r.currency });
     statements.set(r.symbol, list);
   }
   return {
@@ -123,6 +124,21 @@ const priceOn = (series: [string, number][] | undefined, d: string) => {
   return v;
 };
 
+/**
+ * Valuations usable only if saved (created) by the cutoff: latest per method, median across methods
+ * (same convention as the stock valuation page; robust to one outlier method).
+ */
+export function valuationMedianAsOf(data: DividendData, sym: string, cutoff: string): number | null {
+  const latest = new Map<string, { createdTs: number; intrinsicValue: number }>();
+  for (const v of data.valuations) {
+    if (v.symbol !== sym || v.createdAt > cutoff) continue;
+    const cur = latest.get(v.method);
+    if (!cur || v.createdTs > cur.createdTs) latest.set(v.method, v);
+  }
+  const iv = [...latest.values()].map((v) => v.intrinsicValue).sort((p, q) => p - q);
+  return iv.length ? (iv.length % 2 ? iv[(iv.length - 1) / 2] : (iv[iv.length / 2 - 1] + iv[iv.length / 2]) / 2) : null;
+}
+
 /** Candidates as of a cutoff using only data known then (events by ex/announcement date, statements by publication). */
 export function candidatesAsOf(data: DividendData, symbols: string[], cutoff: string, mode: PitMode, includeSpecial: boolean): Candidate[] {
   return symbols.map((sym) => {
@@ -131,16 +147,7 @@ export function candidatesAsOf(data: DividendData, symbols: string[], cutoff: st
     const price = priceOn(series, cutoff);
     const statements = statementsKnownBy(data.statements.get(sym) ?? [], cutoff, mode);
     const events = eventsKnownBy(data.events.get(sym) ?? [], cutoff);
-    // Valuations usable only if saved (created) by the cutoff: latest per method, median across methods
-    // (same convention as the stock valuation page; robust to one outlier method).
-    const latest = new Map<string, { createdTs: number; intrinsicValue: number }>();
-    for (const v of data.valuations) {
-      if (v.symbol !== sym || v.createdAt > cutoff) continue;
-      const cur = latest.get(v.method);
-      if (!cur || v.createdTs > cur.createdTs) latest.set(v.method, v);
-    }
-    const iv = [...latest.values()].map((v) => v.intrinsicValue).sort((p, q) => p - q);
-    const median = iv.length ? (iv.length % 2 ? iv[(iv.length - 1) / 2] : (iv[iv.length / 2 - 1] + iv[iv.length / 2]) / 2) : null;
+    const median = valuationMedianAsOf(data, sym, cutoff);
     return {
       symbol: sym,
       issuer: a.issuer,
@@ -323,5 +330,80 @@ export function summarizeDividendScreen(r: Awaited<ReturnType<typeof screenDivid
     proposal: r.proposal,
     limitations: r.limitations,
     disclaimer: r.disclaimer,
+  };
+}
+
+
+// ------------------------------------------------------------------ factor strategies (Phase 3)
+
+export function factorInputsAsOf(data: DividendData, symbols: string[], cutoff: string, mode: PitMode): FactorInput[] {
+  return symbols.map((sym) => {
+    const a = data.assets.find((x) => x.symbol === sym)!;
+    return {
+      symbol: sym,
+      issuer: a.issuer,
+      sector: a.sector,
+      currency: a.currency,
+      prices: data.prices.get(a.id)?.filter(([d]) => d <= cutoff) ?? [],
+      statements: statementsKnownBy(data.statements.get(sym) ?? [], cutoff, mode),
+      events: eventsKnownBy(data.events.get(sym) ?? [], cutoff),
+      splits: data.splits[sym] ?? [],
+      valuationMedian: valuationMedianAsOf(data, sym, cutoff),
+    };
+  });
+}
+
+const familyWeightsInput = z.object({ value: z.number().min(0).max(1), quality: z.number().min(0).max(1), momentum: z.number().min(0).max(1), dividend: z.number().min(0).max(1) });
+export const factorSettingsOverride = z
+  .object({
+    familyWeights: familyWeightsInput.optional().describe("multi_factor weights (value / quality / momentum / dividend)"),
+    sectorNeutral: z.boolean().optional(),
+    volScaledMomentum: z.boolean().optional(),
+    minCoverage: z.number().min(0).max(1).optional(),
+    topN: z.number().int().min(1).max(50).optional(),
+    holdBuffer: z.number().int().min(0).max(20).optional(),
+    weighting: z.enum(["equal", "score"]).optional(),
+    maxWeight: z.number().gt(0).max(1).optional(),
+    maxPerIssuer: z.number().gt(0).max(1).nullable().optional(),
+    maxPerSector: z.number().gt(0).max(1).nullable().optional(),
+    cashReserve: z.number().min(0).max(0.9).optional(),
+  })
+  .describe("Factor strategy settings (all optional)");
+
+export const screenFactorInput = z.object({
+  strategy: z.enum(FACTOR_STRATEGY_IDS).default("multi_factor"),
+  asOf: isoDate.optional().describe("Decision date (default today); only data known by then is used"),
+  symbols: z.array(z.string()).max(60).optional().describe("Universe (default: every stock / fund in the app)"),
+  settings: factorSettingsOverride.optional(),
+  pointInTime: z.enum(["strict", "illustrative_lookahead"]).default("strict"),
+  compareStandalone: z.boolean().default(true).describe("multi_factor: also return each standalone factor's top picks"),
+});
+
+/** Value / quality / momentum / multi-factor screen. Read-only. */
+export async function screenFactorStocks(input: z.input<typeof screenFactorInput> = {}) {
+  const x = screenFactorInput.parse(input);
+  const asOf = x.asOf ?? today();
+  const data = await loadDividendData();
+  const symbols = dividendUniverse(data, x.symbols);
+  const inputs = factorInputsAsOf(data, symbols, asOf, x.pointInTime);
+  const settings = (x.settings ?? {}) as Partial<FactorSettingsInput>;
+  const decision = screenFactorStrategy({ strategyId: x.strategy, asOf, inputs, settings });
+  const standalone =
+    x.strategy === "multi_factor" && x.compareStandalone
+      ? Object.fromEntries((["value", "quality", "momentum"] as const).map((id) => {
+          const d = screenFactorStrategy({ strategyId: id, asOf, inputs, settings });
+          return [id, { selected: d.selected, scores: d.scores, excluded: d.excluded.length }];
+        }))
+      : null;
+  return {
+    ...decision,
+    pointInTime: x.pointInTime,
+    standalone,
+    limitations: [
+      "จักรวาลคือสินทรัพย์ในแอป (survivorship bias) · ไม่มีข้อมูลปริมาณการซื้อขาย",
+      "Value ใช้ valuation ที่บันทึกไว้ก่อนวันอ้างอิงเท่านั้น — วันที่ในอดีตจึงมักไม่มี margin of safety",
+      "งบที่ไม่มีวันเผยแพร่ใช้ไม่ได้ในโหมดเข้ม",
+    ],
+    disclaimer: "คะแนนเป็นสัญญาณเชิงปริมาณที่ปรับได้ ไม่ใช่คำแนะนำการลงทุน",
   };
 }

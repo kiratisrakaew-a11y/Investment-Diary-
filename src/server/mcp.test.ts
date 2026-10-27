@@ -19,6 +19,8 @@ describe("MCP build info", () => {
     expect(names).toContain("get_dividend_income");
     expect(names).toContain("record_dividend_event");
     expect(names).toContain("list_dividend_events");
+    expect(names).toContain("screen_factor_stocks");
+    expect(names).toContain("plan_bond_ladder");
   });
   it("version carries the formula version and commit", () => {
     expect(serverVersion().startsWith(MODEL_VERSION)).toBe(true);

@@ -14,12 +14,12 @@ import { getAllocation, getPerformance, getPortfolioSummary } from "./services/p
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
-import { bondHoldings } from "./services/bonds";
+import { bondHoldings, bondLadderInput, planBondLadder } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
 import { recordSplit, recordSplitInput } from "./services/splits";
 import { backtestInput, backtestPortfolio } from "./services/backtest";
-import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, summarizeDividendScreen } from "./services/strategies";
+import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, screenFactorInput, screenFactorStocks, summarizeDividendScreen } from "./services/strategies";
 import { dividendEventInput, upsertDividendEvents } from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
@@ -104,6 +104,18 @@ function tools() {
       run: async (x) => json(summarizeDividendScreen(await screenDividendStocks(x))),
     }),
     betaZodTool({
+      name: "screen_factor_stocks",
+      description: "Factor screen: value (earnings yield, book/price, margin of safety from valuations saved by asOf) | quality (ROE, CFO/NI, net debt/EBITDA, FCF stability, sector rules) | momentum (12–1 month, optional ÷ volatility) | multi_factor (adjustable family weights, compared with standalone factors). Absolute or sector-neutral percentile ranks, factor_data_coverage, exclusions, target weights. Data known at asOf only. Read-only.",
+      inputSchema: screenFactorInput,
+      run: async (x) => json(await screenFactorStocks(x)),
+    }),
+    betaZodTool({
+      name: "plan_bond_ladder",
+      description: "Bond ladder plan from the app's bond assets: yearly rungs, equal budget per rung, issuer cap, credit filters, whole units at dirty price; coupon vs principal cashflows by year, XIRR, duration, DV01, optional reinvestment scenario. Forward scenario only; proposal only.",
+      inputSchema: bondLadderInput,
+      run: async (x) => json(await planBondLadder(x)),
+    }),
+    betaZodTool({
       name: "get_dividend_income",
       description: "Dividend calendar for holdings: announced / estimated / received (ledger) / missing_confirmation, gross → withholding → net → THB, by month/quarter/year. Never records receipts.",
       inputSchema: dividendIncomeInput,
@@ -120,7 +132,7 @@ function tools() {
     }),
     betaZodTool({
       name: "backtest_portfolio",
-      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend cash on payment dates; refuses NOT_BACKTESTABLE_NO_ASOF_DATA without statement publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
+      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend cash on payment dates; refuses NOT_BACKTESTABLE_NO_ASOF_DATA without statement publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
       inputSchema: backtestInput,
       run: async (x) => json(summarizeBacktest(await backtestPortfolio(x))),
     }),

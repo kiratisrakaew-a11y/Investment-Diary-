@@ -3,7 +3,8 @@ import { asOf, asOfEntry } from "@/lib/finance/portfolio";
 import { assertSingleDividendTreatment, backtest, type DecisionProvider, type DividendCashflows } from "@/lib/finance/backtest";
 import { DIVIDEND_STRATEGY_IDS, backtestReadiness, resolveSettings, screenDividendStrategy, type DividendStrategyId, type StrategySettingsInput } from "@/lib/finance/dividend-strategies";
 import { dpsLatestBasis } from "@/lib/finance/dividend-metrics";
-import { candidatesAsOf, loadDividendData, strategySettingsOverride } from "./strategies";
+import { candidatesAsOf, factorInputsAsOf, factorSettingsOverride, loadDividendData, strategySettingsOverride } from "./strategies";
+import { FACTOR_STRATEGY_IDS, factorNeedsStatements, factorSettingsSchema, screenFactorStrategy, type FactorSettingsInput, type FactorStrategyId } from "@/lib/finance/factor-strategies";
 import { lotFor, tradingCostsSchema } from "@/lib/finance/rebalance";
 import { blackLittermanInput } from "../optimize-schema";
 import { listAssets } from "./assets";
@@ -13,7 +14,7 @@ import { getSettings, getTradingCosts } from "./settings";
 
 export const backtestInput = z
   .object({
-    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom", "risk_parity", "max_diversification", "min_cvar", ...DIVIDEND_STRATEGY_IDS]).describe("Strategy to test; dividend_* select by dividend metrics known at each decision date"),
+    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom", "risk_parity", "max_diversification", "min_cvar", ...DIVIDEND_STRATEGY_IDS, ...FACTOR_STRATEGY_IDS]).describe("Strategy to test; dividend_* select by dividend metrics known at each decision date"),
     symbols: z.array(z.string()).max(30).optional().describe("Universe (default: every non-cash asset with prices)"),
     startDate: z.string().optional().describe("First date of data (YYYY-MM-DD); default = when all chosen assets have prices"),
     endDate: z.string().optional(),
@@ -33,6 +34,7 @@ export const backtestInput = z
       .enum(["price_return", "total_return"])
       .default("price_return")
       .describe("price_return = closes (dividends excluded); total_return = provider dividend-adjusted closes (dividends reinvested), requires full adj_close coverage"),
+    factorSettings: factorSettingsOverride.optional().describe("value / quality / momentum / multi_factor settings"),
     dividendSettings: strategySettingsOverride.optional().describe("dividend_* strategies: overrides on the preset (optimizer weighting is not available in backtests)"),
     pointInTime: z
       .enum(["strict", "illustrative_lookahead"])
@@ -133,6 +135,34 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   }
 
   let decisionProvider: DecisionProvider | undefined;
+  const isFactor = (FACTOR_STRATEGY_IDS as readonly string[]).includes(x.strategy);
+  const factorWarnings: string[] = [];
+  if (isFactor) {
+    const data = await loadDividendData();
+    const fo = (x.factorSettings ?? {}) as Partial<FactorSettingsInput>;
+    const fs = factorSettingsSchema.parse(fo);
+    if (factorNeedsStatements(x.strategy as FactorStrategyId, fs)) {
+      const st = symbols.map((s) => data.statements.get(s) ?? []);
+      const anyPit = st.some((ys) => ys.some((y) => y.publishedAt != null));
+      const anyRows = st.some((ys) => ys.length > 0);
+      if (x.pointInTime === "strict" && anyRows && !anyPit) {
+        throw new Error("NOT_BACKTESTABLE_NO_ASOF_DATA: กลยุทธ์นี้ใช้งบการเงิน แต่งบไม่มีวันเผยแพร่ (published_at) — ใช้ได้แค่คัดกรองปัจจุบัน, momentum, หรือโหมดภาพประกอบที่มี look-ahead bias");
+      }
+      if (x.pointInTime !== "strict") factorWarnings.push("โหมดภาพประกอบ (look-ahead bias): ใช้งบที่ไม่มีวันเผยแพร่โดยถือว่างบปีก่อนรู้แล้ว");
+      if (!anyRows) factorWarnings.push("ไม่มีงบการเงิน — ส่วน value/quality ใช้ไม่ได้ (คัดออกเพราะข้อมูลไม่พอ)");
+    }
+    let previous: string[] = [];
+    decisionProvider = ({ cutoff }) => {
+      const d = screenFactorStrategy({ strategyId: x.strategy as FactorStrategyId, asOf: cutoff, inputs: factorInputsAsOf(data, symbols, cutoff, x.pointInTime), settings: fo, previous });
+      previous = d.selected;
+      return {
+        w: symbols.map((s) => d.targetWeights[s] ?? 0),
+        selected: d.selected,
+        diagnostics: [...d.diagnostics, ...d.excluded.map((e) => `${e.symbol}: ${e.code}`)],
+        note: d.selected.length ? undefined : "ไม่มีหุ้นที่มีข้อมูลพอ ณ วันตัดสินใจ — ถือเงินสด",
+      };
+    };
+  }
   let dividendCashflows: DividendCashflows | undefined;
   const pitWarnings: string[] = [];
   if (withCash) {
@@ -240,6 +270,8 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
           ]
         : []),
       ...pitWarnings,
+      ...factorWarnings,
+      ...(isFactor ? ["สัญญาณปัจจัยใช้ข้อมูลที่รู้ ณ วันก่อนซื้อขายเท่านั้น · valuation ที่บันทึกภายหลังไม่ถูกใช้ย้อนหลัง · ผลเป็นการจำลอง"] : []),
       `ปฏิทินร่วม: ใช้เฉพาะวันที่ทุกสินทรัพย์มีราคา (${dates.length} วัน)${excluded.length ? ` · ไม่รวม ${excluded.map((e) => e.symbol).join(", ")}` : ""}`,
       "ผลในอดีตไม่รับประกันผลในอนาคต",
     ],

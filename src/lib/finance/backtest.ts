@@ -18,8 +18,9 @@ import { mean } from "./stats";
 import { computeMetrics, type PerformanceMetrics } from "./metrics";
 import { alignWithBenchmark } from "./return-series";
 import type { DividendStrategyId } from "./dividend-strategies";
+import { FACTOR_STRATEGY_IDS, type FactorStrategyId } from "./factor-strategies";
 
-export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom" | DividendStrategyId | RiskObjective;
+export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom" | DividendStrategyId | RiskObjective | FactorStrategyId;
 
 /** Target weights chosen by an external strategy using only data known at `cutoff` (the close before the trade date). */
 export type DecisionProvider = (ctx: { t: number; cutoff: string; tradeDate: string }) => { w: number[]; note?: string; selected?: string[]; diagnostics?: string[] } | { error: string };
@@ -114,8 +115,8 @@ export function backtest(x: BacktestInput): BacktestResult {
   if (n < 1) return fail("ต้องมีอย่างน้อย 1 สินทรัพย์");
   if (x.prices.some((p) => p.length !== T || p.some((v) => !(v > 0)))) return fail("ราคาไม่ครบหรือไม่ถูกต้องในบางวัน");
   const provider = x.decisionProvider;
-  const isProviderStrategy = x.strategy.startsWith("dividend_");
-  if (isProviderStrategy && !provider) return fail("กลยุทธ์ปันผลต้องมี decisionProvider");
+  const isProviderStrategy = x.strategy.startsWith("dividend_") || (FACTOR_STRATEGY_IDS as readonly string[]).includes(x.strategy);
+  if (isProviderStrategy && !provider) return fail("กลยุทธ์ปันผล/ปัจจัยต้องมี decisionProvider");
   const needsWindow = !isProviderStrategy && !["buy_and_hold", "equal_weight", "custom"].includes(x.strategy);
   // First trading index: the window needs `window` returns ending at price index start − 1.
   // Provider strategies decide at t with data up to t − 1, so they start at index 1.
@@ -370,7 +371,7 @@ export function backtest(x: BacktestInput): BacktestResult {
     metrics,
     methodology: [
       isProviderStrategy
-        ? `ปันผล (${x.strategy}): ณ วันปรับพอร์ต t คัดเลือกด้วยข้อมูลที่รู้ ณ สิ้นวัน t − 1 เท่านั้น (เหตุการณ์ปันผลที่ ex-date ผ่านแล้วหรือประกาศแล้ว, งบที่เผยแพร่แล้ว, ราคาถึง t − 1) → ซื้อขายที่ราคาปิดวัน t`
+        ? `${x.strategy.startsWith("dividend_") ? "ปันผล" : "ปัจจัย"} (${x.strategy}): ณ วันปรับพอร์ต t คัดเลือกด้วยข้อมูลที่รู้ ณ สิ้นวัน t − 1 เท่านั้น (เหตุการณ์ปันผลที่ ex-date ผ่านแล้วหรือประกาศแล้ว, งบที่เผยแพร่แล้ว, ราคาถึง t − 1) → ซื้อขายที่ราคาปิดวัน t`
         : needsWindow
         ? `Walk-forward: ณ วันปรับพอร์ต t ใช้ผลตอบแทน ${x.window} งวดล่าสุดที่จบก่อนวัน t (ไม่มีข้อมูลอนาคต) → ประมาณ μ (${x.returnMethod}${x.strategy === "black_litterman" ? " → Black–Litterman" : ""}) และ Σ (${x.covMethod}) → optimizer เดิม (QP) → ซื้อขายที่ราคาปิดวัน t`
         : x.strategy === "buy_and_hold"

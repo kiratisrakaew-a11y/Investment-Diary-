@@ -337,3 +337,34 @@ export function IncomeChart({ data }: { data: { period: string; received: number
     </ResponsiveContainer>
   );
 }
+
+/** Yearly ladder cashflows: coupons vs principal returned (THB). */
+export function LadderCashflowChart({ data }: { data: { year: string; coupon: number; principal: number }[] }) {
+  const id = useId();
+  const series = [
+    { key: "coupon", name: "ดอกเบี้ย (คูปอง)", color: "var(--series-3)" },
+    { key: "principal", name: "เงินต้นครบกำหนด", color: "var(--series-1)" },
+  ];
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          {series.map((sr) => (
+            <linearGradient key={sr.key} id={gid(id, sr.key)} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={sr.color} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={sr.color} stopOpacity={0.45} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="year" {...axis} />
+        <YAxis {...axis} tickFormatter={compactThb} width={48} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtThb(Number(v)), n]} cursor={{ fill: "var(--panel-2)" }} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {series.map((sr) => (
+          <Bar key={sr.key} dataKey={sr.key} name={sr.name} stackId="c" fill={`url(#${gid(id, sr.key)})`} isAnimationActive={false} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

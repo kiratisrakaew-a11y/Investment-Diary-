@@ -23,6 +23,10 @@ const STRATEGIES: { value: BacktestStrategy; label: string }[] = [
   { value: "risk_parity", label: "Risk parity (ความเสี่ยงเท่ากัน)" },
   { value: "max_diversification", label: "Maximum diversification" },
   { value: "min_cvar", label: "Minimum CVaR 95%" },
+  { value: "momentum", label: "ปัจจัย: Momentum 12–1" },
+  { value: "value", label: "ปัจจัย: Value" },
+  { value: "quality", label: "ปัจจัย: Quality" },
+  { value: "multi_factor", label: "ปัจจัย: Multi-factor" },
   { value: "dividend_sustainable_income", label: "ปันผล: รายได้ที่ยั่งยืน" },
   { value: "dividend_growth", label: "ปันผล: ปันผลเติบโต" },
   { value: "dividend_quality_total_return", label: "ปันผล: คุณภาพ + ผลตอบแทนรวม" },
@@ -69,6 +73,7 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
       useLots,
       ...(s === "custom" || (s === "buy_and_hold" && Object.keys(w).length) ? { weights: w } : {}),
       ...(s === "black_litterman" ? { blackLitterman: { marketWeights: w, views: [] } } : {}),
+      ...(["value", "quality", "momentum", "multi_factor"].includes(s) ? { pointInTime: pit, factorSettings: { maxWeight: maxW } } : {}),
       ...(s.startsWith("dividend_") || divCash
         ? { pointInTime: pit, reinvestDividends: reinvest, paymentLagDays: lagDays, ...(s.startsWith("dividend_") ? { dividendSettings: { maxWeight: maxW } } : { dividendCashflows: true }) }
         : {}),
@@ -161,6 +166,17 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
           <Toggle label="หักต้นทุนการซื้อขาย (จากหน้าตั้งค่า)" checked={useCosts} onChange={setUseCosts} />
           <Toggle label="ซื้อขายเป็น lot (ไม่ซื้อเศษหน่วย)" checked={useLots} onChange={setUseLots} />
           {!strategy.startsWith("dividend_") && <Toggle label="รวมเงินปันผลเป็นกระแสเงินสด (จากเหตุการณ์ปันผล)" checked={divCash} onChange={setDivCash} />}
+          {["value", "quality", "momentum", "multi_factor"].includes(strategy) && (
+            <SelectField
+              label="ข้อมูลงบ ณ วันตัดสินใจ (value / quality)"
+              value={pit}
+              onChange={setPit}
+              options={[
+                { value: "strict", label: "เข้ม (point-in-time) — ต้องมีวันเผยแพร่งบ" },
+                { value: "illustrative_lookahead", label: "ภาพประกอบ — มี look-ahead bias" },
+              ]}
+            />
+          )}
           {(strategy.startsWith("dividend_") || divCash) && (
             <div className="space-y-3 rounded-xl border border-border bg-panel-2/50 p-3">
               {strategy.startsWith("dividend_") && (

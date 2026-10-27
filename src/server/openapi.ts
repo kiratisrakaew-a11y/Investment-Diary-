@@ -7,8 +7,9 @@ import { financialYearSchema } from "@/lib/financials";
 import { importPricesInput, syncHistoricalPricesInput } from "./services/price-sync";
 import { rebalanceInput } from "./services/rebalance";
 import { stressInput } from "./services/stress";
-import { dividendIncomeInput, screenDividendInput } from "./services/strategies";
+import { dividendIncomeInput, screenDividendInput, screenFactorInput } from "./services/strategies";
 import { dividendEventInput } from "./services/dividends";
+import { bondLadderInput } from "./services/bonds";
 import { recordSplitInput } from "./services/splits";
 import { backtestInput } from "./services/backtest";
 
@@ -268,6 +269,17 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Strategy decision with metric profiles (status, methodology, provenance)") },
         },
       },
+      "/api/v1/bonds/ladder": {
+        post: { operationId: "planBondLadder", summary: "Bond ladder plan: rungs, holdings, coupon vs principal cashflows, XIRR, duration, DV01", requestBody: body("BondLadderInput"), responses: { "200": ok("Ladder plan (proposal only)") } },
+      },
+      "/api/v1/strategies/factors": {
+        post: {
+          operationId: "screenFactorStocks",
+          summary: "Factor screen: value / quality / momentum / multi-factor with coverage report and exclusions",
+          requestBody: body("ScreenFactorInput"),
+          responses: { "200": ok("Ranked candidates, family scores, target weights") },
+        },
+      },
       "/api/v1/dividends/income": {
         post: {
           operationId: "getDividendIncome",
@@ -334,6 +346,8 @@ export function buildOpenApi(origin: string) {
         YieldCurve: schema(yieldCurveInput),
         BacktestInput: schema(backtestInput),
         ScreenDividendInput: schema(screenDividendInput),
+        ScreenFactorInput: schema(screenFactorInput),
+        BondLadderInput: schema(bondLadderInput),
         DividendIncomeInput: schema(dividendIncomeInput),
         DividendEvents: schema(z.object({ events: z.array(dividendEventInput) })),
       },
