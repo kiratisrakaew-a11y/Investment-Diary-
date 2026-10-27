@@ -24,6 +24,8 @@ import { NumField, SelectField } from "./fields";
 import { fmtNum, fmtPct } from "@/lib/format";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
+import { valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
+import { BondScenarios } from "./BondScenarios";
 
 export interface BondCalcInit {
   maturity?: string;
@@ -95,6 +97,19 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
     } catch (e) {
       return { error: (e as Error).message };
     }
+  }, [r, horizonDate, reinvest, exitYield]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Same inputs as a `bond` valuation, for the scenario engine (bought at today's clean price).
+  const scenarioBase = useMemo((): ValuationInput | null => {
+    if (!r.ok) return null;
+    const parsed = valuationInput.safeParse({
+      method: "bond",
+      assumptions: {
+        ...spec,
+        cleanPrice: r.a.cleanPrice,
+        ...(horizonDate ? { horizon: { date: horizonDate, reinvestRate: reinvest, ...(exitYield != null ? { exitYield } : {}) } } : {}),
+      },
+    });
+    return parsed.success ? parsed.data : null;
   }, [r, horizonDate, reinvest, exitYield]); // eslint-disable-line react-hooks/exhaustive-deps
   const curveRes = useMemo(() => {
     if (!r.ok) return null;
@@ -379,10 +394,16 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
             {horizon && !("error" in horizon) && (
               <div>
                 <Row k="เงินลงทุน (dirty)" v={fmtNum(horizon.initialDirty, 3)} />
-                <Row k="คูปอง + ดอกเบี้ยจากการลงทุนต่อ" v={fmtNum(horizon.couponsAndReinvestment, 3)} />
+                <Row k="คูปองที่ได้รับ" v={fmtNum(horizon.couponIncome, 3)} />
+                <Row k="ดอกเบี้ยจากการนำคูปองไปลงทุนต่อ" v={fmtNum(horizon.reinvestmentIncome, 3)} />
+                {horizon.principalReceived > 0 && <Row k="เงินต้นที่ได้คืนระหว่างทาง" v={fmtNum(horizon.principalReceived, 3)} />}
                 <Row k={`ราคาขาย (dirty, yield ${fmtPct(horizon.exitYield, 2)})`} v={fmtNum(horizon.salePrice, 3)} />
+                <Row k="กำไร/ขาดทุนจากราคา (ขาย + เงินต้นคืน − ซื้อ)" v={fmtNum(horizon.priceReturn, 3)} />
                 <Row k="ผลตอบแทนรวม" v={fmtPct(horizon.totalReturn, 2)} />
-                <Row k="ผลตอบแทนต่อปี (เทียบกับ YTM)" v={fmtPct(horizon.annualizedReturn, 3)} strong />
+                <Row k="ผลตอบแทนต่อปี (ทบตามงวดคูปอง เทียบกับ YTM ได้)" v={fmtPct(horizon.annualizedReturn, 3)} strong />
+                <p className="mt-2 text-[11px] text-muted">
+                  YTM {r.ok ? fmtPct(r.a.ytm, 3) : "–"} คือผลตอบแทนถ้าถือจนครบกำหนดและนำคูปองไปลงทุนต่อที่ YTM เท่านั้น — ผลตอบแทนจริงเมื่อขายก่อนครบกำหนดขึ้นกับ yield ตอนขายและอัตราลงทุนต่อ จึงไม่รับประกัน
+                </p>
               </div>
             )}
             {!horizonDate && <p className="text-xs text-muted">ใส่วันที่ขายเพื่อดูผลตอบแทนจริงซึ่งขึ้นกับ yield ตอนขายและอัตราที่นำคูปองไปลงทุนต่อ</p>}
@@ -411,6 +432,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
           </section>
         </div>
       )}
+      {r.ok && <BondScenarios base={scenarioBase} ytm={r.a.ytm} reinvest={reinvest} horizonDate={horizonDate} />}
 
       <section className="card">
         <h2 className="mb-3 font-semibold">ตั๋วเงินคลัง / พันธบัตรระยะสั้นแบบส่วนลด</h2>

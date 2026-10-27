@@ -449,10 +449,21 @@ export function horizonReturn(b: BondSpec, cleanPrice: number, opts: { horizonDa
   const sale = opts.horizonDate < b.maturity ? analyticsFromYield({ ...b, settlement: opts.horizonDate }, exitYield).dirtyPrice : 0;
   const initial = cleanPrice + sch.accrued;
   const fv = reinvested + sale;
+  // Decomposition (sums to futureValue − initialDirty): coupons received, interest earned by
+  // reinvesting them (and any principal repaid) to the horizon, and the change in capital value.
+  const couponIncome = received.reduce((acc, cf) => acc + cf.coupon, 0);
+  const principalReceived = received.reduce((acc, cf) => acc + cf.principal, 0);
+  const reinvestmentIncome = reinvested - couponIncome - principalReceived;
+  const priceReturn = sale + principalReceived - initial;
   return {
     initialDirty: initial,
     futureValue: fv,
     couponsAndReinvestment: reinvested,
+    couponIncome,
+    reinvestmentIncome,
+    principalReceived,
+    /** Sale (dirty) + principal repaid − purchase (dirty): includes the accrued interest bought and sold. */
+    priceReturn,
     salePrice: sale,
     exitYield,
     totalReturn: fv / initial - 1,
