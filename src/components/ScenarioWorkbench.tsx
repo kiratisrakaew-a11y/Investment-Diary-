@@ -10,7 +10,7 @@ import clsx from "clsx";
 import type { ValuationInput } from "@/lib/valuation-schemas";
 import { presetScenarios, proposeNormalised, runScenarios, SCENARIO_PATHS, segmentKey, VIRTUAL_DRIVERS, type ScenarioSummary } from "@/lib/valuation-scenarios";
 import { defaultReverse, defaultSensitivity, reverseSolve, sensitivityGrid, type ReverseResult, type SensitivityResult } from "@/lib/valuation-analytics";
-import { defaultMonteCarloVariable, type MonteCarloResult } from "@/lib/valuation-montecarlo";
+import { appendCorrelationIndex, checkCorrelation, defaultMonteCarloVariable, identityCorrelation, removeCorrelationIndex, setCorrelationPair, type MonteCarloResult } from "@/lib/valuation-montecarlo";
 import type { DistributionSpec, MonteCarloConfig, ReverseConfig, ScenarioSet, SensitivityConfig, ValuationScenario } from "@/lib/valuation-scenario-schema";
 import { generateScenarioNoteTh, inputHash, lineDiff } from "@/lib/valuation-notes-th";
 import { hasScenarios } from "@/lib/valuation-analyze";
@@ -597,7 +597,10 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
       </div>
     );
   const vars = cfg.variables;
-  const setVar = (i: number, v: MonteCarloConfig["variables"][number]) => setCfg({ variables: vars.map((x, j) => (j === i ? v : x)), correlation: undefined });
+  // Editing a variable keeps the correlation matrix (same row); add / remove resizes it without touching other pairs.
+  const setVar = (i: number, v: MonteCarloConfig["variables"][number]) => setCfg({ variables: vars.map((x, j) => (j === i ? v : x)) });
+  const corrCheck = cfg.correlation ? checkCorrelation(cfg.correlation, vars.length) : null;
+  const corrBlocked = !!corrCheck && (corrCheck.errors.length > 0 || !corrCheck.psd);
   return (
     <div className="space-y-3 text-xs">
       <div className="flex flex-wrap items-end gap-2">
@@ -609,7 +612,7 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
           <span className="label">จำนวนรอบ (≤ 10,000)</span>
           <input className="input w-24 py-0.5" defaultValue={cfg.draws} onBlur={(e) => setCfg({ draws: Math.min(10_000, Math.max(100, Math.floor(Number(e.target.value) || 2000))) })} />
         </label>
-        <button type="button" className="btn-ghost text-xs" disabled={pending || !vars.length} onClick={() => start(async () => {
+        <button type="button" className="btn-ghost text-xs" disabled={pending || !vars.length || corrBlocked} title={corrBlocked ? "แก้ correlation ให้ถูกต้องก่อน" : undefined} onClick={() => start(async () => {
           const r = await analyzeValuationAction({ valuation: input, monteCarlo: cfg });
           setRes(r.ok ? r.result.monteCarlo : { error: r.error });
         })}>
@@ -642,7 +645,7 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
             </select>
           </label>
           <DistFields d={v.dist} onChange={(dist) => setVar(i, { ...v, dist })} />
-          <button type="button" aria-label="ลบตัวแปร" className="text-muted hover:text-neg" onClick={() => setCfg({ variables: vars.filter((_, j) => j !== i), correlation: undefined })}>
+          <button type="button" aria-label="ลบตัวแปร" className="text-muted hover:text-neg" onClick={() => setCfg({ variables: vars.filter((_, j) => j !== i), correlation: removeCorrelationIndex(cfg.correlation, i) })}>
             ×
           </button>
         </div>
@@ -653,13 +656,151 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
         ))}
       </datalist>
       {vars.length < 8 && (
-        <button type="button" className="btn-ghost text-xs" onClick={() => setCfg({ variables: [...vars, { path: "", mode: "absolute", dist: DEFAULT_DIST.uniform }], correlation: undefined })}>
+        <button type="button" className="btn-ghost text-xs" onClick={() => setCfg({ variables: [...vars, { path: "", mode: "absolute", dist: DEFAULT_DIST.uniform }], correlation: appendCorrelationIndex(cfg.correlation) })}>
           + ตัวแปร
         </button>
       )}
-      <p className="text-[11px] text-muted">ตัวแปร *Shift (growthShift, roeShift, yieldShiftBp) เป็นส่วนเพิ่มอยู่แล้ว · “± จากฐาน” = บวกค่าที่สุ่มเข้ากับค่าเดิม · ไม่ได้ตั้ง correlation = สุ่มอิสระ (ตั้งผ่าน API/MCP ได้)</p>
+      <p className="text-[11px] text-muted">ตัวแปร *Shift (growthShift, roeShift, yieldShiftBp) เป็นส่วนเพิ่มอยู่แล้ว · “± จากฐาน” = บวกค่าที่สุ่มเข้ากับค่าเดิม</p>
+      <CorrelationEditor
+        paths={vars.map((v) => v.path || "(ยังไม่ระบุ)")}
+        value={cfg.correlation}
+        check={corrCheck}
+        onChange={(correlation) => setCfg({ correlation })}
+      />
       {res && ("error" in res ? <p className="text-neg">{res.error}</p> : <McResult r={res} />)}
     </div>
+  );
+}
+
+/**
+ * Dependence between Monte Carlo variables: independent, or a manual correlation matrix (Gaussian
+ * copula). Upper-triangle edits are mirrored; the diagonal is fixed at 1. A non-PSD matrix is never
+ * repaired silently: the repaired matrix is shown and applied only after confirmation.
+ */
+function CorrelationEditor({
+  paths,
+  value,
+  check,
+  onChange,
+}: {
+  paths: string[];
+  value: number[][] | undefined;
+  check: ReturnType<typeof checkCorrelation> | null;
+  onChange: (c: number[][] | undefined) => void;
+}) {
+  const n = paths.length;
+  const [showRepair, setShowRepair] = useState(false);
+  const manual = !!value;
+  return (
+    <fieldset className="min-w-0 rounded-lg border border-border p-2">
+      <legend className="px-1 text-[11px] font-medium">การพึ่งพากัน / Correlation</legend>
+      <div className="flex flex-wrap gap-3">
+        <label className="flex items-center gap-1">
+          <input type="radio" name="mc-dependence" checked={!manual} onChange={() => onChange(undefined)} />
+          ตัวแปรอิสระต่อกัน
+        </label>
+        <label className={clsx("flex items-center gap-1", n < 2 && "opacity-50")}>
+          <input type="radio" name="mc-dependence" checked={manual} disabled={n < 2} onChange={() => onChange(identityCorrelation(n))} />
+          กำหนด correlation เอง {n < 2 && "(ต้องมี ≥ 2 ตัวแปร)"}
+        </label>
+      </div>
+      {manual && value && (
+        <div className="mt-2 space-y-2">
+          <div className="overflow-x-auto">
+            <table className="table text-[11px]" aria-label="Correlation matrix">
+              <thead>
+                <tr>
+                  <th />
+                  {paths.map((p, j) => (
+                    <th key={j} className="max-w-[9rem] truncate text-right font-normal normal-case" title={p}>
+                      {j + 1}. {p}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paths.map((p, i) => (
+                  <tr key={i}>
+                    <th className="max-w-[10rem] truncate text-left font-normal normal-case" title={p}>
+                      {i + 1}. {p}
+                    </th>
+                    {paths.map((_, j) =>
+                      i === j ? (
+                        <td key={j} className="text-right tabular-nums text-muted">
+                          1
+                        </td>
+                      ) : j > i ? (
+                        <td key={j} className="text-right">
+                          <input
+                            aria-label={`correlation ${i + 1} กับ ${j + 1}`}
+                            className={clsx("input w-16 py-0.5 text-right", !(Math.abs(value[i]?.[j] ?? 0) <= 1) && "border-neg")}
+                            inputMode="decimal"
+                            defaultValue={Number((value[i]?.[j] ?? 0).toFixed(4))}
+                            key={`${i}-${j}-${value[i]?.[j]}`}
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (Number.isFinite(v)) onChange(setCorrelationPair(value, i, j, v));
+                            }}
+                          />
+                        </td>
+                      ) : (
+                        <td key={j} className="text-right tabular-nums text-muted" title="สะท้อนจากช่องด้านบน (สมมาตร)">
+                          {(value[i]?.[j] ?? 0).toFixed(2)}
+                        </td>
+                      ),
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {check?.errors.map((e) => (
+            <p key={e} className="text-neg" role="alert">
+              • {e}
+            </p>
+          ))}
+          {check && !check.errors.length && check.psd && <p className="text-[11px] text-pos">ผ่านการตรวจ: สมมาตร แนวทแยง = 1 และ positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)})</p>}
+          {check && !check.errors.length && !check.psd && (
+            <div className="rounded-lg border border-warn/40 p-2 text-warn" role="alert">
+              <p>
+                เมทริกซ์นี้ไม่เป็น positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)}) — ค่าชุดนี้ขัดกันเอง เช่น A สัมพันธ์บวกกับ B และ C แต่ B กับ C สัมพันธ์ลบมาก · ยังจำลองไม่ได้จนกว่าจะแก้ค่าเองหรือยืนยันใช้ค่าที่ซ่อม
+              </p>
+              <button type="button" className="btn-ghost mt-1 text-xs" onClick={() => setShowRepair((x) => !x)}>
+                {showRepair ? "ซ่อนค่าที่ซ่อม" : "ดูค่าที่ระบบเสนอให้ซ่อม"}
+              </button>
+              {showRepair && check.repaired && (
+                <div className="mt-2 text-muted">
+                  <p>ปรับ eigenvalue ที่ติดลบเป็น 0 แล้วปรับแนวทแยงกลับเป็น 1 (ค่าที่เปลี่ยน):</p>
+                  <ul className="tabular-nums">
+                    {check.repaired.flatMap((row, i) =>
+                      row
+                        .map((x, j) => ({ i, j, from: value[i][j], to: x }))
+                        .filter((c) => c.j > c.i)
+                        .map((c) => (
+                          <li key={`${c.i}-${c.j}`}>
+                            {c.i + 1}–{c.j + 1}: {c.from.toFixed(3)} → {c.to.toFixed(3)}
+                          </li>
+                        )),
+                    )}
+                  </ul>
+                  <button
+                    type="button"
+                    className="btn-ghost mt-1 text-xs"
+                    onClick={() => {
+                      onChange(check.repaired!);
+                      setShowRepair(false);
+                    }}
+                  >
+                    ยืนยันใช้ค่าที่ซ่อมแล้ว
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <p className="text-[11px] text-muted">Gaussian copula: ρ คือ correlation ของตัวแปรปกติที่ใช้สุ่ม (ไม่ใช่ correlation ของค่าที่ได้ตรง ๆ) · ใส่ตามเหตุผลทางธุรกิจ — ระบบไม่ประมาณจากราคาหุ้น</p>
+        </div>
+      )}
+    </fieldset>
   );
 }
 

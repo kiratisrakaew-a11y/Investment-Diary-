@@ -78,26 +78,45 @@ export function validateDistribution(d: DistributionSpec): string | null {
   return null;
 }
 
+export interface CorrelationCheck {
+  /** Shape, diagonal, range or symmetry problems (the matrix cannot be used). */
+  errors: string[];
+  psd: boolean;
+  minEigenvalue: number | null;
+  /** Nearest usable matrix (negative eigenvalues clipped, unit diagonal restored) when not PSD. */
+  repaired: number[][] | null;
+}
+
+/** Validate a correlation matrix: square n×n, unit diagonal, entries in [−1, 1], symmetric, PSD. Never changes the input. */
+export function checkCorrelation(c: number[][], n: number): CorrelationCheck {
+  const errors: string[] = [];
+  if (c.length !== n || c.some((r) => r.length !== n)) return { errors: [`correlation ต้องเป็นเมทริกซ์ ${n}×${n}`], psd: false, minEigenvalue: null, repaired: null };
+  for (let i = 0; i < n; i++) {
+    if (!(Math.abs(c[i][i] - 1) <= 1e-9)) errors.push("แนวทแยงของ correlation ต้องเป็น 1");
+    for (let j = 0; j < n; j++) {
+      if (!(Math.abs(c[i][j]) <= 1)) errors.push("ค่า correlation ต้องอยู่ระหว่าง −1 ถึง 1");
+      if (!(Math.abs(c[i][j] - c[j][i]) <= 1e-9)) errors.push("correlation ต้องสมมาตร");
+    }
+  }
+  if (errors.length) return { errors: [...new Set(errors)], psd: false, minEigenvalue: null, repaired: null };
+  const diag = covarianceDiagnostics(c);
+  if (diag.psd) return { errors: [], psd: true, minEigenvalue: diag.minEigenvalue, repaired: null };
+  const r = diag.repaired;
+  const s = r.map((_, i) => Math.sqrt(Math.max(r[i][i], 1e-12)));
+  return { errors: [], psd: false, minEigenvalue: diag.minEigenvalue, repaired: r.map((row, i) => row.map((x, j) => (i === j ? 1 : x / (s[i] * s[j])))) };
+}
+
 /** Correlation checks: square, symmetric, unit diagonal, entries in [−1, 1]; non-PSD is repaired (eigenvalue clipping) and said so. */
 export function prepareCorrelation(c: number[][] | undefined, n: number): { L: number[][]; warnings: string[]; error?: string } {
   const I = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
   if (!c) return { L: I, warnings: [] };
-  if (c.length !== n || c.some((r) => r.length !== n)) return { L: I, warnings: [], error: `correlation ต้องเป็นเมทริกซ์ ${n}×${n}` };
-  for (let i = 0; i < n; i++) {
-    if (Math.abs(c[i][i] - 1) > 1e-9) return { L: I, warnings: [], error: "แนวทแยงของ correlation ต้องเป็น 1" };
-    for (let j = 0; j < n; j++) {
-      if (!(Math.abs(c[i][j]) <= 1)) return { L: I, warnings: [], error: "ค่า correlation ต้องอยู่ระหว่าง −1 ถึง 1" };
-      if (Math.abs(c[i][j] - c[j][i]) > 1e-9) return { L: I, warnings: [], error: "correlation ต้องสมมาตร" };
-    }
-  }
-  const diag = covarianceDiagnostics(c);
+  const chk = checkCorrelation(c, n);
+  if (chk.errors.length) return { L: I, warnings: [], error: chk.errors[0] };
   const warnings: string[] = [];
   let m = c;
-  if (!diag.psd) {
-    const r = diag.repaired;
-    const s = r.map((_, i) => Math.sqrt(Math.max(r[i][i], 1e-12)));
-    m = r.map((row, i) => row.map((x, j) => (i === j ? 1 : x / (s[i] * s[j]))));
-    warnings.push(`correlation ไม่เป็น positive semidefinite (eigenvalue ต่ำสุด ${diag.minEigenvalue.toFixed(4)}) — ปรับ eigenvalue ติดลบเป็น 0 แล้วปรับแนวทแยงกลับเป็น 1`);
+  if (!chk.psd) {
+    m = chk.repaired!;
+    warnings.push(`correlation ไม่เป็น positive semidefinite (eigenvalue ต่ำสุด ${chk.minEigenvalue!.toFixed(4)}) — ปรับ eigenvalue ติดลบเป็น 0 แล้วปรับแนวทแยงกลับเป็น 1`);
   }
   // Cholesky with a tiny jitter for semidefinite matrices.
   const L = Array.from({ length: n }, () => Array(n).fill(0) as number[]);
@@ -108,6 +127,31 @@ export function prepareCorrelation(c: number[][] | undefined, n: number): { L: n
       L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-12)) : s / L[j][j];
     }
   return { L, warnings };
+}
+
+// ------------------------------------------------------------------ correlation editing helpers (UI)
+
+/** Identity matrix of size n (independent variables). */
+export const identityCorrelation = (n: number): number[][] => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+
+/** Set ρᵢⱼ and ρⱼᵢ together (the diagonal stays 1). */
+export function setCorrelationPair(c: number[][], i: number, j: number, v: number): number[][] {
+  if (i === j) return c;
+  return c.map((row, a) => row.map((x, b) => ((a === i && b === j) || (a === j && b === i) ? v : x)));
+}
+
+/** Drop variable k's row and column; other pairs keep their values and order. */
+export function removeCorrelationIndex(c: number[][] | undefined, k: number): number[][] | undefined {
+  if (!c) return c;
+  const out = c.filter((_, i) => i !== k).map((row) => row.filter((_, j) => j !== k));
+  return out.length >= 2 ? out : undefined;
+}
+
+/** Append an uncorrelated variable (new row / column of zeros, diagonal 1). */
+export function appendCorrelationIndex(c: number[][] | undefined): number[][] | undefined {
+  if (!c) return c;
+  const n = c.length + 1;
+  return Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : i < n - 1 && j < n - 1 ? c[i][j] : 0)));
 }
 
 export interface MonteCarloResult {
