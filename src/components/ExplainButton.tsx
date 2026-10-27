@@ -95,7 +95,7 @@ function ExplainDrawer({
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal aria-label={`คำอธิบาย: ${topic}`}>
       <button type="button" aria-label="ปิด" className="absolute inset-0 bg-[rgb(10_14_22/0.45)]" onClick={onClose} />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-border bg-panel shadow-2xl">
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-border bg-panel-solid/85 shadow-2xl backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-accent uppercase">

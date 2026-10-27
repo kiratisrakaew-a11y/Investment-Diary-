@@ -132,7 +132,7 @@ export function CalculationDrawer({ e, onClose }: { e: Explanation | null; onClo
   return (
     <div className="fixed inset-0 z-50 flex justify-end print:static print:block" role="dialog" aria-modal="true" aria-label={e.title}>
       <button type="button" aria-label="ปิด" className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} />
-      <div className="relative h-full w-full overflow-y-auto bg-panel p-5 shadow-xl sm:max-w-2xl print:max-w-none print:shadow-none">
+      <div className="relative h-full w-full overflow-y-auto bg-panel-solid/90 p-5 shadow-xl backdrop-blur-xl sm:max-w-2xl print:max-w-none print:shadow-none">
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold">วิธีคำนวณ: {e.title}</h2>
           <button type="button" className="btn-ghost text-xs print:hidden" onClick={onClose}>

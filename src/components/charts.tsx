@@ -22,7 +22,7 @@ import type { AssetClass } from "@/db/schema";
 
 const axis = { stroke: "var(--muted)", fontSize: 11, tickLine: false, axisLine: false } as const;
 const tooltipStyle = {
-  contentStyle: { background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" },
+  contentStyle: { background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" },
   labelStyle: { color: "var(--muted)" },
 };
 const compactThb = (v: number) => (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : `${v}`);
@@ -33,7 +33,7 @@ export function AllocationDonut({ rows }: { rows: { assetClass: AssetClass; valu
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey="value" nameKey="assetClass" innerRadius="58%" outerRadius="92%" paddingAngle={1} stroke="var(--panel)" strokeWidth={2} isAnimationActive={false}>
+        <Pie data={data} dataKey="value" nameKey="assetClass" innerRadius="58%" outerRadius="92%" paddingAngle={1} stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false}>
           {data.map((r) => (
             <Cell key={r.assetClass} fill={ASSET_CLASS_COLOR[r.assetClass]} />
           ))}
@@ -62,7 +62,7 @@ export function GrowthChart({ data, benchmark }: { data: { date: string; portfol
         <YAxis {...axis} tickFormatter={pct} width={44} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Line type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
         {benchmark && <Line type="monotone" dataKey="benchmark" name={benchmark} stroke="var(--series-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
       </LineChart>
     </ResponsiveContainer>
@@ -73,12 +73,18 @@ export function ValueChart({ data }: { data: { date: string; value: number; cont
   return (
     <ResponsiveContainer width="100%" height={240}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="gValue" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.45} />
+            <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={compactThb} width={48} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtThb(Number(v)), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Area type="monotone" dataKey="value" name="มูลค่าพอร์ต" stroke="var(--series-1)" fill="var(--series-1)" fillOpacity={0.12} strokeWidth={2} isAnimationActive={false} />
+        <Area type="monotone" dataKey="value" name="มูลค่าพอร์ต" stroke="var(--series-1)" fill="url(#gValue)" strokeWidth={2.5} isAnimationActive={false} />
         <Line type="stepAfter" dataKey="contributed" name="เงินลงทุนสุทธิ" stroke="var(--series-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -138,10 +144,10 @@ export function FrontierChart({
         <Scatter name="พอร์ตสุ่ม" data={cloud} fill="var(--muted)" fillOpacity={0.18} shape="circle" legendType="circle" isAnimationActive={false} />
         <Line name="Efficient frontier" data={frontier} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
         {cml && <Line name="Capital Market Line" data={cmlLine} dataKey="expectedReturn" stroke="var(--series-3)" strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />}
-        <Scatter name="สินทรัพย์รายตัว" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
-        <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />
-        {tangency && <Scatter name="Max Sharpe" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />}
-        <Scatter name="Min variance" data={[minVariance]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
+        <Scatter name="สินทรัพย์รายตัว" data={assets} fill="var(--series-4)" stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false} />
+        <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel-solid)" strokeWidth={2} shape="diamond" isAnimationActive={false} />
+        {tangency && <Scatter name="Max Sharpe" data={[tangency]} fill="var(--series-3)" stroke="var(--panel-solid)" strokeWidth={2} shape="star" isAnimationActive={false} />}
+        <Scatter name="Min variance" data={[minVariance]} fill="var(--series-5)" stroke="var(--panel-solid)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -218,12 +224,12 @@ export function BulletChart({
         <Line name="Efficient frontier ตามข้อจำกัด (ลงทุนได้จริง)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
         <Line name="ส่วนไม่มีประสิทธิภาพ" data={arm(constrained, false, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
         {cml.length > 0 && <Line name="Capital Market Line (จาก Rf)" data={cml} dataKey="expectedReturn" stroke="var(--series-3)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />}
-        <Scatter name="สินทรัพย์" data={assets} fill="var(--series-4)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} />
-        {current && <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} shape="diamond" isAnimationActive={false} />}
-        <Scatter name="Min variance" data={[gmv]} fill="var(--series-5)" stroke="var(--panel)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
-        {tangency && <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} shape="star" isAnimationActive={false} />}
-        <Scatter name="Rf" data={[{ volatility: 0, expectedReturn: rf }]} fill="var(--series-3)" stroke="var(--panel)" strokeWidth={2} isAnimationActive={false} legendType="none" />
-        <Scatter name="แนะนำ" data={[recommended]} fill="var(--series-6)" stroke="var(--panel)" strokeWidth={2} shape="square" isAnimationActive={false} />
+        <Scatter name="สินทรัพย์" data={assets} fill="var(--series-4)" stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false} />
+        {current && <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel-solid)" strokeWidth={2} shape="diamond" isAnimationActive={false} />}
+        <Scatter name="Min variance" data={[gmv]} fill="var(--series-5)" stroke="var(--panel-solid)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
+        {tangency && <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel-solid)" strokeWidth={2} shape="star" isAnimationActive={false} />}
+        <Scatter name="Rf" data={[{ volatility: 0, expectedReturn: rf }]} fill="var(--series-3)" stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false} legendType="none" />
+        <Scatter name="แนะนำ" data={[recommended]} fill="var(--series-6)" stroke="var(--panel-solid)" strokeWidth={2} shape="square" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );

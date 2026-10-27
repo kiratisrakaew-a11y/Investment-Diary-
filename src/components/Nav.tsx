@@ -74,7 +74,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-panel lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border glass lg:flex">
         <Link href="/" className="flex items-center gap-3 border-b border-border px-5 py-5">
           <span className="grid size-9 place-items-center rounded-xl bg-accent/15 text-accent">
             <Icon name="journal" className="size-5" />
@@ -91,7 +91,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
               href={l.href}
               className={clsx(
                 "flex items-center gap-3 rounded-lg px-3 py-2 transition-colors",
-                isActive(l.href) ? "bg-accent font-medium text-accent-ink shadow-sm" : "text-muted hover:bg-panel-2 hover:text-text",
+                isActive(l.href) ? "bg-linear-to-r from-accent to-accent-2 font-medium text-accent-ink shadow-[0_4px_14px_rgb(255_120_60/0.35)]" : "text-muted hover:bg-panel-2 hover:text-text",
               )}
             >
               <Icon name={l.icon} />
@@ -110,7 +110,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
       </aside>
 
       {/* Mobile / tablet top bar */}
-      <header className="sticky top-0 z-20 border-b border-border bg-panel/95 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 border-b border-border glass lg:hidden">
         <div className="flex items-center gap-2 px-3 py-2">
           <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold text-accent">
             <Icon name="journal" className="size-5" /> Diary
@@ -120,7 +120,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
               <Link
                 key={l.href}
                 href={l.href}
-                className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap", isActive(l.href) ? "bg-accent font-medium text-accent-ink" : "text-muted hover:text-text")}
+                className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap", isActive(l.href) ? "bg-linear-to-r from-accent to-accent-2 font-medium text-accent-ink" : "text-muted hover:text-text")}
               >
                 <Icon name={l.icon} className="size-3.5" />
                 {l.label}

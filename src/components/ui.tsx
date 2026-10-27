@@ -19,8 +19,8 @@ export function Ring({ value, color = "orange", children, size = 48, className }
   return (
     <div className={clsx("relative grid shrink-0 place-items-center", className)} style={{ width: size, height: size, color: TONE_VAR[color] }}>
       <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90" aria-hidden>
-        <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeOpacity={0.18} strokeWidth="4" />
-        {v != null && <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${v * c} ${c}`} />}
+        <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeOpacity={0.22} strokeWidth="4" />
+        {v != null && <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${v * c} ${c}`} style={{ filter: "drop-shadow(0 0 4px currentColor)" }} />}
       </svg>
       <div className="relative text-[11px] font-semibold">{children}</div>
     </div>
@@ -50,8 +50,12 @@ export function Stat({
   ringLabel?: React.ReactNode;
 }) {
   return (
-    <div className="card relative overflow-hidden" title={hint}>
-      {color && <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: TONE_VAR[color], opacity: 0.7 }} />}
+    <div
+      className="card relative overflow-hidden"
+      title={hint}
+      style={color ? { backgroundImage: `radial-gradient(circle at 0% 0%, color-mix(in srgb, ${TONE_VAR[color]} 30%, transparent), transparent 70%)` } : undefined}
+    >
+      {color && <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${TONE_VAR[color]}, transparent)` }} />}
       <div className="text-[11px] font-semibold tracking-wide text-muted uppercase">{label}</div>
       <div className="mt-2 flex items-center gap-3">
         {color && (
