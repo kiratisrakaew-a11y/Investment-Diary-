@@ -3,6 +3,7 @@
  * guards, valuation import/export and a data-quality assessment shared by the
  * dashboard, settings page, MCP and REST.
  */
+import { z } from "zod";
 import { valuationInput, type ValuationInput } from "./valuation-schemas";
 import type { InputMeta } from "./finance/valuation";
 
@@ -21,27 +22,65 @@ export const MODEL_VERSION = "2026.10-val6";
 const DAY = 86_400_000;
 const days = (a: string, b: string) => Math.round((Date.parse(a) - Date.parse(b)) / DAY);
 
+/** User-set thresholds for date consistency (Settings → วันที่ข้อมูล). Defaults are a starting point, not a standard. */
+export const timestampPolicySchema = z.object({
+  inputsMaxAgeDays: z.number().int().min(1).max(3650).default(180).describe("Max age of Rf / ERP / beta at the valuation date"),
+  priceMaxGapDays: z.number().int().min(0).max(365).default(7).describe("Max gap between the valuation date and the last stored price"),
+  statementsMaxAgeDays: z.number().int().min(30).max(3650).default(548).describe("Max age of the latest fiscal year-end at the valuation date"),
+});
+export type TimestampPolicy = z.infer<typeof timestampPolicySchema>;
+export const DEFAULT_TIMESTAMP_POLICY: TimestampPolicy = timestampPolicySchema.parse({});
+
+/** Parse a stored policy, falling back to defaults for anything missing or invalid. */
+export function readTimestampPolicy(raw: unknown): TimestampPolicy {
+  const r = timestampPolicySchema.safeParse(raw ?? {});
+  return r.success ? r.data : DEFAULT_TIMESTAMP_POLICY;
+}
+
+/** Latest stored price date on or before `date` (dates sorted ascending). */
+export function priceDateAt(sortedDates: string[], date: string): string | null {
+  let out: string | null = null;
+  for (const d of sortedDates) {
+    if (d > date) break;
+    out = d;
+  }
+  return out;
+}
+
+/**
+ * Latest fiscal year whose year-end is on or before `date`. Statements store a fiscal year only,
+ * so the year-end is taken as 31 Dec (stated in the flag text).
+ */
+export function statementsAsOfAt(fiscalYears: number[], date: string): { asOf: string; label: string } | null {
+  const fy = fiscalYears.filter((y) => `${y}-12-31` <= date).sort((a, b) => b - a)[0];
+  return fy != null ? { asOf: `${fy}-12-31`, label: `ปีบัญชี ${fy} (ถือว่าสิ้นปี 31 ธ.ค.)` } : null;
+}
+
 /**
  * Timestamp consistency of one valuation: market inputs (Rf / ERP / beta), the price and the latest
  * statements should describe roughly the same moment as the valuation date. Flags only — nothing is changed.
  */
-export function timestampFlags(x: { valuationDate: string; inputsAsOf?: string | null; priceDate?: string | null; statementsAsOf?: string | null }): string[] {
+export function timestampFlags(
+  x: { valuationDate: string; inputsAsOf?: string | null; priceDate?: string | null; statementsAsOf?: string | null; statementsLabel?: string },
+  policy: TimestampPolicy = DEFAULT_TIMESTAMP_POLICY,
+): string[] {
   const out: string[] = [];
   const ok = (d?: string | null): d is string => !!d && !Number.isNaN(Date.parse(d));
   if (!ok(x.valuationDate)) return out;
   if (ok(x.inputsAsOf)) {
     const d = days(x.valuationDate, x.inputsAsOf);
     if (d < 0) out.push(`ข้อมูลตลาด (Rf/ERP/Beta) ลงวันที่ ${x.inputsAsOf} หลังวันประเมิน ${x.valuationDate}`);
-    else if (d > 180) out.push(`ข้อมูลตลาด (Rf/ERP/Beta) ณ ${x.inputsAsOf} เก่ากว่าวันประเมิน ${d} วัน`);
+    else if (d > policy.inputsMaxAgeDays) out.push(`ข้อมูลตลาด (Rf/ERP/Beta) ณ ${x.inputsAsOf} เก่ากว่าวันประเมิน ${d} วัน (เกณฑ์ ${policy.inputsMaxAgeDays} วัน)`);
   }
   if (ok(x.priceDate)) {
     const d = Math.abs(days(x.valuationDate, x.priceDate));
-    if (d > 7) out.push(`ราคาที่ใช้ ณ ${x.priceDate} ห่างจากวันประเมิน ${d} วัน`);
+    if (d > policy.priceMaxGapDays) out.push(`ราคาล่าสุดในระบบ ณ ${x.priceDate} ห่างจากวันประเมิน ${d} วัน (เกณฑ์ ${policy.priceMaxGapDays} วัน)`);
   }
   if (ok(x.statementsAsOf)) {
     const d = days(x.valuationDate, x.statementsAsOf);
-    if (d > 548) out.push(`งบการเงินล่าสุด ณ ${x.statementsAsOf} เก่ากว่า 18 เดือน ณ วันประเมิน`);
-    else if (d < 0) out.push(`งบการเงิน ณ ${x.statementsAsOf} อยู่หลังวันประเมิน — ระวัง look-ahead`);
+    const label = x.statementsLabel ?? x.statementsAsOf;
+    if (d > policy.statementsMaxAgeDays) out.push(`งบการเงินล่าสุด ${label} เก่ากว่าวันประเมิน ${d} วัน (เกณฑ์ ${policy.statementsMaxAgeDays} วัน)`);
+    else if (d < 0) out.push(`งบการเงิน ${label} อยู่หลังวันประเมิน — ระวัง look-ahead`);
   }
   return out;
 }
@@ -172,6 +211,8 @@ export interface DataQualityInput {
   today: string;
   /** valueChanged: today's formula gives a different value (null/absent = could not recompute). */
   valuations: { id: number; symbol: string; modelVersion?: string; valueChanged?: boolean | null }[];
+  /** Latest valuation per symbol and method with its timestampFlags (Settings policy). */
+  valuationDates?: { symbol: string; method: string; date: string; flags: string[] }[];
   bonds: { symbol: string; conventionsSet: boolean }[];
   /** Prices stored in the last `lookbackDays` per held asset (optimizer needs ≥ HISTORY_MIN_OBS). */
   history?: { symbol: string; observations: number; lookbackDays: number }[];
@@ -238,6 +279,20 @@ export function assessDataQuality(d: DataQualityInput) {
     old.length ? `ทุก valuation ให้ค่าเท่ากับสูตรปัจจุบัน (${old.length} รายการบันทึกด้วยเวอร์ชันก่อน)` : "ทุก valuation ใช้สูตรเวอร์ชันปัจจุบัน",
     "/valuation",
   );
+  if (d.valuationDates) {
+    const bad = d.valuationDates.filter((v) => v.flags.length);
+    add(
+      "วันที่ข้อมูล valuation",
+      bad.length > 0,
+      "warn",
+      bad
+        .slice(0, 4)
+        .map((v) => `${v.symbol} ${v.method} (${v.date}): ${v.flags[0]}${v.flags.length > 1 ? ` และอีก ${v.flags.length - 1} ข้อ` : ""}`)
+        .join(" · ") + (bad.length > 4 ? ` · และอีก ${bad.length - 4} รายการ` : ""),
+      d.valuationDates.length ? "วันที่ของ Rf/ERP/Beta ราคา และงบ สอดคล้องกับวันประเมินตามเกณฑ์ในหน้าตั้งค่า" : "ยังไม่มี valuation",
+      "/valuation",
+    );
+  }
   const bondsMissing = d.bonds.filter((b) => !b.conventionsSet);
   add("พันธบัตร", bondsMissing.length > 0, "warn", `ยังไม่ระบุความถี่คูปอง/day count: ${bondsMissing.map((b) => b.symbol).join(", ")} — ใช้ค่าสมมติ ทุก 6 เดือน ACT/ACT`, "พันธบัตรทุกตัวระบุเงื่อนไขแล้ว", "/holdings");
 

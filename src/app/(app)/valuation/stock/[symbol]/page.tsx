@@ -4,6 +4,8 @@ import { valuationsForSymbol } from "@/server/services/valuations";
 import { getAssetBySymbol } from "@/server/services/assets";
 import { priceHistoryFor } from "@/server/services/prices";
 import { getStatements } from "@/server/services/statements";
+import { getTimestampPolicy } from "@/server/services/settings";
+import { priceDateAt, statementsAsOfAt, timestampFlags } from "@/lib/governance";
 import { SavedValuationList } from "@/components/SavedValuationList";
 import { PageHeader, Section, Stat } from "@/components/ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
@@ -13,7 +15,7 @@ const ALL_METHODS = ["dcf_fcff", "dcf_fcfe", "ddm", "residual_income", "multiple
 
 export default async function StockValuationPage({ params }: { params: Promise<{ symbol: string }> }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase();
-  const [group, asset, statements] = await Promise.all([valuationsForSymbol(symbol), getAssetBySymbol(symbol), getStatements(symbol)]);
+  const [group, asset, statements, tsPolicy] = await Promise.all([valuationsForSymbol(symbol), getAssetBySymbol(symbol), getStatements(symbol), getTimestampPolicy()]);
   if (!group && !asset) notFound();
   const hist = asset ? await priceHistoryFor(asset.id) : [];
   const price = hist[hist.length - 1]?.close ?? group?.latestByMethod[0]?.priceAtValuation ?? null;
@@ -21,6 +23,22 @@ export default async function StockValuationPage({ params }: { params: Promise<{
   const upside = avg && price ? avg / price - 1 : null;
   const unused = ALL_METHODS.filter((m) => !group?.methods.includes(m));
   const latestIds = new Set(group?.latestByMethod.map((r) => r.id));
+  const priceDates = hist.map((h) => h.date);
+  const fiscalYears = statements.map((y) => y.fiscalYear);
+  // Inputs, last stored price and latest fiscal year, each as of the valuation date (never after it).
+  const flagsFor = (r: { date: string; assumptions: unknown }) => {
+    const st = statementsAsOfAt(fiscalYears, r.date);
+    return timestampFlags(
+      {
+        valuationDate: r.date,
+        inputsAsOf: (r.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf,
+        priceDate: priceDates.length ? priceDateAt(priceDates, r.date) : null,
+        statementsAsOf: st?.asOf,
+        statementsLabel: st?.label,
+      },
+      tsPolicy,
+    );
+  };
   const max = Math.max(price ?? 0, ...(group?.latestByMethod.map((r) => r.intrinsicValue ?? 0) ?? [0])) * 1.1 || 1;
 
   return (
@@ -97,6 +115,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
               assumptions: r.assumptions,
               modelVersion: (r.result as { modelVersion?: string } | null)?.modelVersion,
               isLatestForMethod: latestIds.has(r.id),
+              timestampFlags: flagsFor(r),
             }))}
           />
         ) : (

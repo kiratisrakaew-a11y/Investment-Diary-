@@ -1,11 +1,11 @@
 import { headers } from "next/headers";
-import { getSettings, getTargets, getTradingCosts, getYieldCurve } from "@/server/services/settings";
+import { getSettings, getTargets, getTimestampPolicy, getTradingCosts, getYieldCurve } from "@/server/services/settings";
 import { YieldCurveForm } from "@/components/YieldCurveForm";
 import { today } from "@/lib/validation";
 import { ActionForm } from "@/components/ActionForm";
 import { CopyBlock } from "@/components/CopyBlock";
 import { PageHeader, Section } from "@/components/ui";
-import { saveSettingsAction, saveTargetsAction, saveTradingCostsAction } from "../actions";
+import { saveSettingsAction, saveTargetsAction, saveTimestampPolicyAction, saveTradingCostsAction } from "../actions";
 import { ASSET_CLASSES } from "@/lib/finance/allocation";
 import { ASSET_CLASS_LABEL } from "@/lib/format";
 import { GPT_INSTRUCTIONS } from "@/lib/gpt-instructions";
@@ -13,7 +13,7 @@ import { MODEL_VERSION, marketInputProvenance } from "@/lib/governance";
 import Link from "next/link";
 
 export default async function SettingsPage() {
-  const [settings, targets, h, costs, curve] = await Promise.all([getSettings(), getTargets(), headers(), getTradingCosts(), getYieldCurve()]);
+  const [settings, targets, h, costs, curve, tsPolicy] = await Promise.all([getSettings(), getTargets(), headers(), getTradingCosts(), getYieldCurve(), getTimestampPolicy()]);
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span className={`ml-1 rounded px-1 text-[11px] ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}>{p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}</span>
@@ -125,6 +125,31 @@ export default async function SettingsPage() {
               </div>
             </div>
             <p className="text-xs text-muted">ค่าเริ่มต้นเป็น 0 — ใส่ตามโบรกเกอร์ของคุณ · ใช้คำนวณข้อเสนอเท่านั้น ไม่บันทึกรายการซื้อขายให้</p>
+          </ActionForm>
+        </Section>
+
+        <Section title="เกณฑ์วันที่ข้อมูลของ valuation">
+          <ActionForm action={saveTimestampPolicyAction} className="space-y-3" resetOnSuccess={false}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {(
+                [
+                  ["inputsMaxAgeDays", "Rf / ERP / Beta เก่าได้ไม่เกิน (วัน)", tsPolicy.inputsMaxAgeDays, 1],
+                  ["priceMaxGapDays", "ราคาห่างจากวันประเมินได้ไม่เกิน (วัน)", tsPolicy.priceMaxGapDays, 0],
+                  ["statementsMaxAgeDays", "งบปีล่าสุดเก่าได้ไม่เกิน (วัน)", tsPolicy.statementsMaxAgeDays, 30],
+                ] as const
+              ).map(([name, label, v, min]) => (
+                <div key={name} className="flex flex-col justify-end">
+                  <label className="label" htmlFor={`ts-${name}`}>
+                    {label}
+                  </label>
+                  <input id={`ts-${name}`} name={name} type="number" step={1} min={min} className="input" defaultValue={v} />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted">
+              ใช้แสดงป้าย “วันที่ข้อมูลไม่ตรง” ในหน้า valuation, หน้าแก้ไข และหน้าคุณภาพข้อมูล — เป็นแค่การเตือน ไม่เปลี่ยนตัวเลข · ค่าเริ่มต้น 180 / 7 / 548 วัน
+              เป็นจุดตั้งต้น ไม่ใช่มาตรฐาน · งบใช้ปีบัญชีล่าสุดที่จบก่อนวันประเมิน (ถือว่าสิ้นปี 31 ธ.ค.)
+            </p>
           </ActionForm>
         </Section>
 

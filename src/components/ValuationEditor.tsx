@@ -27,7 +27,7 @@ import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
 import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
-import { exportValuationFile, parseValuationImport, timestampFlags, type InputProvenance } from "@/lib/governance";
+import { exportValuationFile, parseValuationImport, statementsAsOfAt, timestampFlags, type InputProvenance, type TimestampPolicy } from "@/lib/governance";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
@@ -44,6 +44,10 @@ export interface EditorDefaults {
   /** Sources copied into new valuations (from settings and the beta estimate). */
   inputMeta?: InputMeta;
   provenance?: { riskFree: InputProvenance; erp: InputProvenance };
+  /** Date of the stored close used as the default price (null = no stored price). */
+  priceDate?: string | null;
+  /** Date-consistency thresholds from Settings. */
+  timestampPolicy?: TimestampPolicy;
 }
 
 const METHODS: { value: Method; label: string }[] = [
@@ -536,7 +540,7 @@ export function ValuationEditor({
                 )}
                 <KeyDrivers a={method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA} show={method !== "multiples"} />
                 {method !== "multiples" &&
-                  timestampFlags({ valuationDate: new Date().toISOString().slice(0, 10), inputsAsOf: (method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA).inputMeta?.asOf }).map((f) => (
+                  editorTimestampFlags(method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA, defaults, statements?.years.map((y) => y.fiscalYear) ?? []).map((f) => (
                     <p key={f} className="mt-1 text-xs text-warn">⚠️ {f}</p>
                   ))}
                 {activeExplanation && activeExplanation.warnings.length > 0 && method !== "dcf_fcff" && method !== "dcf_fcfe" && (
@@ -593,6 +597,25 @@ export function ValuationEditor({
       )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
+  );
+}
+
+/**
+ * Date flags for a valuation made today. The price is checked only while it is still the stored close
+ * the editor started from; a price typed in by hand has no known date.
+ */
+function editorTimestampFlags(a: { currentPrice: number; inputMeta?: InputMeta }, d: EditorDefaults, fiscalYears: number[]) {
+  const today = new Date().toISOString().slice(0, 10);
+  const st = statementsAsOfAt(fiscalYears, today);
+  return timestampFlags(
+    {
+      valuationDate: today,
+      inputsAsOf: a.inputMeta?.asOf,
+      priceDate: d.priceDate && a.currentPrice === d.currentPrice ? d.priceDate : null,
+      statementsAsOf: st?.asOf,
+      statementsLabel: st?.label,
+    },
+    d.timestampPolicy,
   );
 }
 

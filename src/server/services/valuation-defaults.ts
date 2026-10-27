@@ -3,17 +3,19 @@ import { priceHistoryFor } from "./prices";
 import { getSettings } from "./settings";
 import { loadUniverse } from "./optimizer";
 import type { EditorDefaults } from "@/components/ValuationEditor";
-import { defaultInputMeta, marketInputProvenance } from "@/lib/governance";
+import { defaultInputMeta, marketInputProvenance, readTimestampPolicy } from "@/lib/governance";
 
 /** Starting assumptions for the valuation editor: app settings + latest price + estimated beta. */
 export async function editorDefaults(symbol: string): Promise<{ defaults: EditorDefaults; symbols: string[] }> {
   const [settings, assets, asset] = await Promise.all([getSettings(), listAssets(), symbol ? getAssetBySymbol(symbol) : null]);
   let price = 0;
+  let priceDate: string | null = null;
   let beta = 1;
   let betaInfo: { beta: number; observations: number; benchmark: string } | null = null;
   if (asset) {
     const hist = await priceHistoryFor(asset.id);
     price = hist[hist.length - 1]?.close ?? 0;
+    priceDate = hist[hist.length - 1]?.date ?? null;
     // Historical beta vs. the benchmark, when there is enough price history.
     const u = await loadUniverse(365 * 2).catch(() => null);
     const b = u?.assets.find((x) => x.symbol === asset.symbol)?.beta;
@@ -30,6 +32,8 @@ export async function editorDefaults(symbol: string): Promise<{ defaults: Editor
       beta,
       inputMeta: defaultInputMeta(settings, betaInfo),
       provenance: marketInputProvenance(settings),
+      priceDate,
+      timestampPolicy: readTimestampPolicy(settings.timestampPolicy),
     },
     symbols: assets.filter((a) => a.assetClass !== "cash").map((a) => a.symbol),
   };

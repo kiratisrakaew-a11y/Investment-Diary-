@@ -174,6 +174,8 @@ export const settings = pgTable("settings", {
   tradingCosts: jsonb("trading_costs").notNull().default({}),
   /** Government zero curve for spread analytics: { points: [{years, rate}], source, asOf } (decimal, annual compounding). */
   yieldCurve: jsonb("yield_curve"),
+  /** Date-consistency thresholds for valuations (see timestampPolicySchema); null = defaults. */
+  timestampPolicy: jsonb("timestamp_policy"),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

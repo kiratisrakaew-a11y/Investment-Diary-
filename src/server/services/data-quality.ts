@@ -1,4 +1,5 @@
-import { assessDataQuality, marketInputProvenance } from "@/lib/governance";
+import { assessDataQuality, marketInputProvenance, priceDateAt, readTimestampPolicy, statementsAsOfAt, timestampFlags } from "@/lib/governance";
+import { getDb, schema } from "@/db";
 import { evaluate, valuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
 import { detectUnrecordedSplits } from "@/lib/finance/price-coverage";
@@ -11,14 +12,41 @@ import { listValuations } from "./valuations";
 
 /** Everything that can make a number in the app unreliable, in one list (UI, MCP and REST). */
 export async function dataQualityReport() {
-  const [settings, summary, assets, valuations, prices, txs] = await Promise.all([
+  const [settings, summary, assets, valuations, prices, txs, fiscal] = await Promise.all([
     getSettings(),
     getPortfolioSummary(),
     listAssets(),
     listValuations({ limit: 2000 }),
     loadPriceHistory(),
     allTransactions(),
+    getDb().select({ symbol: schema.financialStatements.symbol, fiscalYear: schema.financialStatements.fiscalYear }).from(schema.financialStatements),
   ]);
+  const policy = readTimestampPolicy(settings.timestampPolicy);
+  // Latest valuation per symbol and method (rows are newest first), checked as of its own date.
+  const seen = new Set<string>();
+  const latest = valuations.filter((v) => v.method !== "bond" && !seen.has(`${v.symbol}|${v.method}`) && seen.add(`${v.symbol}|${v.method}`));
+  const valuationDates = latest.map((v) => {
+    const dates = v.assetId ? (prices.get(v.assetId) ?? []).map(([d]) => d) : [];
+    const st = statementsAsOfAt(
+      fiscal.filter((f) => f.symbol === v.symbol).map((f) => f.fiscalYear),
+      v.date,
+    );
+    return {
+      symbol: v.symbol,
+      method: v.method,
+      date: v.date,
+      flags: timestampFlags(
+        {
+          valuationDate: v.date,
+          inputsAsOf: (v.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf,
+          priceDate: dates.length ? priceDateAt(dates, v.date) : null,
+          statementsAsOf: st?.asOf,
+          statementsLabel: st?.label,
+        },
+        policy,
+      ),
+    };
+  });
   const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   const held = new Set(summary.positions.filter((p) => p.quantity > 0).map((p) => p.assetId));
@@ -31,6 +59,7 @@ export async function dataQualityReport() {
     ledgerIssues: summary.issues,
     benchmark: { symbol: settings.benchmarkSymbol, lastDate: bench[bench.length - 1]?.[0] ?? null, kind: settings.benchmarkKind },
     today: today(),
+    valuationDates,
     valuations: valuations.map((v) => ({ id: v.id, symbol: v.symbol, modelVersion: (v.result as { modelVersion?: string } | null)?.modelVersion, valueChanged: recomputeChanged(v) })),
     bonds: assets.filter((a) => a.assetClass === "bond" && held.has(a.id)).map((a) => ({ symbol: a.symbol, conventionsSet: a.couponFrequency != null && a.dayCount != null })),
     splits: assets

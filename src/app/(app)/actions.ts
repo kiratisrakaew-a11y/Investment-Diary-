@@ -7,7 +7,7 @@ import { createAsset, deleteAsset, updateAsset } from "@/server/services/assets"
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
-import { saveSettings, saveTargets, saveTradingCosts } from "@/server/services/settings";
+import { saveSettings, saveTargets, saveTimestampPolicy, saveTradingCosts } from "@/server/services/settings";
 import { updateAllPrices } from "@/server/services/price-updater";
 import { syncHistoricalPrices } from "@/server/services/price-sync";
 
@@ -175,6 +175,19 @@ export async function saveTradingCostsAction(_: ActionState, f: FormData): Promi
       lotSize: Object.fromEntries(classes.flatMap((c) => { const v = lot(c); return v != null && v > 0 ? [[c, v] as const] : []; })),
     });
     return done("บันทึกต้นทุนการซื้อขายแล้ว");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveTimestampPolicyAction(_: ActionState, f: FormData): Promise<ActionState> {
+  try {
+    await saveTimestampPolicy({
+      inputsMaxAgeDays: num(f, "inputsMaxAgeDays") ?? undefined,
+      priceMaxGapDays: num(f, "priceMaxGapDays") ?? undefined,
+      statementsMaxAgeDays: num(f, "statementsMaxAgeDays") ?? undefined,
+    });
+    return done("บันทึกเกณฑ์วันที่ข้อมูลแล้ว");
   } catch (e) {
     return fail(e);
   }

@@ -4,6 +4,7 @@ import type { AssetClass } from "@/db/schema";
 import { tradingCostsSchema, type TradingCosts } from "@/lib/finance/rebalance";
 import { yieldCurveInput } from "@/lib/validation";
 import type { z } from "zod";
+import { readTimestampPolicy, timestampPolicySchema, type TimestampPolicy } from "@/lib/governance";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
@@ -24,6 +25,7 @@ export async function getSettings() {
       erpAsOf: null as string | null,
       tradingCosts: {} as unknown,
       yieldCurve: null as unknown,
+      timestampPolicy: null as unknown,
     }
   );
 }
@@ -116,4 +118,19 @@ export async function saveTargets(input: Partial<Record<AssetClass, number>>) {
       .map(([assetClass, targetPct]) => ({ assetClass: assetClass as AssetClass, targetPct: targetPct! }));
     if (rows.length) await tx.insert(schema.allocationTargets).values(rows);
   });
+}
+
+/** Date-consistency thresholds for valuations; defaults when nothing is stored. */
+export async function getTimestampPolicy(): Promise<TimestampPolicy> {
+  return readTimestampPolicy((await getSettings()).timestampPolicy);
+}
+
+export async function saveTimestampPolicy(input: Partial<TimestampPolicy>) {
+  const data = timestampPolicySchema.parse({ ...(await getTimestampPolicy()), ...input });
+  const s = await getSettings();
+  await getDb()
+    .insert(schema.settings)
+    .values({ ...s, id: 1, timestampPolicy: data })
+    .onConflictDoUpdate({ target: schema.settings.id, set: { timestampPolicy: data } });
+  return data;
 }

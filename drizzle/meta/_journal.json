@@ -85,6 +85,13 @@
       "when": 1793072190340,
       "tag": "0011_strategies_dividend_events",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793089931302,
+      "tag": "0012_valuation_timestamp_policy",
+      "breakpoints": true
     }
   ]
 }

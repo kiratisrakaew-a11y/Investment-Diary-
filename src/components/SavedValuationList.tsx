@@ -25,6 +25,8 @@ export interface SavedValuationRow {
   /** Formula version the stored value was computed with (absent before PR 5). */
   modelVersion?: string;
   isLatestForMethod: boolean;
+  /** Date-consistency flags computed on the server (inputs, price and statements vs the valuation date). */
+  timestampFlags?: string[];
 }
 
 /** Every saved valuation of one stock; each row expands into its full calculation. */
@@ -49,7 +51,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
         const changed =
           explanation != null && v.intrinsicValue != null && (explanation.value == null || Math.abs(explanation.value - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue)));
         const inputsAsOf = (v.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf;
-        const tsFlags = timestampFlags({ valuationDate: v.date, inputsAsOf });
+        const tsFlags = v.timestampFlags ?? timestampFlags({ valuationDate: v.date, inputsAsOf });
         return (
           <div key={v.id} className={clsx(!v.isLatestForMethod && "opacity-70")}>
             <button type="button" onClick={() => setOpen(isOpen ? null : v.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-3 text-left text-sm">

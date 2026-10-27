@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-27 — Phase 2: configurable date-consistency policy
+- Settings → "เกณฑ์วันที่ข้อมูลของ valuation" (inputs / price / statements, defaults 180 / 7 / 548 days), stored in `settings.timestamp_policy` (additive migration 0012) and available at REST `/api/v1/settings/timestamp-policy`.
+- Valuation list, editor and data quality now also check the last stored price on or before the valuation date and the latest fiscal year (year-end taken as 31 Dec), not only Rf / ERP / beta dates.
+- New data-quality check "วันที่ข้อมูล valuation" for the latest valuation per symbol and method.
+
 ## 2026-10-27 — Phase 1 follow-up: RIM scenarios and warnings
 - Residual income Bear/Base/Bull (`scenarios`: roeShift, payoutRatio, terminalGrowth, terminalRoe, persistence). It uses the same probability aggregation as DCF (`aggregateScenarios`, extracted from `scenarioAnalysis` with no change in results). Available in the editor, REST and MCP.
 - Payout × ω sensitivity grid.

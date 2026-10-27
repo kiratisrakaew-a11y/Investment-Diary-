@@ -224,7 +224,7 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 ## 6. Governance — `src/lib/governance.ts`
 
 - `MODEL_VERSION = "2026.10-val6"`: staged DCF and RIM horizons. Legacy values are unchanged, so older saves whose recomputed value is identical are labelled "same value". Only changed or unrecomputable ones are data-quality warnings.
-- `timestampFlags`: market inputs dated after the valuation or more than 180 days before it, a price more than 7 days from the valuation date, and statements more than 18 months old or dated after it (look-ahead).
+- `timestampFlags(x, policy)`: market inputs dated after the valuation or older than `inputsMaxAgeDays`; the last stored close on or before the valuation date more than `priceMaxGapDays` away; the latest fiscal year ending on or before the valuation date (year-end taken as 31 Dec) older than `statementsMaxAgeDays`. Thresholds are user-set in Settings (`settings.timestamp_policy`, migration 0012, defaults 180 / 7 / 548 days, REST `/api/v1/settings/timestamp-policy`). They are used on the stock page (computed on the server), in the editor (the price is checked only while it is still the stored close) and in the data-quality check "วันที่ข้อมูล valuation" (latest valuation per symbol and method). Flags only; no value changes.
 
 - Settings store the source, series and as-of date for Rf and ERP. Without a source the value is shown everywhere as illustrative.
 - Valuation files can be exported and imported (`investment-diary/valuation` v1, with the model version). Older files get defaults for newer fields; malformed files are rejected.

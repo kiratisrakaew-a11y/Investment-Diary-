@@ -6,6 +6,10 @@ import {
   MODEL_VERSION,
   assessDataQuality,
   timestampFlags,
+  priceDateAt,
+  statementsAsOfAt,
+  readTimestampPolicy,
+  DEFAULT_TIMESTAMP_POLICY,
   defaultInputMeta,
   exportValuationFile,
   marketInputProvenance,
@@ -171,8 +175,53 @@ describe("val6: version labels and timestamp flags", () => {
     expect(timestampFlags({ valuationDate: "2026-10-27", inputsAsOf: "2026-01-05" })[0]).toMatch(/เก่ากว่าวันประเมิน 295 วัน/);
     expect(timestampFlags({ valuationDate: "2026-10-27", inputsAsOf: "2026-11-01" })[0]).toMatch(/หลังวันประเมิน/);
     expect(timestampFlags({ valuationDate: "2026-10-27", priceDate: "2026-10-01" })[0]).toMatch(/26 วัน/);
-    expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: "2024-12-31" })[0]).toMatch(/18 เดือน/);
+    expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: "2024-12-31" })[0]).toMatch(/เกณฑ์ 548 วัน/);
     expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: "2026-12-31" })[0]).toMatch(/look-ahead/);
     expect(timestampFlags({ valuationDate: "bad", inputsAsOf: "2020-01-01" })).toEqual([]);
+  });
+});
+
+describe("phase 2: configurable timestamp policy", () => {
+  it("thresholds come from the policy; defaults fill anything missing or invalid", () => {
+    const x = { valuationDate: "2026-10-27", inputsAsOf: "2026-07-01", priceDate: "2026-10-20" };
+    expect(timestampFlags(x)).toEqual([]); // 118 days ≤ 180, 7 days ≤ 7
+    const strict = readTimestampPolicy({ inputsMaxAgeDays: 90, priceMaxGapDays: 3 });
+    expect(strict.statementsMaxAgeDays).toBe(548);
+    const f = timestampFlags(x, strict);
+    expect(f).toHaveLength(2);
+    expect(f[0]).toMatch(/118 วัน \(เกณฑ์ 90 วัน\)/);
+    expect(f[1]).toMatch(/7 วัน \(เกณฑ์ 3 วัน\)/);
+    expect(readTimestampPolicy({ priceMaxGapDays: -5 })).toEqual(DEFAULT_TIMESTAMP_POLICY);
+    expect(readTimestampPolicy(null)).toEqual(DEFAULT_TIMESTAMP_POLICY);
+  });
+  it("price and statement dates are taken as of the valuation date, never after it", () => {
+    expect(priceDateAt(["2026-10-01", "2026-10-20", "2026-10-28"], "2026-10-27")).toBe("2026-10-20");
+    expect(priceDateAt(["2026-11-01"], "2026-10-27")).toBeNull();
+    expect(statementsAsOfAt([2023, 2024, 2025, 2026], "2026-10-27")).toEqual({ asOf: "2025-12-31", label: "ปีบัญชี 2025 (ถือว่าสิ้นปี 31 ธ.ค.)" });
+    expect(statementsAsOfAt([2026], "2026-10-27")).toBeNull();
+    const s = statementsAsOfAt([2023], "2026-10-27")!;
+    expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: s.asOf, statementsLabel: s.label })[0]).toMatch(/ปีบัญชี 2023/);
+  });
+});
+
+describe("phase 2: data-quality check for valuation dates", () => {
+  const clean = {
+    provenance: marketInputProvenance({ ...settings, rfSource: "ThaiBMA", rfAsOf: "2026-10-24", erpSource: "Damodaran", erpAsOf: "2026-01-05" }),
+    positions: [],
+    reconciliation: { navMatches: true, inferredContributionsThb: 0 },
+    ledgerIssues: [],
+    benchmark: { symbol: "^SET.BK", lastDate: "2026-10-24", kind: "total_return" as const },
+    today: "2026-10-26",
+    bonds: [],
+    valuations: [],
+  };
+  it("warns with the first flag per valuation; ok when none; absent input adds no check", () => {
+    const bad = assessDataQuality({ ...clean, valuationDates: [{ symbol: "PTT", method: "ddm", date: "2026-10-26", flags: ["a", "b"] }, { symbol: "PTT", method: "dcf_fcff", date: "2026-10-26", flags: [] }] });
+    const c = bad.checks.find((x) => x.area === "วันที่ข้อมูล valuation")!;
+    expect(c.status).toBe("warn");
+    expect(c.message).toBe("PTT ddm (2026-10-26): a และอีก 1 ข้อ");
+    const ok = assessDataQuality({ ...clean, valuationDates: [{ symbol: "PTT", method: "ddm", date: "2026-10-26", flags: [] }] });
+    expect(ok.checks.find((x) => x.area === "วันที่ข้อมูล valuation")!.status).toBe("ok");
+    expect(assessDataQuality(clean).checks.some((x) => x.area === "วันที่ข้อมูล valuation")).toBe(false);
   });
 });
