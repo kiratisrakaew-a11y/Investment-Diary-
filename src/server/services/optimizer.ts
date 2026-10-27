@@ -4,6 +4,9 @@ import { recommend, type Objective } from "@/lib/finance/recommend";
 import { blackLitterman, type BlView } from "@/lib/finance/black-litterman";
 import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
 import { robustDiagnostics } from "@/lib/finance/robust";
+import { buildConstraints, exposureReport, type ConstraintsInput } from "@/lib/finance/exposure";
+import { analyticsFromPrice, specFromBondAsset } from "@/lib/finance/bonds";
+import { creditProfileSchema } from "@/lib/finance/credit-risk";
 import { OptimizerError } from "@/lib/finance/optimizer";
 import { beta as calcBeta } from "@/lib/finance/risk";
 import { mean } from "@/lib/finance/stats";
@@ -27,6 +30,11 @@ export interface UniverseAsset {
   volatility: number;
   beta: number | null;
   capmReturn: number | null;
+  /** User-maintained risk metadata (null when not set) and bond modified duration from the bond analytics. */
+  issuer: string | null;
+  sector: string | null;
+  rating: string | null;
+  modifiedDuration: number | null;
 }
 
 export interface OptimizerUniverse {
@@ -175,9 +183,30 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
         volatility: Math.sqrt(cov[i][i]),
         beta: b,
         capmReturn: b != null ? rf + b * erp : null,
+        issuer: a.issuer ?? null,
+        sector: a.sector ?? null,
+        rating: a.assetClass === "bond" ? (ratingOf(a.credit) ?? "unrated") : null,
+        modifiedDuration: a.assetClass === "bond" ? bondDuration(a, prices.get(a.id)) : null,
       };
     }),
   };
+}
+
+function ratingOf(credit: unknown): string | null {
+  const p = creditProfileSchema.safeParse(credit ?? {});
+  return p.success ? (p.data.rating ?? null) : null;
+}
+
+/** Modified duration from the last stored price (same convention as bondHoldings: stored price = clean per unit). */
+function bondDuration(a: Parameters<typeof specFromBondAsset>[0] & { faceValue: number | null }, series: [string, number][] | undefined): number | null {
+  const last = series?.[series.length - 1];
+  const settlement = today();
+  if (a.couponRate == null || !a.maturityDate || !last || a.maturityDate <= settlement) return null;
+  try {
+    return analyticsFromPrice(specFromBondAsset(a, settlement).spec, a.faceValue ? (last[1] / a.faceValue) * 100 : last[1]).modifiedDuration;
+  } catch {
+    return null;
+  }
 }
 
 export type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
@@ -212,6 +241,7 @@ export interface OptimizeParams {
   blackLitterman?: { marketWeights: Record<string, number>; marketRiskAversion?: number; tau?: number; views?: BlView[]; posteriorCovariance?: boolean };
   robust?: { bootstrap?: number; returnShock?: number; seed?: number };
   returnBasis?: ReturnBasis;
+  constraints?: ConstraintsInput;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
@@ -245,15 +275,20 @@ export async function optimizePortfolio(p: OptimizeParams) {
     bl = blackLittermanSummary(b, symbols);
   }
   const currentValues = u.assets.map((a) => a.currentValue);
+  const wealth = currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0);
+  // Risk-aware constraints (issuer / sector / rating / groups / duration / DV01) → linear rows for the same QP.
+  const built = buildConstraints(u.assets, { min: p.minWeight ?? 0, max: p.maxWeight ?? 1 }, p.constraints, wealth);
+  if (built.unsupported.length) throw new OptimizerError({ code: "UNSUPPORTED_CONSTRAINT", message: `ข้อจำกัดที่ไม่รองรับ: ${built.unsupported.join(" · ")}` });
+  extraWarnings.push(...built.warnings);
   const constraints = {
     rf: u.riskFree,
-    bounds: { min: p.minWeight ?? 0, max: p.maxWeight ?? 1 },
+    bounds: built.bounds,
     objective: p.objective ?? "max_sharpe",
     riskAversion: p.riskAversion ?? 4,
     targetReturn: p.targetReturn,
     targetRisk: p.targetRisk,
     currentValues,
-    totalWealth: currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0),
+    totalWealth: wealth,
     useRiskFree: p.useRiskFree ?? false,
   };
   const r = recommend({
@@ -327,6 +362,13 @@ export async function optimizePortfolio(p: OptimizeParams) {
     returnMethod: method,
     blackLitterman: bl,
     risk,
+    exposure: {
+      recommended: exposureReport(u.assets, riskyW, built.durations, wealth * r.riskyShare),
+      current: wealth > 0 ? exposureReport(u.assets, currentValues.map((v) => v / Math.max(currentValues.reduce((a, b) => a + b, 0), 1e-9)), built.durations, currentValues.reduce((a, b) => a + b, 0)) : null,
+      constraintsApplied: (built.bounds.linear ?? []).map((c) => ({ name: c.name, min: c.lo ?? null, max: c.hi ?? null, value: c.a.reduce((s, a, i) => s + a * riskyW[i], 0) })),
+      unclassified: built.unclassified,
+      note: "สัดส่วนของพอร์ตเสี่ยง · duration ของพันธบัตรจากราคาล่าสุด (อื่น ๆ = 0 ถ้าไม่ระบุ durationOverride)",
+    },
     robust,
     assets: u.assets.map((a, i) => ({ symbol: a.symbol, assetClass: a.assetClass, expectedReturn: mu[i], volatility: a.volatility, beta: a.beta })),
     skipped: u.skipped,

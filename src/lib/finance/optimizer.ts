@@ -17,7 +17,26 @@ import { portfolioStats, type Matrix, type PortfolioPoint } from "./mpt";
 export interface Bounds {
   min: number; // e.g. 0 for long-only
   max: number; // e.g. 1, or 0.4 for a 40% cap
+  /** Optional per-asset bounds (override min/max for that asset). */
+  lower?: (number | null)[];
+  upper?: (number | null)[];
+  /** Optional linear constraints lo ≤ aᵀw ≤ hi (issuer / sector / bucket caps, duration limits). */
+  linear?: LinearConstraint[];
+  /** Asset labels for constraint names in messages. */
+  names?: string[];
 }
+
+export interface LinearConstraint {
+  name: string;
+  a: number[];
+  lo?: number;
+  hi?: number;
+}
+
+/** True when the problem needs the general-constraint solver (anything beyond one shared box). */
+export const isGeneral = (b: Bounds) => !!(b.linear?.length || b.lower?.some((x) => x != null) || b.upper?.some((x) => x != null));
+const loOf = (b: Bounds, i: number) => b.lower?.[i] ?? b.min;
+const hiOf = (b: Bounds, i: number) => b.upper?.[i] ?? b.max;
 
 const dot = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0);
 const matVec = (m: Matrix, v: number[]) => m.map((row) => dot(row, v));
@@ -102,13 +121,22 @@ export function analyticFrontier(mu: number[], cov: Matrix, rf: number, points =
 
 // ------------------------------------------------------------------ feasibility
 
-export type OptimizerIssueCode = "INFEASIBLE_BOUNDS" | "INFEASIBLE_TARGET_RETURN" | "INFEASIBLE_TARGET_RISK" | "NO_EXCESS_RETURN" | "INVALID_INPUT";
+export type OptimizerIssueCode =
+  | "INFEASIBLE_BOUNDS"
+  | "INFEASIBLE_CONSTRAINTS"
+  | "UNSUPPORTED_CONSTRAINT"
+  | "INFEASIBLE_TARGET_RETURN"
+  | "INFEASIBLE_TARGET_RISK"
+  | "NO_EXCESS_RETURN"
+  | "INVALID_INPUT";
 
 export interface OptimizerIssue {
   code: OptimizerIssueCode;
   message: string;
   /** What the user can change to make the problem solvable. */
   suggestion?: string;
+  /** Constraints that cannot hold together (INFEASIBLE_CONSTRAINTS). */
+  constraints?: string[];
 }
 
 export class OptimizerError extends Error {
@@ -122,6 +150,25 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 /** Bounds must admit a fully invested portfolio: n·min ≤ 1 ≤ n·max. Never relaxed silently. */
 export function validateBounds(n: number, b: Bounds): OptimizerIssue | null {
+  if (isGeneral(b)) {
+    if (!(n >= 1)) return { code: "INVALID_INPUT", message: "ต้องมีสินทรัพย์อย่างน้อย 1 ตัว" };
+    let sumLo = 0;
+    let sumHi = 0;
+    for (let i = 0; i < n; i++) {
+      const lo = loOf(b, i);
+      const hi = hiOf(b, i);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo > hi) return { code: "INVALID_INPUT", message: `ขอบเขตน้ำหนักของสินทรัพย์ลำดับ ${i + 1} ไม่ถูกต้อง (${pct(lo)} > ${pct(hi)})` };
+      sumLo += lo;
+      sumHi += hi;
+    }
+    for (const c of b.linear ?? []) {
+      if (c.a.length !== n || !c.a.every(Number.isFinite)) return { code: "INVALID_INPUT", message: `ข้อจำกัด ${c.name}: ค่าสัมประสิทธิ์ไม่ครบ` };
+      if (c.lo != null && c.hi != null && c.lo > c.hi + 1e-12) return { code: "INFEASIBLE_CONSTRAINTS", message: `ข้อจำกัด ${c.name}: ต่ำสุด > สูงสุด`, constraints: [c.name] };
+    }
+    if (sumHi < 1 - 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักสูงสุดรวมทุกตัว ${pct(sumHi)} < 100%`, suggestion: "เพิ่มน้ำหนักสูงสุดของบางสินทรัพย์" };
+    if (sumLo > 1 + 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักต่ำสุดรวมทุกตัว ${pct(sumLo)} > 100%`, suggestion: "ลดน้ำหนักต่ำสุดของบางสินทรัพย์" };
+    return null;
+  }
   if (!(n >= 1) || !Number.isFinite(b.min) || !Number.isFinite(b.max) || b.min > b.max) {
     return { code: "INVALID_INPUT", message: `ขอบเขตน้ำหนักไม่ถูกต้อง (ต่ำสุด ${pct(b.min)} > สูงสุด ${pct(b.max)})` };
   }
@@ -149,9 +196,13 @@ function assertBounds(n: number, b: Bounds) {
 
 /** Σw − 1 and the largest bound violation of a weight vector. */
 export function checkWeights(w: number[], b: Bounds) {
+  const linear = (b.linear ?? []).map((c) => {
+    const v = dot(c.a, w);
+    return Math.max(c.lo != null ? c.lo - v : 0, c.hi != null ? v - c.hi : 0);
+  });
   return {
     sumError: Math.abs(w.reduce((a, x) => a + x, 0) - 1),
-    maxBoundViolation: Math.max(0, ...w.map((x) => Math.max(b.min - x, x - b.max))),
+    maxBoundViolation: Math.max(0, ...w.map((x, i) => Math.max(loOf(b, i) - x, x - hiOf(b, i))), ...linear),
   };
 }
 
@@ -186,6 +237,24 @@ function greedyFill(n: number, b: Bounds, order: number[]) {
 /** Exact feasible expected-return range under the bounds (an LP solved greedily). */
 export function feasibleReturnRange(mu: number[], b: Bounds): [number, number] {
   assertBounds(mu.length, b);
+  if (isGeneral(b)) {
+    // LP max/min μᵀw over the polytope: min ½‖w‖² ∓ K·μᵀw is piecewise linear in K and reaches the
+    // LP vertex exactly for large K (well conditioned, unlike a vanishing quadratic term).
+    const I = mu.map((_, i) => mu.map((__, j) => (i === j ? 1 : 0)));
+    const spread = Math.max(Math.max(...mu) - Math.min(...mu), 1e-12);
+    const extreme = (sign: 1 | -1) => {
+      let K = 1 / spread;
+      let prev = NaN;
+      for (let k = 0; k < 200; k++) {
+        const v = dot(solveGeneralQP(I, mu.map((m) => -sign * K * m), b).weights, mu);
+        if (Math.abs(v - prev) <= 1e-15 * Math.max(1, Math.abs(v))) return v;
+        prev = v;
+        K *= 2;
+      }
+      return prev;
+    };
+    return [extreme(-1), extreme(1)];
+  }
   const idx = mu.map((_, i) => i);
   return [dot(greedyFill(mu.length, b, [...idx].sort((a, c) => mu[a] - mu[c])), mu), dot(greedyFill(mu.length, b, [...idx].sort((a, c) => mu[c] - mu[a])), mu)];
 }
@@ -327,6 +396,180 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
   return { weights: w, status: iterations < maxIter ? "optimal" : "max_iterations", iterations, kktResidual: Math.max(0, kkt), ...chk, regularized: ridge > 0 };
 }
 
+// ------------------------------------------------------------------ general linear constraints
+
+/**
+ * Dual active-set method (Goldfarb & Idnani, 1983) for
+ *   min ½wᵀGw + cᵀw  s.t.  Σw = 1,  lo_i ≤ w_i ≤ hi_i,  lo_k ≤ a_kᵀw ≤ hi_k.
+ * Starts from the unconstrained minimum and adds the most violated constraint each step, so no
+ * feasible start is needed; an empty feasible set is detected and the conflicting constraints are
+ * named (INFEASIBLE_CONSTRAINTS). G is made positive definite with a tiny ridge when needed.
+ * Used only when per-asset bounds or linear constraints are given; the box-only path is unchanged.
+ */
+export function solveGeneralQP(Gin: Matrix, c: number[], b: Bounds, maxIter = 2000): QpResult {
+  const n = c.length;
+  assertBounds(n, b);
+  // Constraints as nᵀw ≥ β (equalities flagged).
+  const rows: { v: number[]; beta: number; eq: boolean; name: string }[] = [{ v: c.map(() => 1), beta: 1, eq: true, name: "ลงทุนครบ 100%" }];
+  for (let i = 0; i < n; i++) {
+    const e = c.map((_, j) => (j === i ? 1 : 0));
+    const lo = loOf(b, i);
+    const hi = hiOf(b, i);
+    const label = b.names?.[i] ?? `สินทรัพย์ ${i + 1}`;
+    if (Number.isFinite(lo)) rows.push({ v: e, beta: lo, eq: false, name: `${label} ≥ ${pct(lo)}` });
+    if (Number.isFinite(hi)) rows.push({ v: e.map((x) => -x), beta: -hi, eq: false, name: `${label} ≤ ${pct(hi)}` });
+  }
+  for (const k of b.linear ?? []) {
+    if (k.lo != null) rows.push({ v: [...k.a], beta: k.lo, eq: false, name: `${k.name} ≥ ${pct(k.lo)}` });
+    if (k.hi != null) rows.push({ v: k.a.map((x) => -x), beta: -k.hi, eq: false, name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}` });
+  }
+  const avgDiag = Gin.reduce((s, r, i) => s + Math.abs(r[i]), 0) / n || 1;
+  let ridge = 0;
+  let Ginv = invert(Gin);
+  // Positive definiteness check through the inverse; add the smallest ridge that makes G invertible.
+  while (!Ginv || Ginv.some((r, i) => !(r[i] > 0))) {
+    ridge = ridge ? ridge * 10 : 1e-12 * avgDiag;
+    Ginv = invert(Gin.map((r, i) => r.map((x, j) => (i === j ? x + ridge : x))));
+    if (ridge > 1e-3 * avgDiag) break;
+  }
+  if (!Ginv) throw new OptimizerError({ code: "INVALID_INPUT", message: "covariance ใช้คำนวณไม่ได้ (singular)" });
+  const G = Gin.map((r, i) => r.map((x, j) => (i === j ? x + ridge : x)));
+  const tol = 1e-12 * Math.max(1, avgDiag);
+
+  let x = matVec(Ginv, c).map((v) => -v);
+  const active: number[] = [];
+  let u: number[] = [];
+  const directions = (np: number[]) => {
+    // N* = (NᵀG⁻¹N)⁻¹NᵀG⁻¹ ; z = (G⁻¹ − G⁻¹N N*) n⁺ ; r = N* n⁺
+    if (!active.length) return { z: matVec(Ginv!, np), r: [] as number[] };
+    const N = active.map((k) => rows[k].v);
+    const GiN = N.map((v) => matVec(Ginv!, v));
+    const M = N.map((vi) => GiN.map((gj) => dot(vi, gj)));
+    const Minv = invert(M);
+    if (!Minv) return null;
+    const Ginp = matVec(Ginv!, np);
+    const NtGinp = N.map((v) => dot(v, Ginp));
+    const r = matVec(Minv, NtGinp);
+    const z = Ginp.map((g, i) => g - GiN.reduce((s, col, k) => s + col[i] * r[k], 0));
+    return { z, r };
+  };
+
+  let iterations = 0;
+  const addOrder = [...rows.keys()].filter((k) => rows[k].eq);
+  let infeasible: string[] | null = null;
+  outer: for (; iterations < maxIter; iterations++) {
+    // Pick the constraint to add: pending equalities first, then the most violated inequality.
+    let p = -1;
+    let sign = 1;
+    if (addOrder.length) {
+      p = addOrder.shift()!;
+      sign = dot(rows[p].v, x) - rows[p].beta > 0 ? -1 : 1;
+    } else {
+      let worst = -tol * 10;
+      rows.forEach((row, k) => {
+        if (row.eq || active.includes(k)) return;
+        const sk = dot(row.v, x) - row.beta;
+        if (sk < worst) {
+          worst = sk;
+          p = k;
+        }
+      });
+      if (p < 0) break;
+    }
+    const np = rows[p].v.map((v) => v * sign);
+    const betaP = rows[p].beta * sign;
+    let uPlus = [...u, 0];
+    for (let inner = 0; inner < 10 * rows.length + 10; inner++) {
+      const d = directions(np);
+      if (!d) {
+        infeasible = [rows[p].name, ...active.map((k) => rows[k].name)];
+        break outer;
+      }
+      const { z, r } = d;
+      // Partial step: largest dual step keeping inequality multipliers ≥ 0.
+      let t2 = Infinity;
+      let drop = -1;
+      active.forEach((k, j) => {
+        if (rows[k].eq || !(r[j] > 1e-12 * Math.max(1, Math.abs(r[j])))) return;
+        const tj = uPlus[j] / r[j];
+        if (tj < t2) {
+          t2 = tj;
+          drop = j;
+        }
+      });
+      const zn = dot(z, np);
+      const sp = dot(np, x) - betaP;
+      // z = 0 means n⁺ depends linearly on the active set; judge it relative to ‖G⁻¹n⁺‖ (rounding-safe).
+      const scaleZ = Math.max(...matVec(Ginv!, np).map(Math.abs), 1e-300);
+      if (Math.max(...z.map(Math.abs)) <= 1e-9 * scaleZ || Math.abs(zn) <= 1e-12 * scaleZ * Math.max(...np.map(Math.abs))) {
+        if (!Number.isFinite(t2)) {
+          // No primal step and no constraint to drop: the constraint set is empty.
+          infeasible = [rows[p].name, ...active.filter((k) => !rows[k].eq).map((k) => rows[k].name)];
+          break outer;
+        }
+        uPlus = uPlus.map((v, j) => (j < active.length ? v - t2 * r[j] : v + t2));
+        active.splice(drop, 1);
+        uPlus.splice(drop, 1);
+        continue;
+      }
+      const t1 = -sp / zn;
+      const t = Math.min(t1, t2);
+      x = x.map((xi, i) => xi + t * z[i]);
+      uPlus = uPlus.map((v, j) => (j < active.length ? v - t * r[j] : v + t));
+      if (t1 <= t2) {
+        // Full step: the new constraint becomes active (stored with its sign).
+        if (sign < 0) rows[p] = { ...rows[p], v: np, beta: betaP };
+        active.push(p);
+        u = uPlus;
+        continue outer;
+      }
+      active.splice(drop, 1);
+      uPlus.splice(drop, 1);
+    }
+  }
+  if (infeasible) {
+    throw new OptimizerError({
+      code: "INFEASIBLE_CONSTRAINTS",
+      message: `ข้อจำกัดขัดกัน — ไม่มีน้ำหนักที่ผ่านทุกข้อพร้อมกัน: ${[...new Set(infeasible)].join(" · ")}`,
+      suggestion: "ผ่อนข้อจำกัดใดข้อหนึ่งในรายการนี้ (ระบบไม่ผ่อนให้เอง)",
+      constraints: [...new Set(infeasible)],
+    });
+  }
+  // Polish: solve the KKT system on the final active set directly ([G −N; Nᵀ 0][x; u] = [−c; β]),
+  // removing drift accumulated over many steps; kept only if feasible with valid multipliers.
+  if (active.length) {
+    const m = active.length;
+    const K = [
+      ...G.map((row, i) => [...row, ...active.map((k) => -rows[k].v[i])]),
+      ...active.map((k) => [...rows[k].v, ...Array<number>(m).fill(0)]),
+    ];
+    const sol = solveLinear(K, [...c.map((v) => -v), ...active.map((k) => rows[k].beta)]);
+    if (sol) {
+      const xp = sol.slice(0, n);
+      const up = sol.slice(n);
+      const feasible = rows.every((row) => dot(row.v, xp) - row.beta >= -1e-10 * Math.max(1, Math.abs(row.beta)) || (row.eq && Math.abs(dot(row.v, xp) - row.beta) <= 1e-10));
+      const dualOk = active.every((k, j) => rows[k].eq || up[j] >= -1e-9 * Math.max(1, ...up.map(Math.abs)));
+      if (feasible && dualOk) {
+        x = xp;
+        u = up;
+      }
+    }
+  }
+  // KKT residual: stationarity Gx + c − Σ u_k n_k, dual feasibility (u ≥ 0 for inequalities), primal feasibility.
+  const g = matVec(G, x).map((v, i) => v + c[i]);
+  active.forEach((k, j) => rows[k].v.forEach((v, i) => (g[i] -= u[j] * v)));
+  const dualViol = Math.max(0, ...active.map((k, j) => (rows[k].eq ? 0 : -u[j])));
+  const chk = checkWeights(x, b);
+  return {
+    weights: x,
+    status: iterations < maxIter ? "optimal" : "max_iterations",
+    iterations,
+    kktResidual: Math.max(...g.map(Math.abs), dualViol),
+    ...chk,
+    regularized: ridge > 0,
+  };
+}
+
 // ------------------------------------------------------------------ constrained frontier
 
 export type SolverDiagnostics = Omit<QpResult, "weights">;
@@ -334,7 +577,7 @@ export type OptimizedPoint = PortfolioPoint & { solver: SolverDiagnostics; lambd
 
 /** min wᵀΣw − λ μᵀw  under the bounds (λ = 0: GMV; λ < 0 traces the inefficient arm). */
 function solveLambda(mu: number[], cov: Matrix, rf: number, lambda: number, b: Bounds): OptimizedPoint {
-  const r = solveBoxQP(
+  const r = (isGeneral(b) ? solveGeneralQP : solveBoxQP)(
     cov.map((row) => row.map((x) => 2 * x)),
     mu.map((m) => -lambda * m),
     b,

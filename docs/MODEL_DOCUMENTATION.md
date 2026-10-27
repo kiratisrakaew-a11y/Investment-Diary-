@@ -107,6 +107,14 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 
 - One engine: the analytics page (`getMptAnalysis`) and the legacy `mpt.ts` exports (`minVariancePortfolio`, `maxSharpePortfolio`, `efficientFrontier`, `meanVarianceOptimize`) now call the active-set QP in `optimizer.ts` with long-only bounds. The projected-gradient solver was removed. With no portfolio above Rf there is no tangency portfolio (null), instead of a "best negative Sharpe" point.
 
+### 4a. Risk-aware constraints (v3)
+
+- Per-asset bounds and linear constraints (issuer / sector / rating / custom groups, portfolio duration, DV01 in THB) go through a dual active-set QP (`solveGeneralQP`) inside the same λ pipeline.
+- Box-only problems keep the original solver.
+- Infeasible → `INFEASIBLE_CONSTRAINTS` with names; ES/turnover limits → `UNSUPPORTED_CONSTRAINT`.
+- Groups come only from user metadata; unclassified assets are listed, never assigned.
+- See `docs/roadmap-v3/03_RISK_CONSTRAINTS.md`.
+
 ### 4b. Black–Litterman — `black-litterman.ts`, `returnMethod: "black_litterman"`
 
 - Prior: Π = δΣw_mkt (excess returns).

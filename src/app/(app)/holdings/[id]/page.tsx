@@ -11,6 +11,8 @@ import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
 import { ActionForm } from "@/components/ActionForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
+import { AssetProfileForm } from "@/components/AssetProfileForm";
+import { today } from "@/lib/validation";
 import { deleteAssetAction, updateBondTermsAction } from "../../actions";
 import { ASSET_CLASS_LABEL, TX_TYPE_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
@@ -69,6 +71,10 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           </ActionForm>
         </Section>
       )}
+      <Section title="ผู้ออกและหมวด (ใช้กับข้อจำกัดความเสี่ยง)">
+        <AssetProfileForm symbol={asset.symbol} issuer={asset.issuer} sector={asset.sector} sectorSource={asset.sectorSource} sectorAsOf={asset.sectorAsOf} today={today()} />
+      </Section>
+
       <Section title={`ราคา (${asset.currency})`}>
         {prices.length > 1 ? <PriceChart data={prices} currency={asset.currency} /> : <Empty>ยังไม่มีประวัติราคา</Empty>}
         <div className="mt-4">

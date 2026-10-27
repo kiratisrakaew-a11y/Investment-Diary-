@@ -9,6 +9,7 @@ import type { AssetClass } from "@/db/schema";
 import { applyTargetsAction } from "@/app/(app)/optimizer/actions";
 import { BulletChart } from "./charts";
 import { RebalancePanel } from "./RebalancePanel";
+import { buildConstraints, exposureReport, type ConstraintsInput } from "@/lib/finance/exposure";
 import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
 
@@ -53,6 +54,9 @@ export function OptimizerClient({
   const [useRiskFree, setUseRiskFree] = useState(false);
   const [extraCash, setExtraCash] = useState(0);
   const [covMethod, setCovMethod] = useState<"sample" | "ledoit_wolf">("sample");
+  const [maxIssuer, setMaxIssuer] = useState<number | null>(null);
+  const [maxSector, setMaxSector] = useState<number | null>(null);
+  const [maxDuration, setMaxDuration] = useState<number | null>(null);
   const cov = covMethod === "ledoit_wolf" ? covShrunk : covSample;
   // Black–Litterman: market weights are entered by the user (never defaulted to holdings).
   const [mktW, setMktW] = useState<Record<string, number | null>>({});
@@ -60,7 +64,14 @@ export function OptimizerClient({
   const [tau, setTau] = useState(0.05);
   const [views, setViews] = useState<BlView[]>([]);
   const [postCov, setPostCov] = useState(false);
-  const [result, setResult] = useState<{ r: RecommendOutcome; idx: number[]; prior: RecommendOutcome | null; bl: BlResult | null } | null>(null);
+  const [result, setResult] = useState<{
+    r: RecommendOutcome;
+    idx: number[];
+    prior: RecommendOutcome | null;
+    bl: BlResult | null;
+    built?: ReturnType<typeof buildConstraints>;
+    exposure?: ReturnType<typeof exposureReport> | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
@@ -92,9 +103,9 @@ export function OptimizerClient({
   const mu = assets.map((a, i) => overrides[a.symbol] ?? baseReturn(a, i));
 
   const params = useMemo(
-    () => ({ included, mu: mu.join(), objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov }),
+    () => ({ included, mu: mu.join(), objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [included, method, overrides, objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov],
+    [included, method, overrides, objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration],
   );
 
   function compute() {
@@ -115,10 +126,18 @@ export function OptimizerClient({
       try {
         const cur = idx.map((i) => assets[i].currentValue);
         const subCov = idx.map((i) => idx.map((j) => cov[i][j]));
+        const spec: ConstraintsInput = {
+          ...(maxIssuer != null ? { maxPerIssuer: maxIssuer } : {}),
+          ...(maxSector != null ? { maxPerSector: maxSector } : {}),
+          ...(maxDuration != null ? { maxDuration } : {}),
+        };
+        const wealth = cur.reduce((a, b) => a + b, 0) + extraCash;
+        // Same constraint builder as the server optimizer (issuer / sector / duration → linear rows).
+        const built = buildConstraints(idx.map((i) => assets[i]), { min: minW, max: maxW }, Object.keys(spec).length ? spec : undefined, wealth);
         const common = {
           symbols: idx.map((i) => assets[i].symbol),
           rf,
-          bounds: { min: minW, max: maxW },
+          bounds: built.bounds,
           objective,
           riskAversion,
           targetReturn,
@@ -130,7 +149,8 @@ export function OptimizerClient({
         const r = recommend({ ...common, mu: idx.map((i) => mu[i]), cov: isBl && postCov && bl?.posteriorCov ? bl.posteriorCov : subCov });
         // Same optimizer and constraints with the equilibrium prior, for the weight comparison.
         const prior = isBl && bl?.ok ? recommend({ ...common, mu: bl.prior, cov: subCov }) : null;
-        setResult({ r, idx, prior, bl: isBl ? bl : null });
+        const exposure = r.ok ? exposureReport(idx.map((i) => assets[i]), r.risky.weights, built.durations, wealth * r.riskyShare) : null;
+        setResult({ r, idx, prior, bl: isBl ? bl : null, built, exposure });
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -193,6 +213,11 @@ export function OptimizerClient({
             onChange={setCovMethod}
           />
           <NumField label="เงินลงทุนเพิ่ม (บาท)" value={extraCash} onChange={(v) => setExtraCash(Math.max(0, v ?? 0))} />
+          <div className="grid grid-cols-3 gap-2">
+            <NumField label="สูงสุด/ผู้ออก" pct nullable value={maxIssuer} onChange={setMaxIssuer} hint="รวมหุ้นและหุ้นกู้ของผู้ออกเดียวกัน (ตั้งผู้ออกที่หน้าพันธบัตร / update_asset_profile)" />
+            <NumField label="สูงสุด/หมวด" pct nullable value={maxSector} onChange={setMaxSector} hint="ใช้หมวดที่ผู้ใช้ระบุพร้อมแหล่งที่มา — ตัวที่ไม่ระบุไม่ถูกจัดเข้าหมวด" />
+            <NumField label="Duration สูงสุด (ปี)" nullable value={maxDuration} onChange={setMaxDuration} hint="Modified duration ของพอร์ตเสี่ยง (พันธบัตรจากราคาล่าสุด อื่น ๆ = 0)" />
+          </div>
           <p className="text-xs text-muted">
             Rf {fmtPct(rf)} · ERP {fmtPct(erp)} · ข้อมูล {period} · {periodsPerYear.toFixed(1)} งวด/ปี · long-only, ลงทุนครบ 100%, ไม่มี margin
           </p>
@@ -338,6 +363,17 @@ export function OptimizerClient({
                   <KV k="E[R] / σ" v={`${fmtPct(r.current.expectedReturn)} / ${fmtPct(r.current.volatility)}`} />
                   <KV k="Sharpe" v={fmtRatio(r.current.sharpe)} />
                 </>
+              )}
+              {result?.built?.warnings.map((n) => (
+                <p key={n} className="pt-2 text-xs text-muted">ℹ️ {n}</p>
+              ))}
+              {result?.exposure && (
+                <div className="pt-3 text-xs">
+                  <div className="font-semibold text-muted">การกระจุกตัวของพอร์ตที่แนะนำ</div>
+                  <div>ผู้ออก: {result.exposure.byIssuer.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
+                  <div>หมวด: {result.exposure.bySector.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
+                  <div>Duration พอร์ต {result.exposure.duration.toFixed(2)} ปี{result.exposure.dv01Thb != null ? ` · DV01 ≈ ${fmtThb(result.exposure.dv01Thb)} ต่อ 1bp` : ""}</div>
+                </div>
               )}
               {r.warnings.map((n) => (
                 <p key={n} className="pt-2 text-xs text-neg">⚠️ {n}</p>

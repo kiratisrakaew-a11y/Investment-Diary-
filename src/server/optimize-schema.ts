@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { constraintsInput } from "@/lib/finance/exposure";
 
 const view = z.discriminatedUnion("type", [
   z.object({
@@ -40,6 +41,7 @@ export const optimizeInput = z
     .describe("Return series for μ/Σ: price_return (closes, default) or total_return (provider dividend-adjusted closes; assets without full adj_close coverage are skipped)"),
   returnMethod: z.enum(["historical", "capm", "blend", "black_litterman"]).optional().describe("How expected returns are estimated (default blend). black_litterman needs blackLitterman.marketWeights"),
   blackLitterman: blackLittermanInput.optional(),
+  constraints: constraintsInput.optional(),
   robust: z
     .object({
       bootstrap: z.number().int().min(0).max(500).default(100).describe("Resampling draws (0 = skip)"),
