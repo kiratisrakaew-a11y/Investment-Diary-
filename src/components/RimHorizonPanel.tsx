@@ -22,12 +22,19 @@ export function RimHorizonPanel({
   scenarios,
   onScenariosChange,
   terminalMethod,
+  onSaveHorizon,
+  saving,
+  saveMsg,
 }: {
   details: Record<string, unknown>;
   bookValue: number;
   scenarios?: RimScenario[];
   onScenariosChange: (s: RimScenario[] | undefined) => void;
   terminalMethod: "perpetuity" | "persistence" | "none";
+  /** Save the first h years as a separate residual_income valuation (a labelled snapshot). */
+  onSaveHorizon?: (h: number) => void;
+  saving?: boolean;
+  saveMsg?: { ok: boolean; text: string; href?: string } | null;
 }) {
   const cmp = details.horizonComparison as RimHorizonComparison | null | undefined;
   const payoutSens = details.payoutSensitivity as PayoutSens | null | undefined;
@@ -89,6 +96,28 @@ export function RimHorizonPanel({
             </button>
           ))}
         </div>
+        {onSaveHorizon && valid.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {valid.map((r) => (
+              <button key={r.horizon} type="button" className="btn-ghost px-2 py-1 text-xs" disabled={saving} onClick={() => onSaveHorizon(r.horizon)}>
+                บันทึกผล {r.horizon} ปีเป็น valuation แยก
+              </button>
+            ))}
+            {saveMsg && (
+              <span className={clsx("text-xs", saveMsg.ok ? "text-pos" : "text-neg")}>
+                {saveMsg.text}
+                {saveMsg.href && (
+                  <a href={saveMsg.href} className="ml-1 text-accent underline">
+                    เปิด
+                  </a>
+                )}
+              </span>
+            )}
+            <span className="w-full text-[11px] text-muted">
+              บันทึกเป็นภาพ (snapshot) ใช้ Residual income เดิม ตัดเหลือ h ปีแรกตามที่กรอก — แสดงในประวัติพร้อมป้าย แต่ไม่ถูกนับเป็น “ล่าสุดของวิธีนี้” จึงไม่ทับ valuation หลัก
+            </span>
+          </div>
+        )}
         {cmp.notes.length > 0 && (
           <ul className="mt-3 space-y-0.5 text-xs text-muted">
             {cmp.notes.map((n) => (

@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { evaluate, evaluateMultiStageRi, multiStageRiToolInput, valuationInput, type MultiStageRiToolInput, type ValuationInput } from "@/lib/valuation-schemas";
+import { evaluate, evaluateMultiStageRi, isHorizonSnapshot, multiStageRiToolInput, valuationInput, type MultiStageRiToolInput, type ValuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
 import { MODEL_VERSION } from "@/lib/governance";
 import { getAssetBySymbol } from "./assets";
@@ -121,7 +121,8 @@ function median(xs: number[]) {
 
 function summarize(symbol: string, rows: Row[]): StockValuationGroup {
   const latest = new Map<string, Row>();
-  for (const r of rows) if (!latest.has(r.method)) latest.set(r.method, r); // rows are newest first
+  // Rows are newest first; saved horizon snapshots (RIM 5Y/10Y views) never become the method's current view.
+  for (const r of rows) if (!latest.has(r.method) && !isHorizonSnapshot(r.assumptions)) latest.set(r.method, r);
   const latestByMethod = [...latest.values()];
   const vals = latestByMethod.map((r) => r.intrinsicValue).filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
   return {

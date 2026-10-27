@@ -1,6 +1,6 @@
 import { assessDataQuality, marketInputProvenance, priceDateAt, readTimestampPolicy, statementsAsOfAt, timestampFlags } from "@/lib/governance";
 import { getDb, schema } from "@/db";
-import { evaluate, valuationInput } from "@/lib/valuation-schemas";
+import { evaluate, isHorizonSnapshot, valuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
 import { detectUnrecordedSplits } from "@/lib/finance/price-coverage";
 import { listAssets } from "./assets";
@@ -24,7 +24,7 @@ export async function dataQualityReport() {
   const policy = readTimestampPolicy(settings.timestampPolicy);
   // Latest valuation per symbol and method (rows are newest first), checked as of its own date.
   const seen = new Set<string>();
-  const latest = valuations.filter((v) => v.method !== "bond" && !seen.has(`${v.symbol}|${v.method}`) && seen.add(`${v.symbol}|${v.method}`));
+  const latest = valuations.filter((v) => v.method !== "bond" && !isHorizonSnapshot(v.assumptions) && !seen.has(`${v.symbol}|${v.method}`) && seen.add(`${v.symbol}|${v.method}`));
   const valuationDates = latest.map((v) => {
     const dates = v.assetId ? (prices.get(v.assetId) ?? []).map(([d]) => d) : [];
     const st = statementsAsOfAt(

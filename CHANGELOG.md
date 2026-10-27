@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-27 — Phase 3: save RIM horizon snapshots
+- "บันทึกผล h ปีเป็น valuation แยก" under the 5Y/10Y comparison. It saves the first h forecast years as a new `residual_income` valuation tagged `horizonSnapshot`, with the continuing value re-based at year h. Years are never added.
+- Snapshots show in history with a badge but never replace the latest valuation of a method (stock page average/median, overview, data quality).
+
 ## 2026-10-27 — Phase 2: configurable date-consistency policy
 - Settings → "เกณฑ์วันที่ข้อมูลของ valuation" (inputs / price / statements, defaults 180 / 7 / 548 days), stored in `settings.timestamp_policy` (additive migration 0012) and available at REST `/api/v1/settings/timestamp-policy`.
 - Valuation list, editor and data quality now also check the last stored price on or before the valuation date and the latest fiscal year (year-end taken as 31 Dec), not only Rf / ERP / beta dates.

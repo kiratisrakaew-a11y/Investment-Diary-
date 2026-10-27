@@ -53,6 +53,12 @@ API / MCP: ส่ง `forecastMode: "staged"` และ `stages` ภายใต
 8. **ROE จริงจากงบ**: เติมอัตโนมัติเมื่อกด "เติมสมมติฐานจากงบการเงิน" ใช้เพื่อเตือนเมื่อ ROE ปีแรกต่างเกิน 5 จุดเท่านั้น ไม่มีผลต่อมูลค่า
    - มีคำเตือนเมื่อ payout อยู่นอก 0–100% และเมื่อ EPS ที่กรอกทำให้ ROE ต่างจาก ROE ที่กรอกไว้
 
+9. **บันทึกผล 5 / 10 ปีเป็น valuation แยก** (ปุ่มใต้การ์ดเทียบ horizon)
+   - บันทึกเป็น Residual income ใหม่ที่ตัดเหลือ h ปีแรกตามที่กรอก และคิด continuing value ใหม่ที่ปี h
+   - ตั้งชื่อ "… · ภาพ h ปี" และบันทึกที่มาไว้ในหมายเหตุ
+   - ในประวัติจะมีป้าย "ภาพ h ปี จาก n ปี" แต่ไม่ถูกนับเป็น valuation ล่าสุดของวิธีนี้ จึงไม่ทับ valuation หลักและไม่อยู่ในค่าเฉลี่ย/มัธยฐาน
+   - หน้าแก้ไขยังอยู่ที่ valuation เดิม มีลิงก์ "เปิด" ไปยังภาพที่บันทึก
+
 API / MCP: `multi_stage_residual_income` และ `value_security` ส่งคืน `horizonComparison`, `persistenceSensitivity`, `sensitivity`, `payoutSensitivity` และ `scenarios` (ส่ง `scenarios` / `historicalRoe` เข้าไปได้); กำหนดช่วงเองได้ด้วย `compareHorizons: [5, 10]`
 
 ## 3. วันที่ของข้อมูลและเวอร์ชันสูตร

@@ -48,19 +48,26 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
           explanation = null;
         }
         const oldVersion = v.modelVersion !== MODEL_VERSION;
+        const snap = (v.assumptions as { horizonSnapshot?: { horizon: number; sourceYears: number } } | null)?.horizonSnapshot;
         const changed =
           explanation != null && v.intrinsicValue != null && (explanation.value == null || Math.abs(explanation.value - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue)));
         const inputsAsOf = (v.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf;
         const tsFlags = v.timestampFlags ?? timestampFlags({ valuationDate: v.date, inputsAsOf });
         return (
-          <div key={v.id} className={clsx(!v.isLatestForMethod && "opacity-70")}>
+          <div key={v.id} className={clsx(!v.isLatestForMethod && !snap && "opacity-70")}>
             <button type="button" onClick={() => setOpen(isOpen ? null : v.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-3 text-left text-sm">
               <span className="w-4 text-muted">{isOpen ? "▾" : "▸"}</span>
               <span className="w-24 tabular-nums text-muted">{v.date}</span>
               <Badge className="border-accent/40 text-accent">{METHOD_LABEL[v.method] ?? v.method}</Badge>
               <span className="min-w-32 flex-1 truncate">
                 {v.title || <span className="text-muted">ไม่มีชื่อ scenario</span>}
-                {!v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>}
+                {snap ? (
+                  <Badge className="ml-2 border-info/40 text-info" title="ไม่นับเป็น valuation ล่าสุดของวิธีนี้ (ไม่อยู่ในค่าเฉลี่ย/มัธยฐาน)">
+                    ภาพ {snap.horizon} ปี จาก {snap.sourceYears} ปี
+                  </Badge>
+                ) : (
+                  !v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>
+                )}
                 {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
                 {oldVersion &&
                   (changed ? (

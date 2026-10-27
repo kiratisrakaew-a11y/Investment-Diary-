@@ -17,7 +17,7 @@ import {
   type ScenarioField,
   type SensitivityAxis,
 } from "@/lib/finance/valuation";
-import { evaluate, riForecastRows, type ValuationInput } from "@/lib/valuation-schemas";
+import { evaluate, riForecastRows, riHorizonSnapshot, type ValuationInput } from "@/lib/valuation-schemas";
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
 import { DcfStageEditor } from "./DcfStageEditor";
@@ -230,6 +230,27 @@ export function ValuationEditor({
       setMsg({ ok: true, text: "บันทึกแล้ว" });
       // Show the new valuation alongside the stock's other valuations.
       router.push(`/valuation/stock/${encodeURIComponent(symbol)}`);
+    });
+  }
+
+  const [snapMsg, setSnapMsg] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
+  /** Save the first h years as a new, labelled residual_income valuation; the editor stays as it is. */
+  function saveHorizon(h: number) {
+    setSnapMsg(null);
+    start(async () => {
+      try {
+        const assumptions = riHorizonSnapshot(ri, h, title || undefined);
+        const n = assumptions.horizonSnapshot!.sourceYears;
+        const r = await saveValuationAction({
+          symbol,
+          title: `${title || "Residual income"} · ภาพ ${h} ปี`,
+          note: `ภาพ ${h} ปีจากประมาณการ ${n} ปี${title ? ` (“${title}”)` : ""} — continuing value คำนวณใหม่ที่ปี ${h}${note ? `\n\n${note}` : ""}`,
+          valuation: { method: "residual_income", assumptions },
+        });
+        setSnapMsg(r.ok ? { ok: true, text: `บันทึกภาพ ${h} ปีแล้ว`, href: `/valuation/${r.id}` } : { ok: false, text: r.error });
+      } catch (e) {
+        setSnapMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      }
     });
   }
 
@@ -472,6 +493,12 @@ export function ValuationEditor({
             </Group>
           )}
 
+          {method === "residual_income" && ri.horizonSnapshot && (
+            <p className="rounded-lg border border-info/40 bg-info/10 p-2 text-xs">
+              valuation นี้เป็นภาพ {ri.horizonSnapshot.horizon} ปีจากประมาณการ {ri.horizonSnapshot.sourceYears} ปี
+              {ri.horizonSnapshot.sourceTitle ? ` (“${ri.horizonSnapshot.sourceTitle}”)` : ""} — แสดงในประวัติแต่ไม่นับเป็น valuation ล่าสุดของวิธีนี้
+            </p>
+          )}
           {method === "residual_income" && <RiForecastEditor ri={ri} setRi={setRi} />}
 
           {method === "residual_income" && (
@@ -593,6 +620,9 @@ export function ValuationEditor({
           scenarios={ri.scenarios}
           onScenariosChange={(scenarios) => setRi((a) => ({ ...a, scenarios }))}
           terminalMethod={ri.terminalMethod ?? "perpetuity"}
+          onSaveHorizon={symbol ? saveHorizon : undefined}
+          saving={pending}
+          saveMsg={snapMsg}
         />
       )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />

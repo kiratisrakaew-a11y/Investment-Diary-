@@ -197,6 +197,14 @@ export const residualIncomeSchema = z.object({
     .max(5)
     .optional()
     .describe("Multi-stage: Bear/Base/Bull overrides with probabilities summing to 1, valued at the full forecast horizon"),
+  horizonSnapshot: z
+    .object({
+      horizon: z.number().int().min(1).max(30),
+      sourceYears: z.number().int().min(1).max(30),
+      sourceTitle: z.string().max(200).optional(),
+    })
+    .optional()
+    .describe("Set when this valuation is a saved h-year view of a longer forecast; such snapshots are listed but not counted as the latest valuation of the method"),
   inputMeta: inputMetaSchema,
 });
 
@@ -342,6 +350,33 @@ export function riForecastRows(a: Partial<RiAssumptions>) {
       }).filter(([, v]) => v != null),
     ) as NonNullable<RiAssumptions["forecast"]>[number];
   });
+}
+
+/**
+ * An h-year snapshot of a multi-stage residual-income valuation: the first h forecast rows exactly as
+ * entered (continuing value re-based at year h by the engine), labelled with where it came from.
+ * Years are never added: h must not exceed the rows available.
+ */
+export function riHorizonSnapshot(a: RiAssumptions, horizon: number, sourceTitle?: string): RiAssumptions {
+  const rows = riForecastRows(a);
+  if (!(Number.isInteger(horizon) && horizon >= 1)) throw new Error("Horizon ต้องเป็นจำนวนเต็ม ≥ 1");
+  if (rows.length < horizon) throw new Error(`มีประมาณการ ${rows.length} ปี — บันทึกภาพ ${horizon} ปีไม่ได้ (ระบบไม่เติมปีที่ขาดให้)`);
+  return {
+    ...a,
+    model: "multi_stage",
+    forecast: rows.slice(0, horizon),
+    roeForecast: undefined,
+    epsForecast: undefined,
+    payoutForecast: undefined,
+    bookValueForecast: undefined,
+    compareHorizons: [horizon],
+    horizonSnapshot: { horizon, sourceYears: a.horizonSnapshot?.sourceYears ?? rows.length, sourceTitle: sourceTitle || a.horizonSnapshot?.sourceTitle },
+  };
+}
+
+/** Saved horizon snapshots are shown in history but never replace the latest valuation of a method. */
+export function isHorizonSnapshot(assumptions: unknown): boolean {
+  return !!(assumptions as { horizonSnapshot?: unknown } | null)?.horizonSnapshot;
 }
 
 /** Which residual-income model applies: explicit `model`, else multi-stage when yearly data exists. */

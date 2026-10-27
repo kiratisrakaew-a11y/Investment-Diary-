@@ -161,3 +161,27 @@ describe("RIM warnings (phase 1)", () => {
     expect(sc.expectedValue).toBeCloseTo(ev.value!, 12);
   });
 });
+
+describe("phase 3: horizon snapshots", () => {
+  const a = { bookValuePerShare: 20, roe: 0.12, payoutRatio: 0.4, currentPrice: 25, riskFree: 0.03, beta: 1, equityRiskPremium: 0.07, extraPremium: 0, terminalGrowth: 0.03, model: "multi_stage" as const };
+  it("a 5-year snapshot values exactly like the 5Y horizon of the full forecast, and survives the schema", async () => {
+    const { riHorizonSnapshot, residualIncomeSchema, isHorizonSnapshot } = await import("../valuation-schemas");
+    const full = residualIncomeSchema.parse({ ...a, forecast });
+    const fullEv = evaluate({ method: "residual_income", assumptions: full });
+    const fiveY = (fullEv.details.horizonComparison as { rows: { horizon: number; value: number }[] }).rows[0];
+    const snap = residualIncomeSchema.parse(JSON.parse(JSON.stringify(riHorizonSnapshot(full, 5, "Base 2026"))));
+    expect(snap.forecast).toHaveLength(5);
+    expect(snap.horizonSnapshot).toEqual({ horizon: 5, sourceYears: 10, sourceTitle: "Base 2026" });
+    expect(isHorizonSnapshot(snap)).toBe(true);
+    expect(isHorizonSnapshot(full)).toBe(false);
+    expect(evaluate({ method: "residual_income", assumptions: snap }).value).toBeCloseTo(fiveY.value, 12);
+  });
+  it("parallel arrays are flattened into rows; years beyond the data are refused", async () => {
+    const { riHorizonSnapshot, residualIncomeSchema } = await import("../valuation-schemas");
+    const parallel = residualIncomeSchema.parse({ ...a, roeForecast: [0.15, null, 0.13], epsForecast: [null, 3.1, null] });
+    const s = riHorizonSnapshot(parallel, 2);
+    expect(s.forecast).toEqual([{ roe: 0.15 }, { eps: 3.1 }]);
+    expect(s.roeForecast).toBeUndefined();
+    expect(() => riHorizonSnapshot(parallel, 5)).toThrow(/มีประมาณการ 3 ปี/);
+  });
+});
