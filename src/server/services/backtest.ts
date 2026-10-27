@@ -13,7 +13,7 @@ import { getSettings, getTradingCosts } from "./settings";
 
 export const backtestInput = z
   .object({
-    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom", ...DIVIDEND_STRATEGY_IDS]).describe("Strategy to test; dividend_* select by dividend metrics known at each decision date"),
+    strategy: z.enum(["buy_and_hold", "equal_weight", "min_variance", "max_sharpe", "black_litterman", "custom", "risk_parity", "max_diversification", "min_cvar", ...DIVIDEND_STRATEGY_IDS]).describe("Strategy to test; dividend_* select by dividend metrics known at each decision date"),
     symbols: z.array(z.string()).max(30).optional().describe("Universe (default: every non-cash asset with prices)"),
     startDate: z.string().optional().describe("First date of data (YYYY-MM-DD); default = when all chosen assets have prices"),
     endDate: z.string().optional(),
@@ -40,6 +40,7 @@ export const backtestInput = z
       .describe("strict refuses (NOT_BACKTESTABLE_NO_ASOF_DATA) when needed statements have no publication date; illustrative_lookahead runs but is labelled biased"),
     dividendCashflows: z.boolean().optional().describe("Simulate dividend cash events (entitlement on ex-date, cash on payment date). Always on for dividend_* strategies; requires price_return"),
     reinvestDividends: z.boolean().default(true),
+    cvarConfidence: z.number().min(0.8).max(0.995).default(0.95).describe("min_cvar: CVaR confidence"),
     paymentLagDays: z.number().int().min(1).max(120).nullable().default(null).describe("Assumption for events without a payment date: pay = ex-date + N days. null = such events are not credited"),
     withholding: z.record(z.string(), z.number().min(0).max(1)).default({ thai_stock: 0.1, fund: 0.1, us_stock: 0.15 }).describe("Default dividend withholding by asset class when an event has none (assumption)"),
   })
@@ -211,6 +212,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     useLots: x.useLots,
     decisionProvider,
     dividendCashflows,
+    cvarConfidence: x.cvarConfidence,
   });
   if (!r.ok) throw new Error(r.error);
   return {

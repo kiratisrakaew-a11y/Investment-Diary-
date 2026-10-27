@@ -51,7 +51,12 @@ export const optimizeInput = z
     .optional()
     .describe("Robustness diagnostics: bootstrap weight distribution and expected-return sensitivity (same optimizer and constraints)"),
   overrides: z.record(z.string(), z.number()).optional().describe("Expected annual return overrides by symbol (decimal)"),
-  objective: z.enum(["max_sharpe", "min_variance", "target_return", "target_risk", "utility"]).optional(),
+  objective: z
+    .enum(["max_sharpe", "min_variance", "target_return", "target_risk", "utility", "risk_parity", "max_diversification", "min_cvar"])
+    .optional()
+    .describe("risk_parity = equal (or budgeted) risk contributions; max_diversification = max Σwσ/σ_p; min_cvar = minimum historical CVaR (LP). Risk-based objectives do not use expected returns"),
+  riskBudgets: z.record(z.string(), z.number().positive()).optional().describe("risk_parity: risk budget per symbol (normalized); default equal"),
+  cvarConfidence: z.number().min(0.8).max(0.995).optional().describe("min_cvar confidence (default 0.95)"),
   riskAversion: z.number().min(0.5).max(20).optional().describe("A in U = E[R] − ½Aσ² (2 aggressive … 10 conservative)"),
   targetReturn: z.number().optional(),
   targetRisk: z.number().optional(),

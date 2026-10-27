@@ -10,7 +10,7 @@
  * Between rebalances quantities are fixed (weights drift); idle cash accrues Rf.
  */
 import { estimateInputs, ledoitWolf, type Matrix } from "./mpt";
-import { recommend, type Objective } from "./recommend";
+import { RISK_OBJECTIVES, recommend, type Objective, type RiskObjective } from "./recommend";
 import { blackLitterman, type BlView } from "./black-litterman";
 import { rebalance, type CostBreakdown, type TradingCosts } from "./rebalance";
 import { beta as calcBeta } from "./risk";
@@ -19,7 +19,7 @@ import { computeMetrics, type PerformanceMetrics } from "./metrics";
 import { alignWithBenchmark } from "./return-series";
 import type { DividendStrategyId } from "./dividend-strategies";
 
-export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom" | DividendStrategyId;
+export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom" | DividendStrategyId | RiskObjective;
 
 /** Target weights chosen by an external strategy using only data known at `cutoff` (the close before the trade date). */
 export type DecisionProvider = (ctx: { t: number; cutoff: string; tradeDate: string }) => { w: number[]; note?: string; selected?: string[]; diagnostics?: string[] } | { error: string };
@@ -60,6 +60,8 @@ export interface BacktestInput {
   costs: TradingCosts;
   lots: Record<string, number>;
   useLots: boolean;
+  /** min_cvar: confidence (default 0.95); scenarios are the training-window returns. */
+  cvarConfidence?: number;
   /** Required for dividend strategies; ignored by the built-in ones. */
   decisionProvider?: DecisionProvider;
   dividendCashflows?: DividendCashflows;
@@ -170,8 +172,20 @@ export function backtest(x: BacktestInput): BacktestResult {
       if (!bl.ok) return { error: bl.errors.join(" · ") };
       mu = bl.posterior;
     }
-    const objective: Objective = x.strategy === "min_variance" ? "min_variance" : "max_sharpe";
-    const r = recommend({ symbols: x.symbols, mu, cov, rf: x.rf, bounds: x.bounds, objective, riskAversion: 4, useRiskFree: false });
+    const isRisk = (RISK_OBJECTIVES as string[]).includes(x.strategy);
+    const objective: Objective = isRisk ? (x.strategy as RiskObjective) : x.strategy === "min_variance" ? "min_variance" : "max_sharpe";
+    const r = recommend({
+      symbols: x.symbols,
+      mu,
+      cov,
+      rf: x.rf,
+      bounds: x.bounds,
+      objective,
+      riskAversion: 4,
+      useRiskFree: false,
+      // Risk-based: the same training window (returns ending before t) as the scenario set.
+      ...(objective === "min_cvar" ? { scenarios: win, cvarConfidence: x.cvarConfidence ?? 0.95 } : {}),
+    });
     if (!r.ok) {
       // No tangency portfolio in this window: fall back to minimum variance (disclosed).
       if (objective === "max_sharpe") {

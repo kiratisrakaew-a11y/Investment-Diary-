@@ -23,6 +23,9 @@ const OBJECTIVES: { value: Objective; label: string }[] = [
   { value: "utility", label: "Max utility ตาม risk aversion" },
   { value: "target_return", label: "ผลตอบแทนเป้าหมาย" },
   { value: "target_risk", label: "ความเสี่ยงเป้าหมาย" },
+  { value: "risk_parity", label: "Risk parity (ความเสี่ยงเท่ากันทุกตัว)" },
+  { value: "max_diversification", label: "Maximum diversification" },
+  { value: "min_cvar", label: "Minimum CVaR (ขาดทุนวันแย่ ๆ ต่ำสุด)" },
 ];
 
 export function OptimizerClient({
@@ -34,7 +37,10 @@ export function OptimizerClient({
   rf,
   erp,
   period,
+  scenarios,
 }: {
+  /** Historical per-period returns per asset (same order as assets), for min CVaR. */
+  scenarios?: number[][];
   assets: UniverseAsset[];
   cov: number[][];
   covShrunk: number[][];
@@ -48,6 +54,7 @@ export function OptimizerClient({
   const [method, setMethod] = useState<ReturnMethod>("blend");
   const [overrides, setOverrides] = useState<Record<string, number | null>>({});
   const [objective, setObjective] = useState<Objective>("max_sharpe");
+  const [cvarConf, setCvarConf] = useState(0.95);
   const [riskAversion, setRiskAversion] = useState(4);
   const [targetReturn, setTargetReturn] = useState(0.08);
   const [targetRisk, setTargetRisk] = useState(0.1);
@@ -105,9 +112,9 @@ export function OptimizerClient({
   const mu = assets.map((a, i) => overrides[a.symbol] ?? baseReturn(a, i));
 
   const params = useMemo(
-    () => ({ included, mu: mu.join(), objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration }),
+    () => ({ included, mu: mu.join(), objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [included, method, overrides, objective, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration],
+    [included, method, overrides, objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration],
   );
 
   function compute() {
@@ -147,6 +154,7 @@ export function OptimizerClient({
           currentValues: cur,
           totalWealth: cur.reduce((a, b) => a + b, 0) + extraCash,
           useRiskFree,
+          ...(objective === "min_cvar" && scenarios ? { scenarios: idx.map((i) => scenarios[i]), cvarConfidence: cvarConf } : {}),
         };
         const r = recommend({ ...common, mu: idx.map((i) => mu[i]), cov: isBl && postCov && bl?.posteriorCov ? bl.posteriorCov : subCov });
         // Same optimizer and constraints with the equilibrium prior, for the weight comparison.
@@ -199,6 +207,12 @@ export function OptimizerClient({
           )}
           {objective === "target_return" && <NumField label="ผลตอบแทนเป้าหมายต่อปี" pct value={targetReturn} onChange={(v) => setTargetReturn(v ?? 0)} />}
           {objective === "target_risk" && <NumField label="ความเสี่ยงสูงสุด σ ต่อปี" pct value={targetRisk} onChange={(v) => setTargetRisk(v ?? 0)} />}
+          {objective === "min_cvar" && (
+            <SelectField label="ระดับความเชื่อมั่น CVaR" value={String(cvarConf)} onChange={(v) => setCvarConf(Number(v))} options={[{ value: "0.95", label: "95%" }, { value: "0.99", label: "99%" }]} />
+          )}
+          {(objective === "risk_parity" || objective === "max_diversification" || objective === "min_cvar") && (
+            <p className="text-xs text-muted">กลยุทธ์เน้นความเสี่ยง: เลือกน้ำหนักจากความเสี่ยง/ความสัมพันธ์ ไม่ใช้ผลตอบแทนคาดหวัง{objective === "risk_parity" ? " · ใช้ร่วมกับเพดานผู้ออก/หมวดไม่ได้" : ""}</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <NumField label="น้ำหนักต่ำสุด/ตัว" pct value={minW} onChange={(v) => setMinW(Math.max(0, v ?? 0))} />
             <NumField label="น้ำหนักสูงสุด/ตัว" pct value={maxW} onChange={(v) => setMaxW(Math.min(1, Math.max(0.01, v ?? 1)))} />
@@ -365,6 +379,28 @@ export function OptimizerClient({
               <KV k="ผลตอบแทนคาดหวัง" v={fmtPct(r.final.expectedReturn)} />
               <KV k="ความเสี่ยง σ" v={fmtPct(r.final.volatility)} />
               <KV k="Sharpe" v={fmtRatio(r.final.sharpe)} />
+              {r.riskBased && (
+                <>
+                  <p className="pt-2 text-xs font-medium text-muted">กลยุทธ์เน้นความเสี่ยง</p>
+                  <KV k="Diversification ratio" v={fmtRatio(r.riskBased.diversificationRatio)} />
+                  {r.riskBased.maxBudgetDeviation != null && <KV k="ส่วนต่างจาก risk budget สูงสุด" v={r.riskBased.maxBudgetDeviation.toExponential(1)} />}
+                  {r.riskBased.cvar && (
+                    <>
+                      <KV k={`CVaR ${(r.riskBased.cvar.confidence * 100).toFixed(0)}% ต่อวัน (LP)`} v={fmtPct(r.riskBased.cvar.objective, 2)} />
+                      <KV k="ตรวจทาน: ES ในอดีตของน้ำหนักนี้" v={fmtPct(r.riskBased.cvar.historicalES, 2)} />
+                    </>
+                  )}
+                  <div className="pt-1 text-xs">
+                    {result!.idx.map((i, k) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-muted">ส่วนแบ่งความเสี่ยง {assets[i].symbol}</span>
+                        <span className="tabular-nums">{fmtPct(r.riskBased!.riskShares[k], 1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted">{r.riskBased.method} · {r.riskBased.status} · {r.riskBased.iterations} รอบ</p>
+                </>
+              )}
               {useRiskFree && <KV k="สัดส่วนสินทรัพย์เสี่ยง y*" v={fmtPct(r.riskyShare, 1)} />}
               {r.current && (
                 <>

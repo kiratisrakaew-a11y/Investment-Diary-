@@ -120,7 +120,7 @@ function tools() {
     }),
     betaZodTool({
       name: "backtest_portfolio",
-      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend cash on payment dates; refuses NOT_BACKTESTABLE_NO_ASOF_DATA without statement publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
+      description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend cash on payment dates; refuses NOT_BACKTESTABLE_NO_ASOF_DATA without statement publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).",
       inputSchema: backtestInput,
       run: async (x) => json(summarizeBacktest(await backtestPortfolio(x))),
     }),

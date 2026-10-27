@@ -242,6 +242,10 @@ export interface OptimizeParams {
   robust?: { bootstrap?: number; returnShock?: number; seed?: number };
   returnBasis?: ReturnBasis;
   constraints?: ConstraintsInput;
+  /** risk_parity: budget by symbol (normalized; default equal). */
+  riskBudgets?: Record<string, number>;
+  /** min_cvar confidence (default 0.95). */
+  cvarConfidence?: number;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
@@ -290,6 +294,9 @@ export async function optimizePortfolio(p: OptimizeParams) {
     currentValues,
     totalWealth: wealth,
     useRiskFree: p.useRiskFree ?? false,
+    ...(p.riskBudgets ? { riskBudgets: symbols.map((s) => p.riskBudgets![s] ?? p.riskBudgets![s.toUpperCase()] ?? 0) } : {}),
+    // min_cvar: historical per-period returns of the same universe and window (no new data loader).
+    ...(p.objective === "min_cvar" ? { scenarios: u.series?.returns, cvarConfidence: p.cvarConfidence ?? 0.95 } : {}),
   };
   const r = recommend({
     symbols,
@@ -374,6 +381,15 @@ export async function optimizePortfolio(p: OptimizeParams) {
     skipped: u.skipped,
     objective: r.objective,
     allocations: r.allocations,
+    ...(r.riskBased
+      ? {
+          riskBased: {
+            ...r.riskBased,
+            riskShares: Object.fromEntries(symbols.map((s, i) => [s, r.riskBased!.riskShares[i]])),
+            ...(r.riskBased.budgets ? { budgets: Object.fromEntries(symbols.map((s, i) => [s, r.riskBased!.budgets![i]])) } : {}),
+          },
+        }
+      : {}),
     riskyShare: r.riskyShare,
     riskFreeShare: r.riskFreeShare,
     recommended: r.final,

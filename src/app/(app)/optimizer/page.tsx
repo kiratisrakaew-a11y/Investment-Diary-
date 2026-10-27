@@ -3,7 +3,7 @@ import { OptimizerClient } from "@/components/OptimizerClient";
 import { Empty, PageHeader } from "@/components/ui";
 
 export default async function OptimizerPage() {
-  const u = await loadUniverse();
+  const u = await loadUniverse(undefined, undefined, { withSeries: true });
   return (
     <>
       <PageHeader
@@ -29,7 +29,7 @@ export default async function OptimizerPage() {
             covShrunk={u.covShrunk}
             shrinkage={u.shrinkage}
             periodsPerYear={u.periodsPerYear}
-            rf={u.riskFree} erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} />
+            rf={u.riskFree} erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
         </>
       )}
     </>
