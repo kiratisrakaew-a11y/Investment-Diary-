@@ -114,6 +114,10 @@ export const dcfSchema = z.object({
   terminalRoe: rate("Steady-state return on equity (FCFE, stable_roic)").default(0.12),
   exitMultiple: z.number().default(8).describe("Terminal EV/EBITDA (FCFF) or P/E (FCFE) when terminalMethod = exit_multiple"),
   midYear: z.boolean().default(false),
+  netIncomeBasis: z
+    .enum(["attributable", "consolidated"])
+    .optional()
+    .describe("FCFE: forecast net income attributable to the parent (default, no minority deduction) or consolidated (otherClaims deducted)"),
   scenarios: z.array(scenarioSchema).max(5).optional().describe("Bear/base/bull overrides with probabilities summing to 1"),
   inputMeta: inputMetaSchema,
   forecastMode: z
@@ -540,11 +544,19 @@ function evaluateCore(input: ValuationInput, lean = false): EvaluationSummary {
         };
       }
       const value = residualIncome(a.bookValuePerShare, a.roe, ke, a.terminalGrowth);
+      // Single-stage RIM / justified P/BV and P/E assume g = ROE × (1 − payout); a different g mixes assumptions.
+      const gSustainable = a.roe * (1 - a.payoutRatio);
+      const gWarnings =
+        Math.abs(a.terminalGrowth - gSustainable) > 0.01
+          ? [`g ที่ใส่ ${(a.terminalGrowth * 100).toFixed(2)}% ต่างจาก g ที่สอดคล้องกับ ROE × (1 − payout) = ${(gSustainable * 100).toFixed(2)}% เกิน 1 จุด — สมมติฐาน ROE, payout และ g ขัดกัน (มูลค่ายังคำนวณตาม g ที่ใส่)`]
+          : [];
       return {
         value: finite(value),
         price: a.currentPrice,
         upside: upsideOf(value, a.currentPrice),
         details: {
+          warnings: gWarnings,
+          sustainableGrowth: gSustainable,
           costOfEquity: ke,
           justifiedPBV: finite(justifiedPBV(a.roe, ke, a.terminalGrowth)),
           justifiedPE: finite(justifiedPE(a.payoutRatio, ke, a.terminalGrowth)),

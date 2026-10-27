@@ -88,7 +88,7 @@ export default async function AnalyticsPage() {
                 <Row label="Risk-free rate (Rf)" value={fmtPct(perf.riskFreeRate)} formula="ตั้งค่าเอง (ค่าเริ่มต้นเป็นตัวอย่าง ไม่ใช่ข้อมูลตลาด)" />
                 <Row label="Excess return ต่อปี" value={fmtPct(perf.realizedExcessReturn)} tone={signClass(perf.realizedExcessReturn)} formula="mean(rₜ − rf,ₜ) × N" />
                 <Row label="Volatility (σ)" value={fmtPct(perf.volatility)} formula="σ(rₜ) × √N" />
-                <Row label="Downside deviation" value={fmtPct(perf.downsideDeviation)} formula="√(Σ min(0, rₜ − rf,ₜ)² / n) × √N" />
+                <Row label="Downside deviation" value={fmtPct(perf.downsideDeviation)} formula={`√(Σ min(0, rₜ − MARₜ)² / n) × √N · MAR = ${perf.sortinoMarBasis === "risk_free" ? "Rf" : "ตั้งเอง"} ${fmtPct(perf.sortinoMar)} ต่อปี`} />
                 <Row label="Max drawdown" value={fmtPct(perf.maxDrawdown)} formula="ลดลงสูงสุดจากจุดสูงสุดของดัชนี TWR" />
                 <Row
                   label={`VaR 95% (1 งวด ≈ ${perf.varHorizonDays?.toFixed(1) ?? "–"} วัน)`}
@@ -174,7 +174,7 @@ export default async function AnalyticsPage() {
             <table className="table">
               <tbody>
                 <Row label="Sharpe ratio" value={fmtRatio(perf.sharpe)} formula={na(perf.sharpe, "ข้อมูลไม่พอ (ต้อง ≥ " + perf.dataQuality.minRequired + " งวด)") ?? "mean(rₜ − rf,ₜ) / σ(rₜ − rf,ₜ) × √N"} />
-                <Row label="Sortino ratio" value={fmtRatio(perf.sortino)} formula="mean(excess) × N / downside deviation" />
+                <Row label="Sortino ratio" value={fmtRatio(perf.sortino)} formula={`mean(rₜ − MARₜ) × N / downside deviation · MAR ${perf.sortinoMarBasis === "risk_free" ? "= Rf (เปลี่ยนได้ในหน้าตั้งค่า)" : "ตั้งเอง"} ${fmtPct(perf.sortinoMar)}`} />
                 <Row label="Calmar ratio" value={fmtRatio(perf.calmar)} formula={na(perf.calmar, "ต้องมีข้อมูล ≥ 1 ปี") ?? "Rp (geometric ต่อปี) / Max drawdown"} />
                 {b ? (
                   <>
@@ -239,7 +239,7 @@ export default async function AnalyticsPage() {
         ) : (
           <>
             <p className="mb-3 text-xs text-muted">
-              ประมาณจากผลตอบแทน (บาท) {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
+              ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — หน้าจัดพอร์ตเลือกแบบผลตอบแทนรวมได้) {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
               {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
               {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}

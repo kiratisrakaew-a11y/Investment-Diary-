@@ -773,8 +773,12 @@ function Details({ method, details }: { method: Method; details: Record<string, 
         <>
           <KV k="Cost of equity (Ke)" v={fmtPct(n("costOfEquity"))} />
           <KV k="Justified P/BV = (ROE−g)/(Ke−g)" v={fmtNum(n("justifiedPBV"))} />
-          <KV k="Justified P/E" v={fmtNum(n("justifiedPE"))} />
+          <KV k="Justified P/E (trailing) = payout·(1+g)/(Ke−g)" v={fmtNum(n("justifiedPE"))} />
           <KV k="P/BV ตลาด" v={fmtNum(n("marketPBV"))} />
+          <KV k="g ที่สอดคล้อง = ROE × (1 − payout)" v={fmtPct(n("sustainableGrowth"))} />
+          {((d.warnings as string[] | undefined) ?? []).map((w) => (
+            <p key={w} className="mt-2 text-xs text-warn">⚠️ {w}</p>
+          ))}
         </>
       )}
       {method === "multiples" && (

@@ -26,6 +26,7 @@ export async function getSettings() {
       tradingCosts: {} as unknown,
       yieldCurve: null as unknown,
       timestampPolicy: null as unknown,
+      sortinoMarPct: null as number | null,
     }
   );
 }
@@ -42,6 +43,7 @@ export async function saveSettings(input: {
   rfAsOf?: string | null;
   erpSource?: string | null;
   erpAsOf?: string | null;
+  sortinoMarPct?: number | null;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
@@ -58,6 +60,7 @@ export async function saveSettings(input: {
     rfAsOf: current.rfAsOf,
     erpSource: current.erpSource,
     erpAsOf: current.erpAsOf,
+    sortinoMarPct: current.sortinoMarPct ?? null,
     ...defined,
   });
   await getDb()

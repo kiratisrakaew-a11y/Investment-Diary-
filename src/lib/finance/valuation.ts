@@ -137,6 +137,12 @@ export interface DcfAssumptions {
   /** EV/EBITDA used when terminalMethod = exit_multiple (FCFE uses P/E on net income). */
   exitMultiple: number;
   midYear: boolean;
+  /**
+   * FCFE only: whether forecast net income is attributable to the parent (default — minority
+   * interest already excluded) or consolidated (minorities' share included, so `otherClaims`
+   * is deducted in the bridge).
+   */
+  netIncomeBasis?: "attributable" | "consolidated";
 
   scenarios?: DcfScenario[];
   inputMeta?: InputMeta;
@@ -438,7 +444,7 @@ function terminal(a: DcfAssumptions, model: "fcff" | "fcfe", rate: number, last:
 function bridge(a: DcfAssumptions, model: "fcff" | "fcfe", pvTotal: number) {
   // FCFF: EV less debt-like claims plus non-operating cash.
   // FCFE: interest income on cash is not in the forecast net income, so cash is added once.
-  return model === "fcff" ? pvTotal - a.debt + a.cash - a.otherClaims : pvTotal + a.cash;
+  return model === "fcff" ? pvTotal - a.debt + a.cash - a.otherClaims : pvTotal + a.cash - (a.netIncomeBasis === "consolidated" ? a.otherClaims : 0);
 }
 
 function compute(a0: DcfAssumptions, model: "fcff" | "fcfe", rate: number) {
@@ -489,6 +495,8 @@ export function dcf(a0: DcfAssumptions, model: "fcff" | "fcfe"): DcfResult {
   else if (share != null && share > 0.7) warnings.push("Terminal value > 70% ของมูลค่า — ควรตรวจ sensitivity ของ g และอัตราคิดลด");
   if (g > a.riskFree + 0.01) warnings.push("Terminal growth สูงกว่าอัตราผลตอบแทนพันธบัตร (proxy ของ nominal GDP growth) ค่อนข้างมาก");
   if (last && last.fcff < 0 && model === "fcff") warnings.push("FCFF ปีสุดท้ายติดลบ — ตรวจสอบ capex / NWC");
+  if (model === "fcfe" && a.otherClaims > 0 && a.netIncomeBasis == null)
+    warnings.push("FCFE: มีส่วนของผู้ถือหุ้นส่วนน้อย/ภาระอื่น แต่ไม่ได้ระบุว่ากำไรที่ประมาณการเป็นส่วนของบริษัทใหญ่หรือรวมทั้งกลุ่ม — ถ้ารวมทั้งกลุ่ม ให้ตั้ง netIncomeBasis = consolidated เพื่อหักส่วนน้อย (ค่าเริ่มต้นถือว่าเป็นส่วนของบริษัทใหญ่ จึงไม่หัก)");
 
   if (a.terminalMethod === "gordon" && last) {
     const rr = detail.reinvestmentRate;

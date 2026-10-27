@@ -75,6 +75,10 @@ export default async function SettingsPage() {
                 <option value="modified_dietz">Modified Dietz (กลางวัน)</option>
               </select>
             </div>
+            <div>
+              <label className="label">ผลตอบแทนขั้นต่ำที่ยอมรับได้ของ Sortino (MAR, % ต่อปี)</label>
+              <input name="sortinoMarPct" type="number" step="0.01" className="input" defaultValue={settings.sortinoMarPct ?? ""} placeholder={`ว่าง = Rf (${settings.riskFreeRate}%)`} />
+            </div>
           </ActionForm>
         </Section>
 

@@ -110,6 +110,7 @@ export const settingsInput = z.object({
   rfAsOf: isoDate.nullable().default(null),
   erpSource: z.string().max(200).nullable().default(null),
   erpAsOf: isoDate.nullable().default(null),
+  sortinoMarPct: z.number().min(-50).max(100).nullable().default(null).describe("Sortino minimum acceptable return, annual %; null = risk-free rate"),
 });
 
 export const targetsInput = z.record(assetClass, z.number().min(0).max(100));

@@ -198,6 +198,8 @@ export const settings = pgTable("settings", {
   yieldCurve: jsonb("yield_curve"),
   /** Date-consistency thresholds for valuations (see timestampPolicySchema); null = defaults. */
   timestampPolicy: jsonb("timestamp_policy"),
+  /** Sortino minimum acceptable return, annual %; null = the risk-free rate. */
+  sortinoMarPct: doublePrecision("sortino_mar_pct"),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

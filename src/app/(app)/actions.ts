@@ -176,6 +176,8 @@ export async function saveSettingsAction(_: ActionState, f: FormData): Promise<A
       rfAsOf: str(f, "rfAsOf") ?? null,
       erpSource: str(f, "erpSource") ?? null,
       erpAsOf: str(f, "erpAsOf") ?? null,
+      // Empty = use the risk-free rate as the Sortino minimum acceptable return.
+      sortinoMarPct: num(f, "sortinoMarPct") ?? null,
     });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {

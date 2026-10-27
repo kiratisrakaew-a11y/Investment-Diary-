@@ -91,6 +91,9 @@ export interface PerformanceMetrics {
   realizedExcessReturn: number | null;
   sharpe: number | null;
   sortino: number | null;
+  /** Minimum acceptable return used by Sortino and the downside deviation (annual). */
+  sortinoMar: number;
+  sortinoMarBasis: "risk_free" | "custom";
   calmar: number | null;
   benchmark: BenchmarkStats | null;
   dataQuality: { observations: number; minRequired: number; status: "ok" | "insufficient"; warnings: string[] };
@@ -137,6 +140,8 @@ export function computeMetrics(opts: {
   finalValue: number;
   finalDate: string;
   riskFreeRate: number; // decimal, annual
+  /** Sortino minimum acceptable return (annual decimal); omitted / null = the risk-free rate. */
+  sortinoMar?: number | null;
   flowTiming?: FlowTiming;
   /**
    * Dates on which every held position has an actual price (no carried price). When given, risk
@@ -200,7 +205,11 @@ export function computeMetrics(opts: {
   const sdR = enough ? stdev(rs) : NaN;
   const sdEx = enough ? stdev(ex) : NaN;
   const volatility = enough ? sdR * Math.sqrt(N!) : null;
-  const dsd = enough ? Math.sqrt(ex.reduce((a, e) => a + Math.min(0, e) ** 2, 0) / ex.length) * Math.sqrt(N!) : null;
+  // Sortino: shortfall below the minimum acceptable return (per period, compounded from the annual MAR).
+  const mar = opts.sortinoMar ?? rf;
+  const belowMar = opts.sortinoMar == null ? ex : pr.map((p) => p.r - perPeriodRf(mar, p.gapDays));
+  const dsd = enough ? Math.sqrt(belowMar.reduce((a, e) => a + Math.min(0, e) ** 2, 0) / belowMar.length) * Math.sqrt(N!) : null;
+  const meanBelowMarAnnual = enough ? mean(belowMar) * N! : null;
   const meanExAnnual = enough ? mean(ex) * N! : null;
   const mdd = vs.length > 1 ? maxDrawdown(growthIdx).maxDrawdown : null;
   if (rs.length > 0 && rs.length < MIN_VAR_OBS) warnings.push(`VaR/ES ต้องการอย่างน้อย ${MIN_VAR_OBS} ช่วงข้อมูล`);
@@ -310,7 +319,9 @@ export function computeMetrics(opts: {
     riskFreeRate: rf,
     realizedExcessReturn: meanExAnnual,
     sharpe: enough && sdEx > 0 ? (mean(ex) / sdEx) * Math.sqrt(N!) : null,
-    sortino: dsd && dsd > 0 && meanExAnnual != null ? meanExAnnual / dsd : null,
+    sortino: dsd && dsd > 0 && meanBelowMarAnnual != null ? meanBelowMarAnnual / dsd : null,
+    sortinoMar: mar,
+    sortinoMarBasis: opts.sortinoMar == null ? "risk_free" : "custom",
     calmar: ann.annualized != null && mdd && mdd > 0 ? ann.annualized / mdd : null,
     benchmark,
     dataQuality: { observations: rs.length, minRequired: MIN_RATIO_OBS, status: enough ? "ok" : "insufficient", warnings },

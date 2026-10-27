@@ -91,6 +91,7 @@ export async function getPerformance(end = today()) {
     finalValue: last?.value ?? 0,
     finalDate: end,
     riskFreeRate: settings.riskFreeRate / 100,
+    sortinoMar: settings.sortinoMarPct != null ? settings.sortinoMarPct / 100 : null,
     flowTiming: settings.twrFlowTiming,
     riskDates: series.filter((p) => p.carriedPositions === 0).map((p) => p.date),
     benchmark: bench.length ? { symbol: settings.benchmarkSymbol, series: bench, kind: settings.benchmarkKind } : null,
