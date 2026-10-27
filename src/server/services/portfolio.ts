@@ -92,6 +92,7 @@ export async function getPerformance(end = today()) {
     finalDate: end,
     riskFreeRate: settings.riskFreeRate / 100,
     flowTiming: settings.twrFlowTiming,
+    riskDates: series.filter((p) => p.carriedPositions === 0).map((p) => p.date),
     benchmark: bench.length ? { symbol: settings.benchmarkSymbol, series: bench, kind: settings.benchmarkKind } : null,
   });
   const inferredFlows = series.filter((p) => p.inferredFlow > 0).map((p) => ({ date: p.date, amount: p.inferredFlow }));

@@ -515,7 +515,12 @@ export function buildSnapshot(assets: AssetInput[], txs: TxInput[], prices: Pric
   };
 }
 
-export type SeriesPoint = ValuePoint & { contributed: number; inferredFlow: number };
+export type SeriesPoint = ValuePoint & {
+  contributed: number;
+  inferredFlow: number;
+  /** Held positions valued with a price dated earlier than this date (carried / stale in the series). */
+  carriedPositions: number;
+};
 
 /**
  * Daily valuation series (THB) on each date in `dates` (ascending), with the
@@ -540,14 +545,16 @@ export function buildValueSeries(assets: AssetInput[], txs: TxInput[], prices: P
       inferred += r.inferred;
     }
     let value = state.cash;
+    let carried = 0;
     for (const [id, l] of state.lots) {
       const a = byId.get(id);
       if (a && l.qty > 0) {
         const info = priceInfo(a, l, d, prices, fx);
         value += l.qty * info.price * (info.fxRate ?? 0);
+        if (a.assetClass !== "cash" && info.priceDate !== d) carried++;
       }
     }
-    out.push({ date: d, value, flow, contributed: state.netContributed, inferredFlow: inferred });
+    out.push({ date: d, value, flow, contributed: state.netContributed, inferredFlow: inferred, carriedPositions: carried });
   }
   return out;
 }

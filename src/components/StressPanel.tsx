@@ -13,7 +13,7 @@ type Result = {
   pnlPct: number;
   navAfter: number;
   byFactor: Record<string, number>;
-  positions: { symbol: string; pnl: { total: number }; returnPct: number; assumptions: { beta: number | null; modifiedDuration: number | null } }[];
+  positions: { symbol: string; pnl: { total: number }; returnPct: number; linearReturn?: number; boundedAtFullLoss?: boolean; assumptions: { beta: number | null; modifiedDuration: number | null } }[];
   correlation: { volatilityBefore: number; volatilityAfter: number; var95Before: number; var95After: number } | null;
   warnings: string[];
 };
@@ -126,6 +126,12 @@ export function StressPanel() {
               {res.results[0].positions.map((p) => (
                 <span key={p.symbol} className="rounded border border-border/60 px-2 py-1">
                   {p.symbol} <span className={signClass(p.pnl.total)}>{fmtPct(p.returnPct, 1)}</span>
+                  {p.boundedAtFullLoss && (
+                    <span className="text-warn" title="สถานะซื้อที่จ่ายเต็มขาดทุนได้ไม่เกินมูลค่าที่ถือ — ค่าเส้นตรงเกินช่วงที่ใช้ได้">
+                      {" "}
+                      (เส้นตรง {fmtPct(p.linearReturn, 1)} → จำกัดที่ −100%)
+                    </span>
+                  )}
                   <span className="text-muted"> (β {p.assumptions.beta?.toFixed(2) ?? "–"}{p.assumptions.modifiedDuration != null ? ` · D ${p.assumptions.modifiedDuration.toFixed(2)}` : ""})</span>
                 </span>
               ))}

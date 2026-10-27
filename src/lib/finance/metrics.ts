@@ -16,7 +16,7 @@
  */
 import { annualizeReturn, daysBetween, periodReturns, xirrDetailed, type CashFlow, type FlowTiming, type ValuePoint, type XirrResult } from "./returns";
 import { expectedShortfall, historicalVaR, maxDrawdown, MIN_VAR_OBS } from "./risk";
-import { backtestVaR, varTable, type VarBacktest, type VarRow } from "./var-backtesting";
+import { backtestVaR, horizonVarTable, varTable, type HorizonVarRow, type VarBacktest, type VarRow } from "./var-backtesting";
 import { correlation, mean, stdev } from "./stats";
 
 /** Minimum periodic observations before ratios are reported. */
@@ -48,6 +48,14 @@ export interface BenchmarkStats {
   warnings: string[];
 }
 
+export interface RiskSample {
+  /** synchronized = only dates where every held position has an actual price. */
+  basis: "all_dates" | "synchronized" | "all_dates_with_carried_prices";
+  observations: number;
+  /** Valuation dates where at least one held position used an earlier price. */
+  carriedDates: number;
+}
+
 export interface PerformanceMetrics {
   startDate: string | null;
   endDate: string | null;
@@ -74,6 +82,8 @@ export interface PerformanceMetrics {
   varHorizonDays: number | null;
   /** Historical VaR / ES at 95% and 99% with sample size, minimum-observation policy and reliability. */
   varTable: VarRow[];
+  /** Historical VaR / ES at 1 period … 5 years from compounded returns (unavailable when history is too short). */
+  varHorizons: HorizonVarRow[];
   /** Rolling out-of-sample coverage backtests (Kupiec / Christoffersen); unavailable on short samples. */
   varBacktest: (VarBacktest | { confidence: number; unavailable: string })[];
   riskFreeRate: number;
@@ -84,6 +94,7 @@ export interface PerformanceMetrics {
   calmar: number | null;
   benchmark: BenchmarkStats | null;
   dataQuality: { observations: number; minRequired: number; status: "ok" | "insufficient"; warnings: string[] };
+  riskSample: RiskSample;
   /** Cumulative growth of 1 THB for portfolio (TWR) and benchmark, for charting. */
   growth: { date: string; portfolio: number; benchmark: number | null }[];
 }
@@ -127,6 +138,12 @@ export function computeMetrics(opts: {
   finalDate: string;
   riskFreeRate: number; // decimal, annual
   flowTiming?: FlowTiming;
+  /**
+   * Dates on which every held position has an actual price (no carried price). When given, risk
+   * statistics (σ, downside, Sharpe, Sortino, VaR / ES, backtests) use returns of the wealth index
+   * between these dates; TWR, CAGR, XIRR and drawdown are unaffected.
+   */
+  riskDates?: string[];
   /** Actual benchmark prints (ascending), not forward-filled. */
   benchmark?: { symbol: string; series: [string, number][]; kind: "price_index" | "total_return" } | null;
 }): PerformanceMetrics {
@@ -137,18 +154,42 @@ export function computeMetrics(opts: {
   // Measure from the first valuation with positive NAV (or a funding flow under end-of-day timing).
   const startIdx = opts.values.findIndex((v) => v.value > 0);
   const vs = startIdx >= 0 ? opts.values.slice(startIdx) : [];
-  const { returns: pr, issues } = periodReturns(vs, timing);
+  const { returns: allPr, issues } = periodReturns(vs, timing);
   warnings.push(...issues);
-  const rs = pr.map((p) => p.r);
   const startDate = vs[0]?.date ?? null;
   const endDate = vs[vs.length - 1]?.date ?? null;
   const periodDays = startDate && endDate ? daysBetween(startDate, endDate) : 0;
-  const N = periodDays > 0 && rs.length > 0 ? rs.length / (periodDays / 365) : null;
 
   // Flow-adjusted wealth index, one entry per valuation date.
   const growthIdx: number[] = vs.map(() => 1);
-  const byDate = new Map(pr.map((p) => [p.date, p.r]));
+  const byDate = new Map(allPr.map((p) => [p.date, p.r]));
   for (let i = 1; i < vs.length; i++) growthIdx[i] = growthIdx[i - 1] * (1 + (byDate.get(vs[i].date) ?? 0));
+
+  // Risk sample: synchronised dates when some valuation dates carry an earlier price (e.g. a Thai
+  // holiday that is a US trading day), so carried prices do not create artificial 0% periods.
+  let pr = allPr;
+  let riskBasis: RiskSample["basis"] = "all_dates";
+  let carriedDates = 0;
+  let riskSpan = periodDays;
+  if (opts.riskDates) {
+    const keep = new Set(opts.riskDates);
+    const idx = vs.map((v, i) => (keep.has(v.date) ? i : -1)).filter((i) => i >= 0);
+    carriedDates = vs.length - idx.length;
+    if (carriedDates > 0) {
+      const sync = idx.slice(1).map((b, k) => ({ date: vs[b].date, r: growthIdx[b] / growthIdx[idx[k]] - 1, gapDays: daysBetween(vs[idx[k]].date, vs[b].date) }));
+      if (sync.length >= MIN_RATIO_OBS && sync.length >= 0.5 * allPr.length) {
+        pr = sync;
+        riskBasis = "synchronized";
+        riskSpan = daysBetween(vs[idx[0]].date, vs[idx[idx.length - 1]].date);
+        warnings.push(`${carriedDates} วันประเมินมีบางสินทรัพย์ใช้ราคาวันก่อน — ค่าความเสี่ยงคำนวณจาก ${sync.length} ช่วงที่ทุกสินทรัพย์มีราคาจริง (TWR/XIRR ไม่เปลี่ยน)`);
+      } else {
+        riskBasis = "all_dates_with_carried_prices";
+        warnings.push(`${carriedDates} วันประเมินใช้ราคาวันก่อนของบางสินทรัพย์ และช่วงที่ทุกสินทรัพย์มีราคาจริงมีน้อยเกินไป (${sync.length}) — ค่าความเสี่ยงใช้ทุกวันซึ่งมีผลตอบแทน 0% เทียมปนอยู่ ความผันผวนและ VaR อาจคลาดเคลื่อน`);
+      }
+    }
+  }
+  const rs = pr.map((p) => p.r);
+  const N = riskSpan > 0 && rs.length > 0 ? rs.length / (riskSpan / 365) : null;
   const cumulative = (growthIdx[growthIdx.length - 1] ?? 1) - 1;
   const ann = annualizeReturn(cumulative, periodDays);
   if (!ann.applicable && periodDays > 0) warnings.push(`ช่วงข้อมูล ${periodDays} วัน (< 1 ปี) — แสดงผลตอบแทนสะสม; ค่ารายปีเป็นการ extrapolate`);
@@ -261,6 +302,7 @@ export function computeMetrics(opts: {
     cvar95: expectedShortfall(rs),
     varHorizonDays: N ? 365 / N : null,
     varTable: varTable(rs),
+    varHorizons: horizonVarTable(rs, N),
     varBacktest: [0.95, 0.99].map((c) => {
       const b = backtestVaR(rs, c, 250, pr.map((p) => p.date));
       return "unavailable" in b ? { confidence: c, unavailable: b.unavailable } : b;
@@ -272,6 +314,7 @@ export function computeMetrics(opts: {
     calmar: ann.annualized != null && mdd && mdd > 0 ? ann.annualized / mdd : null,
     benchmark,
     dataQuality: { observations: rs.length, minRequired: MIN_RATIO_OBS, status: enough ? "ok" : "insufficient", warnings },
+    riskSample: { basis: riskBasis, observations: rs.length, carriedDates },
     growth: vs.map((v, i) => ({ date: v.date, portfolio: growthIdx[i], benchmark: benchGrowth[i] })),
   };
 }

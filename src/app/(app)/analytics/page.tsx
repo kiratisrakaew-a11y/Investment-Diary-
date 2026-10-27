@@ -32,6 +32,7 @@ function corrColor(c: number) {
 
 export default async function AnalyticsPage() {
   const [perf, mpt] = await Promise.all([getPerformance(), getMptAnalysis()]);
+  const navNow = perf.valueSeries[perf.valueSeries.length - 1]?.value ?? 0;
 
   // Values sent to the "อธิบาย" buttons — the same figures each section renders.
   const returnRisk = compact({
@@ -46,7 +47,7 @@ export default async function AnalyticsPage() {
     ความผันผวนต่อปี: perf.volatility,
     DownsideDeviation: perf.downsideDeviation,
     MaxDrawdown: perf.maxDrawdown,
-    VaR_ES: perf.varTable.map((v) => ({ ความเชื่อมั่น: v.confidence, VaR_1วัน: v.var, ES_1วัน: v.es, จำนวนข้อมูล: v.observations, เชื่อถือได้: v.reliable, VaR_10วัน_ประมาณ: v.horizon.tenPeriodScaled.var })),
+    VaR_ES: perf.varTable.map((v) => ({ ความเชื่อมั่น: v.confidence, VaR_1งวด: v.var, ES_1งวด: v.es, จำนวนข้อมูล: v.observations, เชื่อถือได้: v.reliable, VaR_10วัน_ประมาณ: v.horizon.tenPeriodScaled.var })),
     BacktestVaR: perf.varBacktest.map((b) => ("unavailable" in b ? { ความเชื่อมั่น: b.confidence, ไม่มีผล: b.unavailable } : { ความเชื่อมั่น: b.confidence, วันที่ขาดทุนเกินVaR: b.exceptions, ที่คาดไว้: b.expected, Kupiec_p: b.kupiec.pValue, Christoffersen_p: "pValue" in b.christoffersen ? b.christoffersen.pValue : null })),
   });
   const capm = compact({ Sharpe: perf.sharpe, Sortino: perf.sortino, Calmar: perf.calmar, benchmark: perf.benchmark ? { ...perf.benchmark, warnings: undefined } : null });
@@ -124,6 +125,48 @@ export default async function AnalyticsPage() {
               </tbody>
             </table>
           </div>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-medium text-accent">VaR / ES ตามช่วงเวลาลงทุน (ผลตอบแทนทบต้นจริง)</summary>
+            <div className="mt-2 overflow-x-auto">
+              <table className="table text-xs">
+                <thead>
+                  <tr>
+                    <th>ช่วงเวลา</th>
+                    <th className="text-right">VaR 95%</th>
+                    <th className="text-right">ES 95%</th>
+                    <th className="text-right">VaR 99%</th>
+                    <th className="text-right">≈ บาท (VaR 95%)</th>
+                    <th>วิธี / ข้อจำกัด</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perf.varHorizons.map((h) => {
+                    const pick = h.nonOverlapping.var95 != null ? h.nonOverlapping : h.overlapping.var95 != null ? h.overlapping : null;
+                    const kind = pick === h.nonOverlapping ? `ช่วงไม่ทับกัน ${h.nonOverlapping.windows} ช่วง` : pick ? `ช่วงทับกัน ${h.overlapping.windows} ช่วง` : "";
+                    return (
+                      <tr key={h.key}>
+                        <td>
+                          {h.label}
+                          {Number.isFinite(h.periods) && <span className="block text-[11px] text-muted">{h.periods} งวด{h.calendarDays != null ? ` ≈ ${Math.round(h.calendarDays)} วัน` : ""}</span>}
+                        </td>
+                        <td className="num">{fmtPct(pick?.var95 ?? null)}</td>
+                        <td className="num">{fmtPct(pick?.es95 ?? null)}</td>
+                        <td className="num">{fmtPct(pick?.var99 ?? null)}</td>
+                        <td className="num">{pick?.var95 != null && navNow > 0 ? Math.round(pick.var95 * navNow).toLocaleString() : "–"}</td>
+                        <td className="whitespace-normal text-[11px] text-muted">
+                          {h.unavailable ?? `${kind}${h.notes.length ? ` · ${h.notes.join(" · ")}` : ""}`}
+                          {h.periods > 1 && h.sqrtScaledVar95 != null && ` · เทียบ √h (สมมติอิสระกัน): ${fmtPct(h.sqrtScaledVar95)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-[11px] text-muted">
+              R_H = Π(1 + rₜ) − 1 จากข้อมูลจริง — สถานะซื้อที่ไม่กู้ยืมขาดทุนไม่เกิน 100% · ไม่แสดงช่วงที่ข้อมูลไม่พอ (ไม่ขยายด้วย √h) · บาท = VaR × NAV ปัจจุบัน
+            </p>
+          </details>
         </Section>
 
         <Section title="Risk-adjusted & CAPM" className="min-w-0" explain={{ data: capm, hint: "Sharpe/Sortino/Calmar = ผลตอบแทนต่อหน่วยความเสี่ยง; Beta/Alpha จาก regression เทียบดัชนี; Treynor, Information ratio, Tracking error" }}>

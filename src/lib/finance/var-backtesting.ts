@@ -137,3 +137,93 @@ export function backtestVaR(rs: number[], c: number, window = 250, dates?: strin
     note: "VaR ย้อนหลังแบบ rolling ใช้เฉพาะข้อมูลก่อนวันที่ทดสอบ · ไม่ผ่านการทดสอบ = แบบจำลองประเมินความเสี่ยงต่ำ/สูงเกินไปในช่วงนี้ (ไม่ปรับแต่งให้ผ่าน)",
   };
 }
+
+// ------------------------------------------------------------------ multi-horizon historical VaR (audit H-1)
+
+/** Horizons in years (1 period and 10 periods are expressed in observations instead). */
+export const VAR_HORIZONS: { key: string; label: string; periods?: number; years?: number }[] = [
+  { key: "1p", label: "1 งวด", periods: 1 },
+  { key: "10p", label: "10 งวด", periods: 10 },
+  { key: "1m", label: "≈ 1 เดือน", years: 1 / 12 },
+  { key: "1y", label: "≈ 1 ปี", years: 1 },
+  { key: "3y", label: "≈ 3 ปี", years: 3 },
+  { key: "5y", label: "≈ 5 ปี", years: 5 },
+];
+
+/** Independent (non-overlapping) windows needed before an overlapping estimate is shown. */
+export const MIN_INDEPENDENT_WINDOWS = 10;
+
+/**
+ * Compounded h-period returns R_H = Π(1 + rₜ) − 1. Overlapping windows step by one observation;
+ * non-overlapping windows step by h (most recent data kept, oldest remainder dropped).
+ * Because every rₜ ≥ −1, R_H ≥ −1: a long, unlevered portfolio never loses more than 100%.
+ */
+export function horizonReturns(rs: number[], h: number, overlapping: boolean): number[] {
+  if (!(h >= 1) || rs.length < h) return [];
+  const out: number[] = [];
+  const start = overlapping ? 0 : rs.length % h;
+  for (let i = start; i + h <= rs.length; i += overlapping ? 1 : h) {
+    let g = 1;
+    for (let k = i; k < i + h; k++) g *= 1 + rs[k];
+    out.push(g - 1);
+  }
+  return out;
+}
+
+export interface HorizonVarRow {
+  key: string;
+  label: string;
+  periods: number;
+  /** Approximate calendar days covered (periods ÷ observations per year × 365). */
+  calendarDays: number | null;
+  nonOverlapping: { windows: number; var95: number | null; es95: number | null; var99: number | null; es99: number | null };
+  overlapping: { windows: number; var95: number | null; es95: number | null; var99: number | null; es99: number | null };
+  /** √h × one-period VaR 95%, for comparison only (i.i.d. approximation). */
+  sqrtScaledVar95: number | null;
+  unavailable: string | null;
+  notes: string[];
+}
+
+/**
+ * Historical VaR / ES at several horizons from compounded returns (no √h scaling).
+ * - non-overlapping: independent windows; shown when there are enough windows for the confidence level.
+ * - overlapping: more windows but serially dependent; shown only with ≥ MIN_INDEPENDENT_WINDOWS
+ *   independent windows, and always labelled.
+ * Otherwise the horizon is unavailable — nothing is extrapolated.
+ */
+export function horizonVarTable(rs: number[], observationsPerYear: number | null, horizons = VAR_HORIZONS): HorizonVarRow[] {
+  const one = historicalVaR(rs, 0.95);
+  return horizons.map((hz) => {
+    const periods = hz.periods ?? (observationsPerYear ? Math.max(1, Math.round(hz.years! * observationsPerYear)) : NaN);
+    const calendarDays = observationsPerYear && Number.isFinite(periods) ? (periods / observationsPerYear) * 365 : null;
+    const empty = { windows: 0, var95: null, es95: null, var99: null, es99: null };
+    if (!Number.isFinite(periods)) return { key: hz.key, label: hz.label, periods: NaN, calendarDays, nonOverlapping: empty, overlapping: empty, sqrtScaledVar95: null, unavailable: "ไม่ทราบจำนวนงวดต่อปี", notes: [] };
+    const est = (xs: number[]) => ({
+      windows: xs.length,
+      var95: historicalVaR(xs, 0.95, MIN_OBS_BY_CONFIDENCE["0.95"]),
+      es95: expectedShortfall(xs, 0.95, MIN_OBS_BY_CONFIDENCE["0.95"]),
+      var99: historicalVaR(xs, 0.99, MIN_OBS_BY_CONFIDENCE["0.99"]),
+      es99: expectedShortfall(xs, 0.99, MIN_OBS_BY_CONFIDENCE["0.99"]),
+    });
+    const non = est(horizonReturns(rs, periods, false));
+    const independent = Math.floor(rs.length / periods);
+    const overlapping = periods > 1 && independent >= MIN_INDEPENDENT_WINDOWS ? est(horizonReturns(rs, periods, true)) : { ...empty, windows: Math.max(0, rs.length - periods + 1) };
+    const notes: string[] = [];
+    if (periods > 1 && overlapping.var95 != null) notes.push(`แบบช่วงทับกัน ${overlapping.windows} ช่วง (อิสระจริง ${independent} ช่วง) — ข้อมูลไม่เป็นอิสระต่อกัน ความเชื่อมั่นต่ำกว่าจำนวนช่วงที่เห็น`);
+    const any = non.var95 != null || overlapping.var95 != null;
+    const unavailable = any
+      ? null
+      : `ข้อมูลไม่พอ: ${rs.length} งวด = ${independent} ช่วงอิสระของ ${periods} งวด (ต้องการ ≥ ${MIN_OBS_BY_CONFIDENCE["0.95"]} ช่วงอิสระ หรือ ≥ ${MIN_INDEPENDENT_WINDOWS} ช่วงอิสระและ ≥ ${MIN_OBS_BY_CONFIDENCE["0.95"]} ช่วงทับกัน) — ไม่ประมาณการด้วย √h`;
+    return {
+      key: hz.key,
+      label: hz.label,
+      periods,
+      calendarDays,
+      nonOverlapping: non,
+      overlapping: periods > 1 ? overlapping : empty,
+      sqrtScaledVar95: one != null ? one * Math.sqrt(periods) : null,
+      unavailable,
+      notes,
+    };
+  });
+}

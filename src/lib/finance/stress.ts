@@ -85,7 +85,17 @@ export function runStress(positions: StressPosition[], cash: number, s: StressSc
     for (const g of s.groups ?? []) if (g.symbols.map((x) => x.toUpperCase()).includes(sym)) specific += g.shock;
     const local = equity + rate + credit + specific;
     const fx = p.currency === "USD" && s.fxShock ? (1 + local) * (1 + s.fxShock) - 1 - local : 0;
-    const total = local + fx;
+    const linear = local + fx;
+    // A long, fully paid position cannot lose more than its value. Linear β / duration sensitivities
+    // can exceed −100% for large shocks: the total is floored at −100% (the linear figure is kept and
+    // flagged) and the factor lines are scaled by the same ratio so they still sum to the total.
+    const bounded = p.value > 0 && linear < -1;
+    const total = bounded ? -1 : linear;
+    const scale = bounded ? total / linear : 1;
+    if (bounded)
+      warnings.push(
+        `${p.symbol}: ผลรวม shock แบบเส้นตรง ${(linear * 100).toFixed(1)}% เกินขาดทุนเต็มมูลค่า — สถานะซื้อที่จ่ายเต็มขาดทุนได้ไม่เกิน 100% จึงจำกัดที่ −100% (ค่าประมาณแบบ β / duration ใช้ไม่ได้ในช่วงนี้)`,
+      );
     const haircut = s.liquidityHaircut?.[p.assetClass] ?? 0;
     const afterShock = p.value * (1 + total);
     const liquidity = -afterShock * haircut;
@@ -93,8 +103,19 @@ export function runStress(positions: StressPosition[], cash: number, s: StressSc
       symbol: p.symbol,
       assetClass: p.assetClass,
       value: p.value,
-      pnl: { equity: p.value * equity, rate: p.value * rate, credit: p.value * credit, specific: p.value * specific, fx: p.value * fx, liquidity, total: p.value * total + liquidity },
+      pnl: {
+        equity: p.value * equity * scale,
+        rate: p.value * rate * scale,
+        credit: p.value * credit * scale,
+        specific: p.value * specific * scale,
+        fx: p.value * fx * scale,
+        liquidity,
+        total: p.value * total + liquidity,
+      },
       returnPct: p.value > 0 ? (p.value * total + liquidity) / p.value : 0,
+      /** Sum of the linear sensitivities before the −100% floor (equal to the shock return when not bounded). */
+      linearReturn: linear,
+      boundedAtFullLoss: bounded,
       assumptions: {
         beta: p.beta,
         modifiedDuration: s.durationOverride?.[sym] ?? p.modifiedDuration,
