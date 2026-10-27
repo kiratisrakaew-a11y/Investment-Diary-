@@ -8,7 +8,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -17,8 +16,27 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useId } from "react";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtThb } from "@/lib/format";
 import type { AssetClass } from "@/db/schema";
+
+/** Vertical fill under a line: strong colour at the top fading to transparent (optionally via a second colour). */
+export function AreaGradient({ id, color, via, top = 0.55 }: { id: string; color: string; via?: string; top?: number }) {
+  const stops = [
+    { o: "0%", c: color, a: top },
+    ...(via ? [{ o: "50%", c: via, a: top * 0.6 }] : []),
+    { o: "100%", c: via ?? color, a: 0.06 },
+  ];
+  return (
+    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+      {stops.map((x) => (
+        <stop key={x.o} offset={x.o} stopColor={x.c} stopOpacity={x.a} />
+      ))}
+    </linearGradient>
+  );
+}
+
+const gid = (raw: string, name: string) => `${name}-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
 const axis = { stroke: "var(--muted)", fontSize: 11, tickLine: false, axisLine: false } as const;
 const tooltipStyle = {
@@ -54,37 +72,42 @@ export function AllocationDonut({ rows }: { rows: { assetClass: AssetClass; valu
 /** Growth of 1 THB: portfolio (TWR) vs benchmark — indexed to a common base, one axis. */
 export function GrowthChart({ data, benchmark }: { data: { date: string; portfolio: number; benchmark: number | null }[]; benchmark?: string }) {
   const rows = data.map((d) => ({ date: d.date, portfolio: d.portfolio - 1, benchmark: d.benchmark == null ? null : d.benchmark - 1 }));
+  const id = useId();
+  const gp = gid(id, "gp");
+  const gb = gid(id, "gb");
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <AreaGradient id={gp} color="var(--series-1)" via="var(--series-6)" top={0.75} />
+          <AreaGradient id={gb} color="var(--series-2)" via="var(--accent-2)" top={0.5} />
+        </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-        {benchmark && <Line type="monotone" dataKey="benchmark" name={benchmark} stroke="var(--series-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
-      </LineChart>
+        {benchmark && <Area type="monotone" dataKey="benchmark" name={benchmark} stroke="var(--series-2)" fill={`url(#${gb})`} strokeWidth={2} connectNulls isAnimationActive={false} />}
+        <Area type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" fill={`url(#${gp})`} strokeWidth={2.5} isAnimationActive={false} />
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
 
 export function ValueChart({ data }: { data: { date: string; value: number; contributed: number }[] }) {
+  const g = gid(useId(), "gv");
   return (
     <ResponsiveContainer width="100%" height={240}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
-          <linearGradient id="gValue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.45} />
-            <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0.02} />
-          </linearGradient>
+          <AreaGradient id={g} color="var(--series-1)" via="var(--series-5)" top={0.9} />
         </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={compactThb} width={48} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtThb(Number(v)), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Area type="monotone" dataKey="value" name="มูลค่าพอร์ต" stroke="var(--series-1)" fill="url(#gValue)" strokeWidth={2.5} isAnimationActive={false} />
+        <Area type="monotone" dataKey="value" name="มูลค่าพอร์ต" stroke="var(--series-1)" fill={`url(#${g})`} strokeWidth={2.5} isAnimationActive={false} />
         <Line type="stepAfter" dataKey="contributed" name="เงินลงทุนสุทธิ" stroke="var(--series-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -92,15 +115,19 @@ export function ValueChart({ data }: { data: { date: string; value: number; cont
 }
 
 export function PriceChart({ data, currency }: { data: { date: string; close: number }[]; currency: string }) {
+  const g = gid(useId(), "gpr");
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <AreaGradient id={g} color="var(--series-1)" via="var(--series-6)" top={0.8} />
+        </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} domain={["auto", "auto"]} width={56} />
         <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()} ${currency}`, "ราคา"]} />
-        <Line type="monotone" dataKey="close" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
-      </LineChart>
+        <Area type="monotone" dataKey="close" stroke="var(--series-1)" fill={`url(#${g})`} baseValue="dataMin" strokeWidth={2} isAnimationActive={false} />
+      </AreaChart>
     </ResponsiveContainer>
   );
 }
@@ -236,14 +263,19 @@ export function BulletChart({
 }
 
 export function DrawdownChart({ data }: { data: { date: string; drawdown: number }[] }) {
+  const g = gid(useId(), "gdd");
   return (
     <ResponsiveContainer width="100%" height={180}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          {/* The fill hangs just below the zero line, so the strong end of the gradient sits at the top. */}
+          <AreaGradient id={g} color="var(--neg)" via="var(--series-5)" top={0.75} />
+        </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
         <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v) * 100).toFixed(2)}%`, "Drawdown"]} />
-        <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--neg)" fill="var(--neg)" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
+        <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--neg)" fill={`url(#${g})`} strokeWidth={1.5} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -262,7 +294,7 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
         <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(1)}%`, n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {symbols.map((s, i) => (
-          <Area key={s} type="stepAfter" dataKey={s} stackId="w" stroke={SERIES[i % SERIES.length]} fill={SERIES[i % SERIES.length]} fillOpacity={0.55} isAnimationActive={false} />
+          <Area key={s} type="stepAfter" dataKey={s} stackId="w" stroke={SERIES[i % SERIES.length]} fill={SERIES[i % SERIES.length]} fillOpacity={0.65} isAnimationActive={false} />
         ))}
         <Area type="stepAfter" dataKey="เงินสด" stackId="w" stroke="var(--muted)" fill="var(--muted)" fillOpacity={0.25} isAnimationActive={false} />
       </AreaChart>

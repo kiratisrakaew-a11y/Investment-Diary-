@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AreaGradient } from "./charts";
 import {
   analyticsFromPrice,
   analyticsFromYield,
@@ -319,18 +320,21 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
           <section className="card lg:col-span-3">
             <h2 className="mb-3 font-semibold">Price–Yield curve (ความโค้ง = convexity)</h2>
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={curve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <AreaChart data={curve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <AreaGradient id="gBondCurve" color="var(--series-1)" via="var(--series-5)" top={0.75} />
+                </defs>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
                 <XAxis dataKey="ytm" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis domain={["auto", "auto"]} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} width={44} />
                 <Tooltip
-                  contentStyle={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                  contentStyle={{ background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" }}
                   formatter={(v) => [fmtNum(Number(v), 3), "ราคา clean"]}
                   labelFormatter={(v) => `YTM ${(Number(v) * 100).toFixed(2)}%`}
                 />
-                <Line type="monotone" dataKey="price" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                <ReferenceDot x={r.a.ytm} y={r.a.cleanPrice} r={6} fill="var(--series-2)" stroke="var(--panel)" strokeWidth={2} />
-              </LineChart>
+                <Area type="monotone" dataKey="price" stroke="var(--series-1)" fill="url(#gBondCurve)" baseValue="dataMin" strokeWidth={2} isAnimationActive={false} />
+                <ReferenceDot x={r.a.ytm} y={r.a.cleanPrice} r={6} fill="var(--series-2)" stroke="var(--panel-solid)" strokeWidth={2} />
+              </AreaChart>
             </ResponsiveContainer>
           </section>
           <section className="card overflow-x-auto lg:col-span-2">
