@@ -65,6 +65,15 @@ export const optimizeInput = z
   useRiskFree: z.boolean().optional().describe("Mix the tangency portfolio with the risk-free asset (complete portfolio y*)"),
   extraCash: z.number().min(0).optional().describe("Extra THB to invest on top of current holdings"),
   covMethod: z.enum(["sample", "ledoit_wolf"]).optional().describe("Covariance estimator (default sample; ledoit_wolf shrinks toward a scaled identity)"),
+  riskFree: z
+    .object({
+      source: z.enum(["auto", "curve", "settings", "manual"]).optional().describe("auto (default) = currency-matched sovereign zero curve at the horizon, else the Settings rate; never an owned bond's YTM"),
+      horizonYears: z.number().positive().max(50).optional().describe("Tenor for the curve (default 1 year for portfolio Sharpe / CAL)"),
+      currency: z.string().length(3).optional(),
+      manual: z.object({ rate: z.number().min(-0.05).max(0.5), reason: z.string().min(3).max(300) }).optional().describe("source manual: decimal rate + reason (audit trail)"),
+    })
+    .optional()
+    .describe("Risk-free rate resolver options; the result and its provenance are returned as riskFreeInfo"),
   })
   .refine((v) => (v.minWeight ?? 0) <= (v.maxWeight ?? 1), { message: "minWeight must not exceed maxWeight" })
   .refine((v) => v.returnMethod !== "black_litterman" || v.blackLitterman, { message: "returnMethod black_litterman requires blackLitterman.marketWeights", path: ["blackLitterman"] });

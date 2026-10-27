@@ -17,6 +17,7 @@ import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
+import { getRiskFree } from "./services/risk-free";
 import { bondHoldings, bondLadderInput, planBondLadder } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
@@ -407,6 +408,24 @@ export function createMcpServer() {
     "get_bond_holdings",
     { title: "Bond holdings", description: "YTM and duration of the user's bonds and the portfolio-weighted bond duration.", annotations: { readOnlyHint: true } },
     safe(async () => bondHoldings()),
+  );
+
+  server.registerTool(
+    "get_risk_free_rate",
+    {
+      title: "Risk-free rate (with source)",
+      description:
+        "Risk-free rate for a currency, date and horizon with its provenance: a currency-matched sovereign zero curve from Settings (interpolated at the tenor), else the Settings rate as a documented fallback. Never an owned bond's YTM. purpose: portfolio (Sharpe/CAL, default 1y) | dcf (default 10y) | bond_spread. Warnings for stale curves, tenor outside the curve, negative or real rates.",
+      inputSchema: {
+        currency: z.string().length(3).optional(),
+        asOf: z.string().optional(),
+        horizonYears: z.number().positive().max(50).optional(),
+        purpose: z.enum(["portfolio", "dcf", "bond_spread"]).optional(),
+        source: z.enum(["auto", "curve", "settings"]).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (p) => getRiskFree(p)),
   );
 
   server.registerTool(

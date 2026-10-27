@@ -16,6 +16,8 @@ import { listAssets } from "./assets";
 import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
 import { alignWithBenchmark, buildLevelSeries, commonDates, returnsOn, type ReturnBasis } from "@/lib/finance/return-series";
 import { getSettings } from "./settings";
+import { getRiskFree } from "./risk-free";
+import type { ResolvedRiskFree, RiskFreeRequest } from "@/lib/finance/risk-free";
 import { allTransactions } from "./transactions";
 
 const MIN_OBS = 60;
@@ -44,6 +46,8 @@ export interface OptimizerUniverse {
   to: string | null;
   observations: number;
   riskFree: number;
+  /** Where the risk-free rate came from (resolver output). */
+  riskFreeInfo?: ResolvedRiskFree;
   equityRiskPremium: number;
   benchmark: string;
   assets: UniverseAsset[];
@@ -68,7 +72,7 @@ export interface OptimizerUniverse {
  * and the covariance matrix. Default basis: price return (closes); total_return uses the
  * provider's adjusted closes and excludes assets without full coverage.
  */
-export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis } = {}): Promise<OptimizerUniverse> {
+export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis; riskFree?: RiskFreeRequest } = {}): Promise<OptimizerUniverse> {
   const basis = opts.returnBasis ?? "price_return";
   const [assets, txRows, prices, fx, settings, adj] = await Promise.all([
     listAssets(),
@@ -79,7 +83,10 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
     basis === "total_return" ? loadAdjPriceHistory() : Promise.resolve(null),
   ]);
   const bench = await loadBenchmark(settings.benchmarkSymbol);
-  const rf = settings.riskFreeRate / 100;
+  // Portfolio Rf from the resolver (curve → Settings fallback); without a curve this equals Settings as before.
+  const rfInfo = await getRiskFree({ purpose: "portfolio", ...opts.riskFree });
+  if (!rfInfo.ok || rfInfo.rate == null) throw new OptimizerError({ code: "INVALID_INPUT", message: `อัตราปลอดความเสี่ยง: ${rfInfo.errors.join(" · ")}` });
+  const rf = rfInfo.rate;
   const erp = settings.equityRiskPremium / 100;
   const from = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
 
@@ -124,6 +131,7 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
     to: null,
     observations: 0,
     riskFree: rf,
+    riskFreeInfo: rfInfo,
     equityRiskPremium: erp,
     benchmark: settings.benchmarkSymbol,
     assets: [],
@@ -158,6 +166,7 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
     to: dates[dates.length - 1],
     observations: dates.length,
     riskFree: rf,
+    riskFreeInfo: rfInfo,
     equityRiskPremium: erp,
     benchmark: settings.benchmarkSymbol,
     skipped,
@@ -246,11 +255,13 @@ export interface OptimizeParams {
   riskBudgets?: Record<string, number>;
   /** min_cvar confidence (default 0.95). */
   cvarConfidence?: number;
+  /** Risk-free source for Sharpe / CAL (default auto: currency-matched curve, else Settings). */
+  riskFree?: RiskFreeRequest;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
-  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis });
+  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis, riskFree: p.riskFree });
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
@@ -366,6 +377,7 @@ export async function optimizePortfolio(p: OptimizeParams) {
     ok: true as const,
     period: { from: u.from, to: u.to, observations: u.observations },
     riskFree: u.riskFree,
+    riskFreeInfo: u.riskFreeInfo,
     returnMethod: method,
     blackLitterman: bl,
     risk,
