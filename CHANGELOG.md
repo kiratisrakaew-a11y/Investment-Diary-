@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-27 — Phase 1 follow-up: RIM scenarios and warnings
+- Residual income Bear/Base/Bull (`scenarios`: roeShift, payoutRatio, terminalGrowth, terminalRoe, persistence). It uses the same probability aggregation as DCF (`aggregateScenarios`, extracted from `scenarioAnalysis` with no change in results). Available in the editor, REST and MCP.
+- Payout × ω sensitivity grid.
+- Warnings: payout outside 0–100%, an EPS override that differs from an entered ROE (implied ROE shown), and first-year ROE more than 5 points from the statements' ROE (`historicalRoe`, check only).
+- Scenario panels (DCF and RIM) state the difference between sensitivity, scenario probability and investment conviction.
+
 ## 2026-10-27 — Valuation model `2026.10-val6`
 
 ### Added

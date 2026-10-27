@@ -3,7 +3,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import type { RimHorizonComparison } from "@/lib/finance/rim-horizon";
-import type { rimPersistenceSensitivity, rimSensitivity } from "@/lib/finance/rim-horizon";
+import { defaultRimScenarios, type RimScenario, type RimScenarioOverrides, type rimPayoutSensitivity, type rimPersistenceSensitivity, type rimScenarioAnalysis, type rimSensitivity } from "@/lib/finance/rim-horizon";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
 import { CardTitle } from "./ExplainButton";
@@ -12,10 +12,26 @@ import { RiWaterfallChart, RoeKeChart } from "./charts";
 
 type Persist = ReturnType<typeof rimPersistenceSensitivity>;
 type Sens = ReturnType<typeof rimSensitivity>;
+type PayoutSens = ReturnType<typeof rimPayoutSensitivity>;
+type ScenRes = ReturnType<typeof rimScenarioAnalysis>;
 
 /** 5Y vs 10Y residual-income comparison on one dataset, with waterfall, book roll-forward and sensitivities. */
-export function RimHorizonPanel({ details, bookValue }: { details: Record<string, unknown>; bookValue: number }) {
+export function RimHorizonPanel({
+  details,
+  bookValue,
+  scenarios,
+  onScenariosChange,
+  terminalMethod,
+}: {
+  details: Record<string, unknown>;
+  bookValue: number;
+  scenarios?: RimScenario[];
+  onScenariosChange: (s: RimScenario[] | undefined) => void;
+  terminalMethod: "perpetuity" | "persistence" | "none";
+}) {
   const cmp = details.horizonComparison as RimHorizonComparison | null | undefined;
+  const payoutSens = details.payoutSensitivity as PayoutSens | null | undefined;
+  const scenRes = details.scenarios as ScenRes | null | undefined;
   const persist = details.persistenceSensitivity as Persist | null | undefined;
   const sens = details.sensitivity as Sens | null | undefined;
   const valid = cmp?.rows.filter((r) => r.status === "ok") ?? [];
@@ -146,9 +162,11 @@ export function RimHorizonPanel({ details, bookValue }: { details: Record<string
         </section>
       )}
 
+      <RimScenarioPanel scenarios={scenarios} res={scenRes ?? null} onChange={onScenariosChange} terminalMethod={terminalMethod} />
+
       {(persist || sens) && (
         <section className="card overflow-x-auto">
-          <CardTitle title="Sensitivity: Residual income" explain={{ data: compact({ persistence: persist, sensitivity: sens }), hint: "ω = สัดส่วนที่ RI คงอยู่ปีต่อปีหลังจบประมาณการ (0 = หายทันที, 1 = ไม่ลดลง); ตาราง Ke × ROE / Ke × g คำนวณที่ horizon เต็มของข้อมูล" }} />
+          <CardTitle title="Sensitivity: Residual income" explain={{ data: compact({ persistence: persist, sensitivity: sens, payout: payoutSens }), hint: "ω = สัดส่วนที่ RI คงอยู่ปีต่อปีหลังจบประมาณการ (0 = หายทันที, 1 = ไม่ลดลง); ตาราง Ke × ROE / Ke × g คำนวณที่ horizon เต็มของข้อมูล; payout × ω ใช้ payout เดียวกันทุกปี — payout สูงทำให้ book value โตช้า RI ปีหลังจึงน้อยลง" }} />
           <div className="grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
             {persist && (
               <div className="min-w-0 overflow-x-auto">
@@ -177,6 +195,18 @@ export function RimHorizonPanel({ details, bookValue }: { details: Record<string
             )}
             {sens?.keRoe && <Grid title={`Ke × ROE หลังปี ${sens.horizon}`} rows={sens.keRoe.ke} cols={sens.keRoe.roe} grid={sens.keRoe.grid} base={sens.base} colFmt={(x) => fmtPct(x, 1)} />}
             {sens?.keGrowth && <Grid title={`Ke × g ระยะยาว (${sens.horizon} ปี)`} rows={sens.keGrowth.ke} cols={sens.keGrowth.g} grid={sens.keGrowth.grid} base={sens.base} colFmt={(x) => fmtPct(x, 1)} />}
+            {payoutSens && (
+              <Grid
+                title={`Payout × ω (persistence, ${payoutSens.horizon} ปี)`}
+                rowLabel="Payout ↓ / ω →"
+                rows={payoutSens.payouts}
+                cols={payoutSens.omegas}
+                grid={payoutSens.grid}
+                base={sens?.base ?? null}
+                colFmt={(x) => String(x)}
+                highlight={false}
+              />
+            )}
           </div>
           <p className="mt-2 text-xs text-muted">N/A = สมมติฐานใช้ไม่ได้ (เช่น Ke ≤ g) — ไม่ได้ปรับค่าให้อัตโนมัติ{!sens?.keGrowth ? " · ตาราง Ke × g แสดงเมื่อใช้ continuing value แบบโตต่อเนื่อง (perpetuity)" : ""}</p>
         </section>
@@ -194,7 +224,25 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-function Grid({ title, rows, cols, grid, base, colFmt }: { title: string; rows: number[]; cols: number[]; grid: (number | null)[][]; base: number | null; colFmt: (x: number) => string }) {
+function Grid({
+  title,
+  rows,
+  cols,
+  grid,
+  base,
+  colFmt,
+  rowLabel = "Ke ↓",
+  highlight = true,
+}: {
+  title: string;
+  rows: number[];
+  cols: number[];
+  grid: (number | null)[][];
+  base: number | null;
+  colFmt: (x: number) => string;
+  rowLabel?: string;
+  highlight?: boolean;
+}) {
   const mid = Math.floor(rows.length / 2);
   const midC = Math.floor(cols.length / 2);
   return (
@@ -203,7 +251,7 @@ function Grid({ title, rows, cols, grid, base, colFmt }: { title: string; rows: 
       <table className="data-grid text-xs">
         <thead>
           <tr>
-            <th className="px-2 py-1 text-left text-muted">Ke ↓</th>
+            <th className="px-2 py-1 text-left whitespace-nowrap text-muted">{rowLabel}</th>
             {cols.map((c, j) => (
               <th key={j} className="px-2 py-1 text-right text-muted">{colFmt(c)}</th>
             ))}
@@ -219,7 +267,7 @@ function Grid({ title, rows, cols, grid, base, colFmt }: { title: string; rows: 
                 return (
                   <td
                     key={j}
-                    className={clsx("px-2 py-1 text-right tabular-nums", i === mid && j === midC && "font-semibold", v == null && "text-muted")}
+                    className={clsx("px-2 py-1 text-right tabular-nums", highlight && i === mid && j === midC && "font-semibold", v == null && "text-muted")}
                     style={v != null ? { background: `color-mix(in oklab, ${rel >= 0 ? "var(--series-3)" : "var(--series-2)"} ${c * 40}%, transparent)` } : undefined}
                   >
                     {v != null ? fmtNum(v) : "N/A"}
@@ -231,5 +279,158 @@ function Grid({ title, rows, cols, grid, base, colFmt }: { title: string; rows: 
         </tbody>
       </table>
     </div>
+  );
+}
+
+const SCEN_FIELDS: { key: keyof RimScenarioOverrides; label: string; pct: boolean; when?: "perpetuity" | "persistence" | "not_none"; shift?: boolean }[] = [
+  { key: "roeShift", label: "ROE ± (จุด)", pct: true, shift: true },
+  { key: "payoutRatio", label: "Payout", pct: true },
+  { key: "terminalRoe", label: "ROE ระยะยาว", pct: true, when: "not_none" },
+  { key: "terminalGrowth", label: "g ระยะยาว", pct: true, when: "perpetuity" },
+  { key: "persistence", label: "ω", pct: false, when: "persistence" },
+];
+
+/** Bear / Base / Bull for residual income: the same probability rules as the DCF scenarios. */
+function RimScenarioPanel({
+  scenarios,
+  res,
+  onChange,
+  terminalMethod,
+}: {
+  scenarios?: RimScenario[];
+  res: ScenRes | null;
+  onChange: (s: RimScenario[] | undefined) => void;
+  terminalMethod: "perpetuity" | "persistence" | "none";
+}) {
+  const sc = scenarios ?? [];
+  const fields = SCEN_FIELDS.filter((f) => !f.when || (f.when === "not_none" ? terminalMethod !== "none" : f.when === terminalMethod));
+  const update = (i: number, patch: Partial<RimScenario>) => onChange(sc.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <section className="card overflow-x-auto">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <CardTitle
+          title="Scenarios (Bear / Base / Bull) — Residual income"
+          explain={res ? { data: compact({ scenarios: sc, ผล: res }), hint: "มูลค่าคาดหวัง = Σ ความน่าจะเป็น × มูลค่าแต่ละกรณี; เป็นค่าเฉลี่ยถ่วงน้ำหนักของสมมติฐาน ไม่ใช่ความแน่นอน" } : null}
+        />
+        <div className="flex items-center gap-3">
+          {sc.length > 0 && (
+            <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onChange(defaultRimScenarios())}>
+              รีเซ็ตเป็นตัวอย่าง
+            </button>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={sc.length > 0} onChange={(e) => onChange(e.target.checked ? defaultRimScenarios() : undefined)} />
+            ใช้ scenarios
+          </label>
+        </div>
+      </div>
+      {!sc.length ? (
+        <p className="text-xs text-muted">เปิดเพื่อกำหนด Bear/Base/Bull พร้อมความน่าจะเป็น — ค่าเริ่มต้นเป็นตัวอย่าง (ROE ±2 จุดจากเส้นทางที่กรอก) ไม่ใช่การพยากรณ์</p>
+      ) : (
+        <>
+          <table className="data-grid table text-xs">
+            <thead>
+              <tr>
+                <th>กรณี</th>
+                <th className="num">โอกาส (%)</th>
+                {fields.map((f) => (
+                  <th key={f.key} className="num">
+                    {f.label}
+                    {f.pct && !f.shift ? " (%)" : ""}
+                  </th>
+                ))}
+                <th className="num">มูลค่า/หุ้น</th>
+                <th className="num">Upside</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sc.map((x, i) => {
+                const row = res?.rows[i];
+                return (
+                  <tr key={i}>
+                    <td>
+                      <input aria-label={`ชื่อกรณีที่ ${i + 1}`} className="input w-20 py-1 text-xs" value={x.name} onChange={(e) => update(i, { name: e.target.value })} />
+                    </td>
+                    <td className="num">
+                      <Num label={`ความน่าจะเป็น ${x.name}`} value={x.probability} scale={100} onChange={(v) => update(i, { probability: v ?? 0 })} />
+                    </td>
+                    {fields.map((f) => (
+                      <td key={f.key} className="num">
+                        <Num
+                          label={`${f.label} ${x.name}`}
+                          value={x.overrides[f.key]}
+                          scale={f.pct ? 100 : 1}
+                          placeholder={f.shift ? "0" : "base"}
+                          onChange={(v) => {
+                            const o = { ...x.overrides };
+                            if (v == null) delete o[f.key];
+                            else o[f.key] = v;
+                            update(i, { overrides: o });
+                          }}
+                        />
+                      </td>
+                    ))}
+                    <td className="num font-medium" title={[...(row?.errors ?? []), ...(row && "notes" in row ? (row.notes as string[]) : [])].join(" · ") || undefined}>
+                      {row?.value == null && row?.errors.length ? <span className="text-neg">⚠️</span> : fmtNum(row?.value)}
+                    </td>
+                    <td className={clsx("num", signClass(row?.upside))}>{fmtPct(row?.upside, 1)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {res && (
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span>
+                มูลค่าคาดหวัง <b className="tabular-nums">{fmtNum(res.expectedValue)}</b> <span className={signClass(res.expectedUpside)}>({fmtPct(res.expectedUpside, 1)})</span>
+              </span>
+              <span className="text-muted">
+                ช่วง {fmtNum(res.low)} – {fmtNum(res.high)} · σ {fmtNum(res.stdev)} · ที่ {res.horizon} ปี
+              </span>
+              {res.errors.map((e) => (
+                <span key={e} className="text-xs text-neg">
+                  ⚠️ {e}
+                </span>
+              ))}
+            </div>
+          )}
+          <ScenarioDisclaimer />
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Keeps three different ideas apart: model sensitivity, scenario probability and conviction. */
+export function ScenarioDisclaimer() {
+  return (
+    <p className="mt-2 text-xs text-muted">
+      ช่องว่าง = ใช้ค่าเดียวกับ base · <b>Sensitivity</b> = ตัวเลขเปลี่ยนเท่าไรเมื่อสมมติฐานขยับ · <b>ความน่าจะเป็นของ scenario</b> = น้ำหนักที่คุณให้แต่ละกรณี (ตั้งเอง ไม่ใช่สถิติตลาด) ·
+      มูลค่าคาดหวังเป็นค่าเฉลี่ยถ่วงน้ำหนัก ไม่ใช่ความแน่นอน และไม่ได้บอก<b>ความมั่นใจในการลงทุน</b> — บันทึก valuation เพื่อเก็บ scenarios ไว้กับสมมติฐาน
+    </p>
+  );
+}
+
+function Num({ value, onChange, scale, placeholder, label }: { value: number | undefined; onChange: (v: number | null) => void; scale: number; placeholder?: string; label: string }) {
+  const shown = value == null ? "" : String(Number((value * scale).toFixed(4)));
+  return (
+    <input
+      key={shown}
+      aria-label={label}
+      className="input w-16 py-1 text-right text-xs tabular-nums"
+      inputMode="decimal"
+      defaultValue={shown}
+      placeholder={placeholder}
+      onBlur={(e) => {
+        const t = e.target.value.trim();
+        if (t === shown) return;
+        if (t === "") return onChange(null);
+        const n = Number(t);
+        if (Number.isFinite(n)) onChange(n / scale);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
   );
 }

@@ -6,7 +6,7 @@
  * value at year h (RIₕ₊₁ from Bₕ and the terminal ROE). Years that were not entered are never
  * invented: a horizon longer than the dataset is reported as insufficient data.
  */
-import { multiStageResidualIncome, type RiForecastYear, type RiTerminal, type RiYear } from "./valuation";
+import { aggregateScenarios, multiStageResidualIncome, type RiForecastYear, type RiTerminal, type RiYear } from "./valuation";
 
 export interface RimInput {
   bookValuePerShare: number;
@@ -134,4 +134,77 @@ export function rimSensitivity(i: RimInput, horizon: number, keShifts = [-0.02, 
           grid: kes.map((ke) => gShifts.map((s) => rimAtHorizon({ ...i, ke, terminal: { ...(i.terminal as Extract<RiTerminal, { method: "perpetuity" }>), growth: g0 + s } }, horizon).value)),
         };
   return { horizon, base: baseRow.value, keRoe: roeGrid, keGrowth: gGrid };
+}
+
+/** Payout × ω grid (persistence continuing value) at one horizon. The payout replaces every year's payout. */
+export function rimPayoutSensitivity(i: RimInput, horizon: number, payouts = [0.2, 0.35, 0.5, 0.65, 0.8], omegas = [0, 0.4, 0.6, 0.8, 1]) {
+  const roe = i.terminal.method === "none" ? undefined : i.terminal.roe;
+  return {
+    horizon,
+    payouts,
+    omegas,
+    grid: payouts.map((p) =>
+      omegas.map((w) => rimAtHorizon({ ...i, payoutRatio: p, forecast: i.forecast.map(({ payoutRatio: _p, ...f }) => f), terminal: { method: "persistence", persistence: w, roe } }, horizon).value),
+    ),
+  };
+}
+
+/** Scenario overrides for residual income. Absolute values except `roeShift`. */
+export interface RimScenarioOverrides {
+  /** Added to every explicit-year ROE (years given as EPS are left unchanged and noted). */
+  roeShift?: number;
+  /** Replaces the payout of every year. */
+  payoutRatio?: number;
+  terminalGrowth?: number;
+  terminalRoe?: number;
+  persistence?: number;
+}
+
+export interface RimScenario {
+  name: string;
+  probability: number;
+  overrides: RimScenarioOverrides;
+}
+
+/** Inputs for one scenario, with notes on anything an override could not reach. */
+export function applyRimScenario(i: RimInput, s: RimScenario): { input: RimInput; notes: string[]; error?: string } {
+  const o = s.overrides;
+  const notes: string[] = [];
+  const t = i.terminal;
+  if (o.terminalGrowth != null && t.method !== "perpetuity") return { input: i, notes, error: "ปรับ g ระยะยาวได้เฉพาะ continuing value แบบโตต่อเนื่อง (perpetuity)" };
+  if (o.persistence != null && t.method !== "persistence") return { input: i, notes, error: "ปรับ ω ได้เฉพาะ continuing value แบบ persistence" };
+  if (o.terminalRoe != null && t.method === "none") return { input: i, notes, error: "ไม่มี continuing value — ปรับ ROE ระยะยาวไม่ได้" };
+  if (o.persistence != null && !(o.persistence >= 0 && o.persistence <= 1)) return { input: i, notes, error: "ω ต้องอยู่ระหว่าง 0 ถึง 1" };
+  const shift = o.roeShift ?? 0;
+  if (shift && i.forecast.some((f) => f.eps != null)) notes.push("ปีที่ระบุ EPS ไม่ถูกปรับด้วย ROE shift");
+  const forecast = i.forecast.map((f) => {
+    const next = { ...f };
+    if (shift && f.eps == null && f.roe != null) next.roe = f.roe + shift;
+    if (o.payoutRatio != null) next.payoutRatio = o.payoutRatio;
+    return next;
+  });
+  let terminal: RiTerminal = t;
+  if (t.method === "perpetuity") terminal = { ...t, growth: o.terminalGrowth ?? t.growth, roe: o.terminalRoe ?? (t.roe != null ? t.roe + shift : undefined) };
+  else if (t.method === "persistence") terminal = { ...t, persistence: o.persistence ?? t.persistence, roe: o.terminalRoe ?? (t.roe != null ? t.roe + shift : undefined) };
+  return { input: { ...i, forecast, payoutRatio: o.payoutRatio ?? i.payoutRatio, terminal }, notes };
+}
+
+/** Bear / Base / Bull at one horizon, aggregated with the same rules as DCF scenarios. */
+export function rimScenarioAnalysis(i: RimInput, scenarios: RimScenario[], horizon = i.forecast.length) {
+  const rows = scenarios.map((s) => {
+    const a = applyRimScenario(i, s);
+    if (a.error) return { name: s.name, probability: s.probability, value: null, upside: null, errors: [a.error], notes: a.notes };
+    const r = rimAtHorizon(a.input, horizon);
+    return { name: s.name, probability: s.probability, value: r.value, upside: r.upside, errors: r.errors, notes: [...a.notes, ...r.warnings] };
+  });
+  return { horizon, ...aggregateScenarios(rows, i.price) };
+}
+
+/** Illustrative starting point (not a forecast): ROE ±2 points around the user's own path. */
+export function defaultRimScenarios(): RimScenario[] {
+  return [
+    { name: "Bear", probability: 0.25, overrides: { roeShift: -0.02 } },
+    { name: "Base", probability: 0.5, overrides: {} },
+    { name: "Bull", probability: 0.25, overrides: { roeShift: 0.02 } },
+  ];
 }

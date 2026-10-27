@@ -18,7 +18,7 @@ import {
   type DcfAssumptions,
   type InputMeta,
 } from "./finance/valuation";
-import { riForecastRows, riModel, riTerminal, type ValuationInput } from "./valuation-schemas";
+import { historyRoeWarning, riForecastRows, riModel, riTerminal, type ValuationInput } from "./valuation-schemas";
 import { rateScaleWarnings } from "./rate-scale";
 
 export type Unit = "%" | "x" | "money" | "perShare" | "years" | "text" | "factor";
@@ -537,7 +537,7 @@ function explainRiMulti(a: Ri): Explanation {
   });
   steps.push({ label: "P/BV ที่ได้ / P/BV ตลาด", formula: "V₀ ÷ B₀ และ ราคา ÷ B₀", substitution: `${fmtX(m.value != null ? m.value / a.bookValuePerShare : null)} / ${fmtX(a.currentPrice / a.bookValuePerShare)}`, result: m.value != null ? m.value / a.bookValuePerShare : null, unit: "x" });
   steps.push({ label: "Upside / Downside", formula: "Value ÷ ราคา − 1", substitution: `${fmtM(m.value, 2)} ÷ ${fmtM(a.currentPrice, 2)} − 1`, result: upsideOf(m.value, a.currentPrice), unit: "%" });
-  const warnings = [...m.errors.map((e) => `❌ ${e}`), ...m.warnings];
+  const warnings = [...m.errors.map((e) => `❌ ${e}`), ...m.warnings, ...historyRoeWarning(m.years[0]?.roe, a.historicalRoe)];
   sanity(m.value, a.currentPrice, warnings);
   return {
     method: "residual_income",

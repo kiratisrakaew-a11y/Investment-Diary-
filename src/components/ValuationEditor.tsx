@@ -21,7 +21,7 @@ import { evaluate, riForecastRows, type ValuationInput } from "@/lib/valuation-s
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
 import { DcfStageEditor } from "./DcfStageEditor";
-import { RimHorizonPanel } from "./RimHorizonPanel";
+import { RimHorizonPanel, ScenarioDisclaimer } from "./RimHorizonPanel";
 import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
 import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
@@ -260,7 +260,8 @@ export function ValuationEditor({
   function applyHistory(h: HistoryAssumptions) {
     setDcfA((a) => ({ ...a, ...h.dcf }));
     setDdm((a) => ({ ...a, ...h.ddm }));
-    setRi((a) => ({ ...a, ...h.ri }));
+    // The statements' ROE is kept separately as the history check for the forecast.
+    setRi((a) => ({ ...a, ...h.ri, historicalRoe: h.ri.roe ?? a.historicalRoe }));
     setMult((a) => ({ ...a, ...h.multiples }));
     setMsg({ ok: true, text: "เติมสมมติฐานจากงบการเงินย้อนหลังแล้ว" });
   }
@@ -474,6 +475,16 @@ export function ValuationEditor({
               <NumField label="Book value ต่อหุ้น" value={ri.bookValuePerShare} onChange={(v) => setRi((a) => ({ ...a, bookValuePerShare: v ?? 0 }))} />
               {!ri.forecast?.length && <NumField label="ROE ที่ยั่งยืน" pct value={ri.roe} onChange={(v) => setRi((a) => ({ ...a, roe: v ?? 0 }))} />}
               <NumField label="Payout ratio" pct value={ri.payoutRatio} onChange={(v) => setRi((a) => ({ ...a, payoutRatio: v ?? 0 }))} />
+              {!!ri.forecast?.length && (
+                <NumField
+                  label="ROE จริงจากงบ (ใช้ตรวจเทียบ)"
+                  pct
+                  nullable
+                  value={ri.historicalRoe ?? null}
+                  onChange={(v) => setRi((a) => ({ ...a, historicalRoe: v ?? undefined }))}
+                  hint="เติมอัตโนมัติจาก “เติมสมมติฐานจากงบการเงิน” — ไม่ใช้คำนวณมูลค่า ใช้เตือนเมื่อ ROE ปีแรกต่างเกิน 5 จุด"
+                />
+              )}
               <NumField label="Growth ระยะยาว" pct value={ri.terminalGrowth} onChange={(v) => setRi((a) => ({ ...a, terminalGrowth: v ?? 0 }))} hint="g = ROE × (1 − payout)" />
               <div className="flex items-end pb-2 text-xs text-muted">g ยั่งยืน = {fmtPct(ri.roe * (1 - ri.payoutRatio))}</div>
             </Group>
@@ -571,7 +582,15 @@ export function ValuationEditor({
           <ScenarioPanel a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} onChange={(scenarios) => setDcfA((a) => ({ ...a, scenarios }))} />
         </>
       )}
-      {method === "residual_income" && result?.details.horizonComparison != null && <RimHorizonPanel details={result.details} bookValue={ri.bookValuePerShare} />}
+      {method === "residual_income" && result?.details.horizonComparison != null && (
+        <RimHorizonPanel
+          details={result.details}
+          bookValue={ri.bookValuePerShare}
+          scenarios={ri.scenarios}
+          onScenariosChange={(scenarios) => setRi((a) => ({ ...a, scenarios }))}
+          terminalMethod={ri.terminalMethod ?? "perpetuity"}
+        />
+      )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
   );
@@ -1110,9 +1129,8 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
               ))}
             </div>
           )}
-          <p className="mt-2 text-xs text-muted">
-            ช่องว่าง = ใช้ค่าเดียวกับ base{staged ? " · โหมดหลายช่วง: กำหนด growth (g) / EBIT margin (M) รายช่วง" : ""} · บันทึก valuation เพื่อเก็บ scenarios ไว้กับสมมติฐาน
-          </p>
+          {staged && <p className="mt-2 text-xs text-muted">โหมดหลายช่วง: กำหนด growth (g) / EBIT margin (M) รายช่วง</p>}
+          <ScenarioDisclaimer />
         </>
       )}
     </section>

@@ -46,7 +46,14 @@ API / MCP: ส่ง `forecastMode: "staged"` และ `stages` ภายใต
 6. **Sensitivity**: มูลค่าตาม ω (persistence) ทั้ง 2 horizon, ตาราง Ke × ROE ระยะยาว และ Ke × g (เฉพาะแบบโตต่อเนื่อง)
    - ช่อง N/A = สมมติฐานใช้ไม่ได้
 
-API / MCP: `multi_stage_residual_income` และ `value_security` ส่งคืน `horizonComparison`, `persistenceSensitivity` และ `sensitivity`; กำหนดช่วงเองได้ด้วย `compareHorizons: [5, 10]`
+7. **Scenarios (Bear/Base/Bull)** ใต้การ์ด horizon: เปิด "ใช้ scenarios" แล้วระบบใส่ตัวอย่าง ROE ±2 จุดให้
+   - ปรับได้ทั้ง ROE ± (จุด), payout, ROE ระยะยาว และ g ระยะยาว (เฉพาะแบบโตต่อเนื่อง) หรือ ω (เฉพาะแบบ persistence)
+   - ความน่าจะเป็นต้องรวม 100% จึงจะแสดงมูลค่าคาดหวัง
+   - ปีที่กรอกเป็น EPS จะไม่ถูกปรับด้วย ROE ±
+8. **ROE จริงจากงบ**: เติมอัตโนมัติเมื่อกด "เติมสมมติฐานจากงบการเงิน" ใช้เพื่อเตือนเมื่อ ROE ปีแรกต่างเกิน 5 จุดเท่านั้น ไม่มีผลต่อมูลค่า
+   - มีคำเตือนเมื่อ payout อยู่นอก 0–100% และเมื่อ EPS ที่กรอกทำให้ ROE ต่างจาก ROE ที่กรอกไว้
+
+API / MCP: `multi_stage_residual_income` และ `value_security` ส่งคืน `horizonComparison`, `persistenceSensitivity`, `sensitivity`, `payoutSensitivity` และ `scenarios` (ส่ง `scenarios` / `historicalRoe` เข้าไปได้); กำหนดช่วงเองได้ด้วย `compareHorizons: [5, 10]`
 
 ## 3. วันที่ของข้อมูลและเวอร์ชันสูตร
 

@@ -3,7 +3,7 @@
  * point. Used by the valuation editor (save), the AI advisor tools, MCP and REST.
  * All rates are decimals (0.08 = 8%).
  */
-import { rimHorizonComparison, rimPersistenceSensitivity, rimSensitivity } from "./finance/rim-horizon";
+import { rimHorizonComparison, rimPayoutSensitivity, rimPersistenceSensitivity, rimScenarioAnalysis, rimSensitivity } from "./finance/rim-horizon";
 import { z } from "zod";
 import {
   costOfEquity,
@@ -136,6 +136,20 @@ export const ddmSchema = z.object({
   inputMeta: inputMetaSchema,
 });
 
+const rimScenarioSchema = z.object({
+  name: z.string().min(1),
+  probability: z.number().min(0).max(1).describe("Probability (decimal); all scenarios must sum to 1"),
+  overrides: z
+    .object({
+      roeShift: z.number().optional().describe("Added to every explicit-year ROE (EPS years unchanged)"),
+      payoutRatio: z.number().optional().describe("Replaces every year's payout"),
+      terminalGrowth: z.number().optional().describe("Perpetuity continuing value only"),
+      terminalRoe: z.number().optional(),
+      persistence: z.number().min(0).max(1).optional().describe("Persistence continuing value only"),
+    })
+    .default({}),
+});
+
 export const residualIncomeSchema = z.object({
   bookValuePerShare: money("Book value per share"),
   roe: rate("Sustainable return on equity"),
@@ -177,6 +191,12 @@ export const residualIncomeSchema = z.object({
     .max(4)
     .optional()
     .describe("Multi-stage: explicit horizons to compare on the same yearly data (default [5, 10]); years not entered are never filled in"),
+  historicalRoe: rate("Actual ROE from reported statements (e.g. 3-year average), used only to flag a forecast that departs from history").optional(),
+  scenarios: z
+    .array(rimScenarioSchema)
+    .max(5)
+    .optional()
+    .describe("Multi-stage: Bear/Base/Bull overrides with probabilities summing to 1, valued at the full forecast horizon"),
   inputMeta: inputMetaSchema,
 });
 
@@ -339,6 +359,15 @@ export function riTerminal(a: { terminalMethod?: "perpetuity" | "persistence" | 
       : ({ method: "perpetuity", growth: a.terminalGrowth, roe: a.terminalRoe } as const);
 }
 
+/** Flags a first forecast year whose ROE departs from reported history by more than 5 points. */
+export function historyRoeWarning(forecastRoe: number | undefined, historicalRoe: number | undefined): string[] {
+  if (forecastRoe == null || historicalRoe == null || !Number.isFinite(forecastRoe)) return [];
+  const gap = forecastRoe - historicalRoe;
+  return Math.abs(gap) > 0.05
+    ? [`ROE ปีแรก ${(forecastRoe * 100).toFixed(1)}% ต่างจาก ROE จริงในงบ ${(historicalRoe * 100).toFixed(1)}% อยู่ ${(gap * 100).toFixed(1)} จุด — ระบุเหตุผลที่คาดว่าจะเปลี่ยน`]
+    : [];
+}
+
 const upsideOf = (v: number, p: number) => (p > 0 && Number.isFinite(v) ? v / p - 1 : null);
 const finite = (v: number) => (Number.isFinite(v) ? v : null);
 
@@ -437,8 +466,10 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
             horizonComparison: rows.length ? rimHorizonComparison(rimIn, horizons) : null,
             persistenceSensitivity: rows.length ? rimPersistenceSensitivity(rimIn, horizons.filter((h) => h <= rows.length).length ? horizons.filter((h) => h <= rows.length) : [rows.length]) : null,
             sensitivity: rows.length && m.value != null ? rimSensitivity(rimIn, rows.length) : null,
+            payoutSensitivity: rows.length && m.value != null ? rimPayoutSensitivity(rimIn, rows.length) : null,
+            scenarios: rows.length && a.scenarios?.length ? rimScenarioAnalysis(rimIn, a.scenarios) : null,
             errors: m.errors.map((message) => ({ code: "INVALID_INPUT", message })),
-            warnings: m.warnings,
+            warnings: [...m.warnings, ...historyRoeWarning(m.years[0]?.roe, a.historicalRoe)],
           },
         };
       }
@@ -605,6 +636,8 @@ export const multiStageRiToolInput = z.object({
   terminalRoe: rate("ROE after the forecast (defaults to the last year)").optional(),
   persistence: z.number().min(0).max(1).optional().describe("ω for the persistence continuing value (default 0.6)"),
   compareHorizons: z.array(z.number().int().min(1).max(30)).max(4).optional().describe("Horizons to compare on the same data (default [5, 10]); missing years are never filled"),
+  historicalRoe: rate("Actual ROE from reported statements; flags a forecast far from history").optional(),
+  scenarios: z.array(rimScenarioSchema).max(5).optional().describe("Bear/Base/Bull overrides (roeShift, payoutRatio, terminalGrowth, terminalRoe, persistence); probabilities must sum to 1"),
   inputMeta: inputMetaSchema,
 });
 export type MultiStageRiToolInput = z.infer<typeof multiStageRiToolInput>;
@@ -620,7 +653,7 @@ export function toRiValuation(x: MultiStageRiToolInput): ValuationInput {
 export function evaluateMultiStageRi(x: MultiStageRiToolInput) {
   const valuation = toRiValuation(x);
   const r = evaluate(valuation);
-  const d = r.details as { years?: unknown; costOfEquity?: number; pvResidualIncome?: number; terminalValue?: number | null; pvTerminalValue?: number | null; errors?: unknown; warnings?: string[]; horizonComparison?: unknown; persistenceSensitivity?: unknown; sensitivity?: unknown };
+  const d = r.details as { years?: unknown; costOfEquity?: number; pvResidualIncome?: number; terminalValue?: number | null; pvTerminalValue?: number | null; errors?: unknown; warnings?: string[]; horizonComparison?: unknown; persistenceSensitivity?: unknown; sensitivity?: unknown; payoutSensitivity?: unknown; scenarios?: unknown };
   return {
     valuation,
     result: {
@@ -636,6 +669,8 @@ export function evaluateMultiStageRi(x: MultiStageRiToolInput) {
       horizonComparison: d.horizonComparison,
       persistenceSensitivity: d.persistenceSensitivity,
       sensitivity: d.sensitivity,
+      payoutSensitivity: d.payoutSensitivity,
+      scenarios: d.scenarios,
       errors: d.errors,
       warnings: [...((r.details.sanityWarnings as string[] | undefined) ?? [])],
     },

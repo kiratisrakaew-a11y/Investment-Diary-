@@ -686,9 +686,25 @@ export function scenarioAnalysis(a: DcfAssumptions, model: "fcff" | "fcfe", scen
     const r = dcf(applied.a, model);
     return { name: s.name, probability: s.probability, value: r.valuePerShare, upside: r.upside, errors: r.errors.map((e) => e.message) };
   });
-  const total = scenarios.reduce((t, s) => t + s.probability, 0);
-  if (!scenarios.length) errors.push("ไม่มี scenario");
-  if (scenarios.some((s) => !(s.probability >= 0))) errors.push("ความน่าจะเป็นต้องไม่ติดลบ");
+  return aggregateScenarios(rows, a.currentPrice, errors);
+}
+
+export interface ScenarioRow {
+  name: string;
+  probability: number;
+  value: number | null;
+  upside: number | null;
+  errors: string[];
+}
+
+/**
+ * Probability-weighted summary shared by every model's scenarios: the expected value is shown only
+ * when probabilities are non-negative, sum to 100% and every scenario has a value.
+ */
+export function aggregateScenarios<R extends ScenarioRow>(rows: R[], price: number, errors: string[] = []) {
+  const total = rows.reduce((t, s) => t + s.probability, 0);
+  if (!rows.length) errors.push("ไม่มี scenario");
+  if (rows.some((s) => !(s.probability >= 0))) errors.push("ความน่าจะเป็นต้องไม่ติดลบ");
   if (Math.abs(total - 1) > 1e-6) errors.push(`ความน่าจะเป็นรวม ${(total * 100).toFixed(1)}% — ต้องเท่ากับ 100%`);
   rows.forEach((r) => {
     if (r.value == null) errors.push(`${r.name}: คำนวณไม่ได้ (${r.errors.join(", ") || "ข้อมูลไม่ครบ"})`);
@@ -700,7 +716,7 @@ export function scenarioAnalysis(a: DcfAssumptions, model: "fcff" | "fcfe", scen
   return {
     rows,
     expectedValue,
-    expectedUpside: expectedValue != null && a.currentPrice > 0 ? expectedValue / a.currentPrice - 1 : null,
+    expectedUpside: expectedValue != null && price > 0 ? expectedValue / price - 1 : null,
     stdev,
     low: vals.length ? Math.min(...vals) : null,
     high: vals.length ? Math.max(...vals) : null,
@@ -827,6 +843,9 @@ export function multiStageResidualIncome(i: { bookValuePerShare: number; ke: num
     if (f.eps == null && f.roe == null) errors.push(`ปีที่ ${k + 1}: ต้องระบุ ROE หรือ EPS`);
     const earnings = f.eps ?? (f.roe ?? 0) * b;
     const payout = f.payoutRatio ?? i.payoutRatio ?? 0;
+    if (!(payout >= 0 && payout <= 1)) warnings.push(`ปีที่ ${k + 1}: payout ${(payout * 100).toFixed(1)}% อยู่นอกช่วง 0–100% — จ่ายเกินกำไรหรือติดลบ ทำให้ book value ลดลง/ผิดปกติ`);
+    if (f.eps != null && f.roe != null && b !== 0 && Math.abs(f.eps / b - f.roe) > 1e-6)
+      warnings.push(`ปีที่ ${k + 1}: ใช้ EPS ${f.eps.toFixed(2)} ที่ระบุแทน ROE — ROE ที่ได้จริง ${((f.eps / b) * 100).toFixed(2)}% (ROE ${(f.roe * 100).toFixed(2)}% ที่กรอกไว้ไม่ถูกใช้)`);
     const dividends = earnings * payout;
     const clean = b + earnings - dividends;
     const end = f.bookValueEnd ?? clean;
