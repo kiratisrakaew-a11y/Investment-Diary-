@@ -6,8 +6,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MODEL_VERSION } from "@/lib/governance";
-import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
-import { createAsset, getAssetBySymbol, listAssets } from "./services/assets";
+import { assetInput, assetProfileInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
+import { createAsset, getAssetBySymbol, listAssets, updateAssetProfile } from "./services/assets";
 import { createNote, listNotes } from "./services/notes";
 import { recordPrice } from "./services/prices";
 import { createTransaction, listTransactions } from "./services/transactions";
@@ -185,6 +185,12 @@ export function createMcpServer() {
       inputSchema: importPricesInput.shape,
     },
     safe(async (x) => importPrices(x)),
+  );
+
+  server.registerTool(
+    "update_asset_profile",
+    { title: "Update asset risk profile", description: "Set an asset's risk metadata used by credit analytics, stress tests and exposure limits: issuer (economic issuer shared by its stocks and bonds), sector with source and date, and a bond credit profile (rating with agency/date; PD with type hypothetical|historical|market_implied, source, asOf and annual or cumulative; LGD with source/date). Only enter what the user provides — never invent ratings, PDs or LGDs. null clears a field. Does not touch prices or transactions.", inputSchema: assetProfileInput.shape },
+    safe(async (x) => updateAssetProfile(x)),
   );
 
   server.registerTool(

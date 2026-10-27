@@ -14,6 +14,7 @@ describe("MCP build info", () => {
     expect(names).toContain("stress_test_portfolio");
     expect(names).toContain("backtest_portfolio");
     expect(names).toContain("record_split");
+    expect(names).toContain("update_asset_profile");
   });
   it("version carries the formula version and commit", () => {
     expect(serverVersion().startsWith(MODEL_VERSION)).toBe(true);

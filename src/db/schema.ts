@@ -55,6 +55,14 @@ export const assets = pgTable("assets", {
   dayCount: text("day_count"),
   /** Trading lot (units per lot); null = the default for the asset class in settings.tradingCosts. */
   lotSize: doublePrecision("lot_size"),
+  /** Economic issuer (user-maintained mapping; stocks and bonds of one issuer share it). */
+  issuer: text("issuer"),
+  /** User-maintained sector / industry group with its source and date (never auto-assigned). */
+  sector: text("sector"),
+  sectorSource: text("sector_source"),
+  sectorAsOf: date("sector_as_of"),
+  /** Bond credit profile (rating with agency/date, PD with type/source/date, LGD) — creditProfileSchema. */
+  credit: jsonb("credit"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -164,6 +172,8 @@ export const settings = pgTable("settings", {
   erpAsOf: date("erp_as_of"),
   /** Trading cost model for rebalancing proposals (see tradingCostsSchema); {} = all zero / defaults. */
   tradingCosts: jsonb("trading_costs").notNull().default({}),
+  /** Government zero curve for spread analytics: { points: [{years, rate}], source, asOf } (decimal, annual compounding). */
+  yieldCurve: jsonb("yield_curve"),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

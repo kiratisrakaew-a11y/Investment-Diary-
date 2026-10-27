@@ -3,6 +3,7 @@ import { PRESET_SCENARIOS, historicalWorst, runStress, type StressPosition } fro
 import { getPortfolioSummary } from "./portfolio";
 import { loadUniverse } from "./optimizer";
 import { bondHoldings } from "./bonds";
+import { listAssets } from "./assets";
 
 const scenario = z.object({
   name: z.string().optional(),
@@ -14,6 +15,9 @@ const scenario = z.object({
   liquidityHaircut: z.record(z.string(), z.number().min(0).max(0.9)).optional().describe("Forced-sale discount by asset class (decimal)"),
   durationOverride: z.record(z.string(), z.number().min(0).max(50)).optional().describe("Modified duration by symbol (e.g. bond funds)"),
   correlationShock: z.number().min(0).max(1).optional().describe("k in ρ' = ρ + k(1 − ρ)"),
+  creditSpreadShockBp: z.number().min(-500).max(2000).optional().describe("Credit-spread change in bp for all bonds (100 = +1%); combined with rateShock in one repricing"),
+  creditSpreadShockBpBySymbol: z.record(z.string(), z.number().min(-500).max(5000)).optional().describe("Per-symbol spread change in bp (e.g. one issuer's bonds)"),
+  spreadDurationOverride: z.record(z.string(), z.number().min(0).max(50)).optional().describe("Spread duration by symbol (e.g. bond funds)"),
 });
 
 export const stressInput = z.object({
@@ -27,6 +31,7 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
   const x = stressInput.parse(input);
   const [snap, bonds] = await Promise.all([getPortfolioSummary(), bondHoldings()]);
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
+  const assetMeta = new Map((await listAssets()).map((a) => [a.id, a]));
   const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), { withSeries: true }).catch(() => null);
   const uAsset = (sym: string) => (u?.ok ? u.assets.find((a) => a.symbol === sym) : undefined);
   const bondOf = (sym: string) => bonds.bonds.find((b) => b.symbol === sym && b.analytics);
@@ -41,6 +46,9 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
       modifiedDuration: b?.analytics?.modifiedDuration ?? null,
       convexity: b?.analytics?.convexity ?? null,
       durationSource: b ? `คำนวณจากราคา ${b.lastPrice} (${b.lastPriceDate})` : undefined,
+      spreadDuration: b?.credit && "spreadDuration" in b.credit.spread ? b.credit.spread.spreadDuration : null,
+      issuer: assetMeta.get(p.assetId)?.issuer ?? null,
+      rating: b?.credit && b.credit.rating !== "unrated" ? b.credit.rating.rating : p.assetClass === "bond" ? "unrated" : null,
     };
   });
   const cov = u?.ok ? { symbols: u.assets.map((a) => a.symbol), matrix: u.cov, periodsPerYear: u.periodsPerYear } : undefined;
@@ -60,6 +68,7 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
     assumptions: {
       beta: u?.ok ? `β เทียบ ${u.benchmark} จากผลตอบแทน ${u.from} → ${u.to} (${u.observations} วัน)` : "ไม่มี β (ประวัติราคาไม่พอ)",
       duration: "Modified duration / convexity ของพันธบัตรจากราคาล่าสุด (หน้าพันธบัตร); กองทุนต้องใส่ durationOverride",
+      credit: "Credit spread: spread duration จาก Z-spread บน yield curve ที่ตั้งไว้ ถ้าไม่มีใช้ modified duration แทน (ระบุในผล); ดอกเบี้ย + spread คำนวณราคาใหม่ครั้งเดียวด้วย Δy + Δs (ประมาณอันดับสอง) ส่วนไขว้รวมอยู่ในบรรทัด credit; ไม่รวมการผิดนัด / rating transition",
       fx: "สินทรัพย์ USD: (1 + ผลจากราคา)(1 + ΔFX) − 1",
       correlation: "ρ' = ρ + k(1 − ρ) ความผันผวนรายตัวคงเดิม · VaR 95% 1 วันแบบ parametric (normal)",
       presets: "ขนาด shock ใน preset เป็นตัวอย่าง แก้ได้",

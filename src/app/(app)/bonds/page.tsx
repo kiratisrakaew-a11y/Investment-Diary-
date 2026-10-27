@@ -3,12 +3,16 @@ import { bondHoldings } from "@/server/services/bonds";
 import { BondCalculator } from "@/components/BondCalculator";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
+import { CreditProfileForm } from "@/components/CreditProfileForm";
+import { listAssets } from "@/server/services/assets";
+import { today } from "@/lib/validation";
 
 type SP = Promise<{ maturity?: string; coupon?: string; price?: string }>;
 
 export default async function BondsPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const { settlement, bonds, portfolio } = await bondHoldings();
+  const [{ settlement, bonds, portfolio }, assets] = await Promise.all([bondHoldings(), listAssets()]);
+  const assetBySymbol = new Map(assets.map((a) => [a.symbol, a]));
   return (
     <>
       <PageHeader title="พันธบัตรและหุ้นกู้" subtitle="ราคา ↔ YTM / YTC / YTW, accrued interest ตาม day count ของตราสาร, duration, convexity, Z-spread และ horizon return" />
@@ -89,6 +93,62 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
           </div>
         )}
       </Section>
+
+      {bonds.length > 0 && (
+        <Section title="ความเสี่ยงเครดิต (credit)">
+          <div className="space-y-4">
+            {bonds.map((b) => {
+              const c = b.credit;
+              const a = assetBySymbol.get(b.symbol);
+              return (
+                <details key={b.id} className="rounded border border-border/60 p-3" open={c?.status === "ok"}>
+                  <summary className="cursor-pointer text-sm">
+                    <span className="font-medium">{b.symbol}</span>
+                    <span className="ml-2 text-muted">
+                      {c ? (c.rating === "unrated" ? "unrated" : `${c.rating.rating}${c.rating.agency ? ` (${c.rating.agency}${c.rating.date ? ` ${c.rating.date}` : ""})` : ""}`) : "–"}
+                      {a?.issuer ? ` · ผู้ออก ${a.issuer}` : ""}
+                      {c?.status === "ok" && c.term ? ` · PV(EL) ${fmtNum(c.term.pvExpectedLoss, 3)} ต่อ 100` : c ? " · ยังไม่มีข้อมูล PD/LGD" : ""}
+                    </span>
+                  </summary>
+                  {c ? (
+                    <div className="mt-3 space-y-3 text-sm">
+                      {c.status === "ok" && c.term && c.oneYear ? (
+                        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                          <Stat label="PD 1 ปี" value={fmtPct(c.oneYear.pd, 3)} />
+                          <Stat label="LGD" value={fmtPct(c.oneYear.lgd, 1)} />
+                          <Stat label="EL 1 ปี (ต่อ 100)" value={fmtNum(c.oneYear.expectedLoss, 3)} sub={`EAD ${fmtNum(c.oneYear.ead, 2)}`} />
+                          <Stat label="PD ตลอดอายุ" value={fmtPct(c.term.lifetimePd, 2)} />
+                          <Stat label="PV(EL) ตลอดอายุ" value={fmtNum(c.term.pvExpectedLoss, 3)} sub={`มูลค่าตามสัญญา ${fmtNum(c.term.contractualPv, 2)}`} />
+                          <Stat label="มูลค่าหลังหักความเสี่ยงเครดิต" value={fmtNum(c.term.creditAdjustedValue, 2)} sub="คาดหวัง (ไม่ใช่ราคาตลาด)" />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-neg">{c.status === "invalid" ? c.issues.map((i) => i.message).join(" · ") : `ไม่มีข้อมูล: ${c.required.join(", ")}`}</p>
+                      )}
+                      <p className="text-xs text-muted">
+                        {"zSpread" in c.spread
+                          ? `Z-spread ${fmtPct(c.spread.zSpread, 3)} · spread DV01 ${fmtNum(c.spread.spreadDv01, 4)} ต่อ 100 · spread duration ${fmtNum(c.spread.spreadDuration, 2)} — ${c.spread.basis}`
+                          : c.spread.unavailable}
+                      </p>
+                      {c.status === "ok" && (
+                        <p className="text-xs text-muted">
+                          {c.oneYear?.basis} · ส่วนลด: {c.term?.discount} · PD: {c.provenance.pdType} ({c.provenance.pdSource}, {c.provenance.pdAsOf}) · LGD: {c.provenance.lgdSource} ({c.provenance.lgdAsOf})
+                          {c.issues.length > 0 && ` · ⚠️ ${c.issues.map((i) => i.message).join(" · ")}`}
+                        </p>
+                      )}
+                      <CreditProfileForm symbol={b.symbol} issuer={a?.issuer ?? null} profile={(a?.credit as never) ?? null} today={today()} />
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted">{b.missing}</p>
+                  )}
+                </details>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            EL = PD × LGD × EAD (เป็นตัววัดความเสี่ยง ไม่ใช่ ECL ทางบัญชี TFRS 9) · PV(EL) = Σ PD ส่วนเพิ่ม × LGD × EAD × DF ตามงวดจ่าย · ไม่นำ EL รายปีไปหักจาก YTM โดยตรง
+          </p>
+        </Section>
+      )}
 
       <BondCalculator
         key={`${sp.maturity}-${sp.coupon}-${sp.price}`}

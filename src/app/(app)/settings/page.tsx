@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
-import { getSettings, getTargets, getTradingCosts } from "@/server/services/settings";
+import { getSettings, getTargets, getTradingCosts, getYieldCurve } from "@/server/services/settings";
+import { YieldCurveForm } from "@/components/YieldCurveForm";
+import { today } from "@/lib/validation";
 import { ActionForm } from "@/components/ActionForm";
 import { CopyBlock } from "@/components/CopyBlock";
 import { PageHeader, Section } from "@/components/ui";
@@ -11,7 +13,7 @@ import { MODEL_VERSION, marketInputProvenance } from "@/lib/governance";
 import Link from "next/link";
 
 export default async function SettingsPage() {
-  const [settings, targets, h, costs] = await Promise.all([getSettings(), getTargets(), headers(), getTradingCosts()]);
+  const [settings, targets, h, costs, curve] = await Promise.all([getSettings(), getTargets(), headers(), getTradingCosts(), getYieldCurve()]);
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span className={`ml-1 rounded px-1 text-[11px] ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}>{p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}</span>
@@ -124,6 +126,10 @@ export default async function SettingsPage() {
             </div>
             <p className="text-xs text-muted">ค่าเริ่มต้นเป็น 0 — ใส่ตามโบรกเกอร์ของคุณ · ใช้คำนวณข้อเสนอเท่านั้น ไม่บันทึกรายการซื้อขายให้</p>
           </ActionForm>
+        </Section>
+
+        <Section title="Yield curve พันธบัตรรัฐบาล (สำหรับ credit spread)">
+          <YieldCurveForm initial={curve} today={today()} />
         </Section>
 
         <Section title="เป้าหมาย Asset allocation (%)">

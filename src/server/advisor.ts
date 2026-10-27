@@ -8,7 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
-import { noteInput, today } from "@/lib/validation";
+import { assetProfileInput, noteInput, today } from "@/lib/validation";
 import { fetchFundamentals } from "@/lib/prices/yahoo";
 import { getAllocation, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
@@ -23,7 +23,7 @@ import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { createNote, listNotes } from "./services/notes";
 import { getSettings, getTargets } from "./services/settings";
-import { getAssetBySymbol } from "./services/assets";
+import { getAssetBySymbol, updateAssetProfile } from "./services/assets";
 import { optimizeInput } from "./optimize-schema";
 import { statementsSummary } from "./services/statements";
 
@@ -68,6 +68,12 @@ function tools() {
         "Backfill daily prices for existing assets over a date range (default 365 days) plus benchmark and USDTHB. Use dryRun first; never creates assets — ask the user to add unknown symbols.",
       inputSchema: syncHistoricalPricesInput,
       run: async (x) => json(await syncHistoricalPrices(x)),
+    }),
+    betaZodTool({
+      name: "update_asset_profile",
+      description: "Set an asset's risk metadata used by credit analytics, stress tests and exposure limits: issuer (economic issuer shared by its stocks and bonds), sector with source and date, and a bond credit profile (rating with agency/date; PD with type hypothetical|historical|market_implied, source, asOf and annual or cumulative; LGD with source/date). Only enter what the user provides — never invent ratings, PDs or LGDs. null clears a field. Does not touch prices or transactions.",
+      inputSchema: assetProfileInput,
+      run: async (x) => json(await updateAssetProfile(x)),
     }),
     betaZodTool({
       name: "record_split",

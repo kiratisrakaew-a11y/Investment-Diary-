@@ -3,10 +3,12 @@ import { today } from "@/lib/validation";
 import { listAssets } from "./assets";
 import { loadPriceHistory } from "./prices";
 import { getPortfolioSummary } from "./portfolio";
+import { getSettings, getYieldCurve } from "./settings";
+import { bondCredit, creditProfileSchema } from "@/lib/finance/credit-risk";
 
 /** YTM, duration and convexity for every bond asset that has coupon, maturity and a price. */
 export async function bondHoldings() {
-  const [assets, prices, summary] = await Promise.all([listAssets(), loadPriceHistory(), getPortfolioSummary()]);
+  const [assets, prices, summary, curve, settings] = await Promise.all([listAssets(), loadPriceHistory(), getPortfolioSummary(), getYieldCurve(), getSettings()]);
   const settlement = today();
   const rows = assets
     .filter((a) => a.assetClass === "bond")
@@ -28,20 +30,29 @@ export async function bondHoldings() {
         dayCount: a.dayCount,
         /** Price basis: stored per-unit price is treated as a CLEAN price (× 100 / face); accrued interest is added for the dirty price. */
         priceBasis: "clean_assumed" as const,
+        issuer: a.issuer,
         /** Conventions the analytics had to assume because the asset does not store them. */
         assumed: specFromBondAsset(a, settlement).assumed,
       };
       if (a.couponRate == null || !a.maturityDate || !last || a.maturityDate <= settlement) {
-        return { ...base, analytics: null, missing: "ต้องมีอัตราคูปอง วันครบกำหนด และราคาล่าสุด" };
+        return { ...base, analytics: null, credit: null, missing: "ต้องมีอัตราคูปอง วันครบกำหนด และราคาล่าสุด" };
       }
       // Prices are stored per unit; convert to per-100-face for yield maths.
       const cleanPer100 = a.faceValue ? (last[1] / a.faceValue) * 100 : last[1];
       try {
-        const r = analyticsFromPrice(specFromBondAsset(a, settlement).spec, cleanPer100);
+        const spec = specFromBondAsset(a, settlement).spec;
+        const r = analyticsFromPrice(spec, cleanPer100);
         const { flows: _f, ...analytics } = r;
-        return { ...base, analytics, missing: null };
+        const profile = creditProfileSchema.safeParse(a.credit ?? {});
+        const credit = bondCredit(spec, cleanPer100, profile.success ? profile.data : null, {
+          curve: curve?.points ?? null,
+          curveLabel: curve ? `${curve.source} (${curve.asOf})` : undefined,
+          flatRate: settings.riskFreeRate / 100,
+          flatLabel: `Rf คงที่ ${settings.riskFreeRate}% จากหน้าตั้งค่า (ไม่มี yield curve)`,
+        });
+        return { ...base, analytics, credit, missing: null };
       } catch (e) {
-        return { ...base, analytics: null, missing: (e as Error).message };
+        return { ...base, analytics: null, credit: null, missing: (e as Error).message };
       }
     });
   const held = rows.filter((r) => r.analytics && r.marketValueThb > 0);

@@ -200,6 +200,15 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - Portfolio bonds use the asset's stored frequency and day count. If these are missing, semi-annual ACT/ACT-ICMA is assumed and disclosed.
 - Not supported: FRNs, holiday calendars, OAS.
 
+## 5b. Credit risk (v3) — `credit-risk.ts`
+
+- All inputs are user-provided with source and date (PD type: hypothetical / historical / market-implied; LGD; rating, agency and date, else `unrated`). Missing → unavailable.
+- 1-year EL = PD·LGD·EAD (not TFRS 9 ECL).
+- PV(EL) = Σ marginal PD·LGD·EAD·DF over the payment periods; the credit-adjusted value is shown separately.
+- Spread DV01 and spread duration come from bump-and-reprice on a supplied zero curve.
+- Stress: a credit-spread shock combined with the rate shock in one repricing (2nd order, cross term in the credit line).
+- See `docs/roadmap-v3/02_CREDIT_RISK_MODEL.md`.
+
 ## 6. Governance — `src/lib/governance.ts`
 
 - Settings store the source, series and as-of date for Rf and ERP. Without a source the value is shown everywhere as illustrative.

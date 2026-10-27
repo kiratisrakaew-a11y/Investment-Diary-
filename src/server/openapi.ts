@@ -1,6 +1,6 @@
 /** OpenAPI 3.1 document for ChatGPT Custom GPT Actions, generated from the shared zod schemas. */
 import { z } from "zod";
-import { assetInput, noteInput, priceInput, transactionInput } from "@/lib/validation";
+import { assetInput, assetProfileInput, noteInput, priceInput, transactionInput, yieldCurveInput } from "@/lib/validation";
 import { bondSchema, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
 import { optimizeInput } from "./optimize-schema";
 import { financialYearSchema } from "@/lib/financials";
@@ -67,6 +67,23 @@ export function buildOpenApi(origin: string) {
           summary: "Add an idea / thesis / review / lesson / market note to the diary",
           requestBody: body("NoteInput"),
           responses: { "200": ok("Created note") },
+        },
+      },
+      "/api/v1/assets/profile": {
+        post: {
+          operationId: "updateAssetProfile",
+          summary: "Set issuer / sector (with source and date) / bond credit profile of an asset",
+          description: "Only user-provided data; nothing is inferred. null clears a field.",
+          requestBody: body("AssetProfile"),
+          responses: { "200": ok("Updated asset") },
+        },
+      },
+      "/api/v1/settings/yield-curve": {
+        put: {
+          operationId: "setYieldCurve",
+          summary: "Set the government zero curve used for Z-spread and spread duration",
+          requestBody: body("YieldCurve"),
+          responses: { "200": ok("Saved curve") },
         },
       },
       "/api/v1/transactions/split": {
@@ -288,6 +305,8 @@ export function buildOpenApi(origin: string) {
         RebalanceInput: schema(rebalanceInput),
         StressInput: schema(stressInput),
         RecordSplit: schema(recordSplitInput.omit({ source: true })),
+        AssetProfile: schema(assetProfileInput),
+        YieldCurve: schema(yieldCurveInput),
         BacktestInput: schema(backtestInput),
       },
       securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },

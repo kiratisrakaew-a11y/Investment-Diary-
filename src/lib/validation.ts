@@ -1,5 +1,6 @@
 /** zod schemas shared by the UI server actions, the REST API and the MCP tools. */
 import { z } from "zod";
+import { creditProfileSchema } from "./finance/credit-risk";
 
 export const isoDate = z
   .string()
@@ -68,6 +69,24 @@ export const transactionInput = z
     message: "split needs splitFrom and splitTo (or quantity = new shares per old share)",
     path: ["quantity"],
   });
+
+/** Risk metadata maintained by the user (issuer / sector / credit). Sector needs a source and date; nothing is inferred. */
+export const assetProfileInput = z
+  .object({
+    symbol: z.string().min(1),
+    issuer: z.string().max(120).nullable().optional().describe("Economic issuer, e.g. PTT for PTT and its bonds (null clears)"),
+    sector: z.string().max(80).nullable().optional().describe("Sector / industry group as you classify it (null clears)"),
+    sectorSource: z.string().max(200).nullable().optional().describe("Classification source, e.g. SET industry group"),
+    sectorAsOf: isoDate.nullable().optional(),
+    credit: creditProfileSchema.nullable().optional().describe("Bond credit profile (rating + agency + date; PD with type/source/date; LGD with source/date). null clears"),
+  })
+  .refine((v) => !v.sector || (v.sectorSource && v.sectorAsOf), { message: "sector needs sectorSource and sectorAsOf", path: ["sectorSource"] });
+
+export const yieldCurveInput = z.object({
+  points: z.array(z.object({ years: z.number().positive().max(50), rate: z.number().min(-0.05).max(0.5) })).min(1).max(30).describe("Zero rates (decimal, annual compounding) by maturity in years"),
+  source: z.string().min(1).max(200).describe("e.g. ThaiBMA government zero curve"),
+  asOf: isoDate,
+});
 
 export const priceInput = z.object({
   symbol: z.string(),

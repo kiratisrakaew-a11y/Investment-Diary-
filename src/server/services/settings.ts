@@ -2,6 +2,8 @@ import { getDb, schema } from "@/db";
 import { settingsInput, targetsInput } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { tradingCostsSchema, type TradingCosts } from "@/lib/finance/rebalance";
+import { yieldCurveInput } from "@/lib/validation";
+import type { z } from "zod";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
@@ -21,6 +23,7 @@ export async function getSettings() {
       erpSource: null as string | null,
       erpAsOf: null as string | null,
       tradingCosts: {} as unknown,
+      yieldCurve: null as unknown,
     }
   );
 }
@@ -76,6 +79,23 @@ export async function saveTradingCosts(input: Partial<TradingCosts>) {
       .values({ ...s, id: 1, tradingCosts: data })
       .onConflictDoUpdate({ target: schema.settings.id, set: { tradingCosts: data } }),
   );
+  return data;
+}
+
+/** Government zero curve for spread analytics, or null (spread metrics are then unavailable). */
+export async function getYieldCurve(): Promise<z.infer<typeof yieldCurveInput> | null> {
+  const s = await getSettings();
+  const parsed = yieldCurveInput.safeParse(s.yieldCurve);
+  return parsed.success ? parsed.data : null;
+}
+
+export async function saveYieldCurve(input: z.input<typeof yieldCurveInput> | null) {
+  const data = input == null ? null : yieldCurveInput.parse(input);
+  const s = await getSettings();
+  await getDb()
+    .insert(schema.settings)
+    .values({ ...s, id: 1, yieldCurve: data })
+    .onConflictDoUpdate({ target: schema.settings.id, set: { yieldCurve: data } });
   return data;
 }
 
