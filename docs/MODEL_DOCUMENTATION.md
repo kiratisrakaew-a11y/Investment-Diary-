@@ -240,3 +240,10 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 ## 7. Validation
 
 `npm test` runs unit, regression and end-to-end tests (`src/lib/e2e.test.ts`). The regression tests for each remediation PR were run first on the code before the fix and failed there. Reports are in `docs/validation/PR1_REPORT.md` … `PR5_REPORT.md`.
+
+Valuation roadmap checks:
+- Golden values for legacy DCF/FCFE/RIM/DDM, recorded before the staged/RIM changes (`valuation-golden.test.ts`).
+- Staged DCF (`valuation-staged.test.ts`) and RIM horizons, scenarios and snapshots (`rim-horizon.test.ts`).
+- `valuation-phase5.test.ts`: SOTP with staged DCF and multi-stage RIM segments, plus RIM at 2/5/10 years against an independent closed form for every continuing-value method.
+- `npm run check:valuation-roundtrip` (needs the database): save → read → evaluate and JSON export → import for staged/legacy DCF, RIM with scenarios and a horizon snapshot. It removes its own rows.
+- `e2e/valuation-smoke.mjs` (needs a running app and Playwright): 375/720/768/1440 px in both themes. It checks for horizontal scroll, console errors and a visible keyboard focus, and that the staged switch works. Read-only.

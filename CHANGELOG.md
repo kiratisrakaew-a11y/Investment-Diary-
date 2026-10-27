@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-27 — Phase 5: missing valuation tests
+- `valuation-phase5.test.ts` covers two areas:
+  - SOTP with staged FCFF / FCFE and multi-stage RIM segments (debt counted once, errors surfaced).
+  - RIM at 2/5/10 years against an independent closed form (perpetuity, persistence, none), plus a hand-worked 2-year example.
+- `npm run check:valuation-roundtrip`: database save → read → evaluate and JSON round trip (self-cleaning).
+- `e2e/valuation-smoke.mjs`: Playwright smoke at 375/720/768/1440 px in dim and light themes (no horizontal scroll, no console errors, focus visible, staged switch).
+
 ## 2026-10-27 — Phase 3: save RIM horizon snapshots
 - "บันทึกผล h ปีเป็น valuation แยก" under the 5Y/10Y comparison. It saves the first h forecast years as a new `residual_income` valuation tagged `horizonSnapshot`, with the continuing value re-based at year h. Years are never added.
 - Snapshots show in history with a badge but never replace the latest valuation of a method (stock page average/median, overview, data quality).
