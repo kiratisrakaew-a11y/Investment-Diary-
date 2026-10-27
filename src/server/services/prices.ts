@@ -35,6 +35,21 @@ export async function recordPrice(input: PriceInputT) {
   return { symbol: asset.symbol, date, close: data.close };
 }
 
+/** Provider dividend-adjusted closes (adj_close) where stored; assets without them are absent or partial. */
+export async function loadAdjPriceHistory(): Promise<PriceHistory> {
+  const rows = await getDb()
+    .select({ assetId: schema.prices.assetId, date: schema.prices.date, adj: schema.prices.adjClose })
+    .from(schema.prices)
+    .orderBy(asc(schema.prices.assetId), asc(schema.prices.date));
+  const map: PriceHistory = new Map();
+  for (const r of rows) {
+    if (r.adj == null) continue;
+    if (!map.has(r.assetId)) map.set(r.assetId, []);
+    map.get(r.assetId)!.push([r.date, r.adj]);
+  }
+  return map;
+}
+
 export async function loadPriceHistory(): Promise<PriceHistory> {
   const rows = await getDb()
     .select({ assetId: schema.prices.assetId, date: schema.prices.date, close: schema.prices.close })

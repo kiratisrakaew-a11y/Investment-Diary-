@@ -105,6 +105,18 @@ describe("backtest — walk-forward, no look-ahead, reproducible", () => {
     expect(b.weights[3].target).not.toEqual(a.weights[3].target);
   });
 
+  it("CAPM β uses only benchmark prints before the trade date, and gaps are not forward-filled", () => {
+    const x = base({ strategy: "max_sharpe", returnMethod: "capm", bounds: { min: 0, max: 0.7 } });
+    const a = backtest(x);
+    expect(a.ok).toBe(true);
+    const cut = x.dates.indexOf(a.weights[1].date);
+    // Change benchmark prints on/after the 2nd rebalance date and drop some earlier ones.
+    const series = x.benchmark!.series.filter((_, t) => t % 17 !== 5).map(([d, v], t) => [d, t >= cut ? v * (1 + 0.5 * Math.cos(t)) : v] as [string, number]);
+    const b = backtest({ ...x, benchmark: { ...x.benchmark!, series } });
+    expect(b.ok).toBe(true);
+    expect(b.weights[0].target).toEqual(backtest({ ...x, benchmark: { ...x.benchmark!, series: series.map(([d, v], t) => [d, t >= cut ? x.benchmark!.series.find(([dd]) => dd === d)![1] : v] as [string, number]) } }).weights[0].target);
+  });
+
   it("the first trade comes after the full training window; weights respect bounds", () => {
     const x = base({ strategy: "min_variance", bounds: { min: 0.1, max: 0.5 }, covMethod: "ledoit_wolf" });
     const r = backtest(x);

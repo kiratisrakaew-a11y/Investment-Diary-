@@ -1,4 +1,4 @@
-import { asOf, buildSnapshot, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
+import { buildSnapshot, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
 import { covarianceDiagnostics, estimateInputs, ledoitWolf, type Matrix } from "@/lib/finance/mpt";
 import { recommend, type Objective } from "@/lib/finance/recommend";
 import { blackLitterman, type BlView } from "@/lib/finance/black-litterman";
@@ -6,11 +6,12 @@ import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
 import { robustDiagnostics } from "@/lib/finance/robust";
 import { OptimizerError } from "@/lib/finance/optimizer";
 import { beta as calcBeta } from "@/lib/finance/risk";
-import { simpleReturns, mean } from "@/lib/finance/stats";
+import { mean } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
-import { loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { alignWithBenchmark, buildLevelSeries, commonDates, returnsOn, type ReturnBasis } from "@/lib/finance/return-series";
 import { getSettings } from "./settings";
 import { allTransactions } from "./transactions";
 
@@ -47,22 +48,27 @@ export interface OptimizerUniverse {
   /** Return observations per year implied by the data (not a fixed 252). */
   periodsPerYear: number;
   covarianceWarnings: string[];
+  returnBasis?: ReturnBasis;
   /** Aligned periodic returns (only with `withSeries`): per asset, the benchmark, and price dates (returns end on dates[t + 1]). */
   series?: { returns: number[][]; benchmark: number[] | null; dates: string[] };
 }
 
 /**
  * Builds the investable universe: every asset (held or not) with enough price
- * history, its THB daily returns on a common forward-filled calendar,
- * historical and CAPM expected returns, and the covariance matrix.
+ * history, its THB returns on the common calendar of actual prints (shared conventions in
+ * `return-series.ts`: no forward fill, FX applied once), historical and CAPM expected returns,
+ * and the covariance matrix. Default basis: price return (closes); total_return uses the
+ * provider's adjusted closes and excludes assets without full coverage.
  */
-export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean } = {}): Promise<OptimizerUniverse> {
-  const [assets, txRows, prices, fx, settings] = await Promise.all([
+export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis } = {}): Promise<OptimizerUniverse> {
+  const basis = opts.returnBasis ?? "price_return";
+  const [assets, txRows, prices, fx, settings, adj] = await Promise.all([
     listAssets(),
     allTransactions(),
     loadPriceHistory(),
     loadFxHistory(),
     getSettings(),
+    basis === "total_return" ? loadAdjPriceHistory() : Promise.resolve(null),
   ]);
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   const rf = settings.riskFreeRate / 100;
@@ -77,18 +83,30 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
   const wanted = symbols?.length ? new Set(symbols.map((s) => s.toUpperCase())) : null;
   const skipped: { symbol: string; reason: string }[] = [];
   const candidates = assets.filter((a) => a.assetClass !== "cash" && (!wanted || wanted.has(a.symbol.toUpperCase())));
-  const fxStart = fx[0]?.[0];
+  const levelsById = new Map<number, [string, number][]>();
+  const seriesWarnings: string[] = [];
   const usable = candidates.filter((a) => {
-    const n = prices.get(a.id)?.filter(([d]) => d >= from).length ?? 0;
-    if (n < MIN_OBS) {
-      skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${n} วัน (ต้องการ ≥ ${MIN_OBS})` });
+    const window = prices.get(a.id)?.filter(([d]) => d >= from) ?? [];
+    if (window.length < MIN_OBS) {
+      skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${window.length} วัน (ต้องการ ≥ ${MIN_OBS})` });
       return false;
     }
-    // Never convert at FX = 1: USD assets need USDTHB history covering the window.
-    if (a.currency === "USD" && (fxStart == null || fxStart > (prices.get(a.id)!.find(([d]) => d >= from)?.[0] ?? from))) {
-      skipped.push({ symbol: a.symbol, reason: "ไม่มีอัตรา USDTHB ครอบคลุมช่วงข้อมูล" });
+    const adjMap = adj ? new Map(adj.get(a.id) ?? []) : null;
+    // Never convert at FX = 1: USD assets need a USDTHB fixing on (or within 5 days before) each date.
+    const lv = buildLevelSeries({
+      label: a.symbol,
+      observations: window.map(([date, close]) => ({ date, close, adjClose: adjMap?.get(date) ?? null })),
+      basis,
+      totalReturnSource: basis === "total_return" ? "adjusted_close" : undefined,
+      currency: a.currency,
+      fx,
+    });
+    if (!lv.ok) {
+      skipped.push({ symbol: a.symbol, reason: `${lv.reason}${lv.required ? ` — ต้องการ: ${lv.required}` : ""}` });
       return false;
     }
+    seriesWarnings.push(...lv.warnings);
+    levelsById.set(a.id, lv.levels);
     return true;
   });
 
@@ -111,17 +129,16 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
   if (usable.length < 2) return { ...empty, reason: "ต้องมีสินทรัพย์ที่มีประวัติราคาเพียงพออย่างน้อย 2 ตัว" };
 
   // Common calendar: only dates on which every asset has an actual price (no forward-filled zero returns).
-  const sets = usable.map((a) => new Set(prices.get(a.id)!.filter(([d]) => d >= from).map(([d]) => d)));
-  const dates = [...sets[0]].filter((d) => sets.every((x) => x.has(d))).sort();
+  const dates = commonDates(usable.map((a) => levelsById.get(a.id)!));
   if (dates.length < MIN_OBS) return { ...empty, reason: `วันที่ทุกสินทรัพย์มีราคาพร้อมกันมีเพียง ${dates.length} วัน (ต้องการ ≥ ${MIN_OBS})` };
 
-  const series = usable.map((a) =>
-    simpleReturns(dates.map((d) => (asOf(prices.get(a.id), d) ?? 0) * (a.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1))),
-  );
+  const series = usable.map((a) => returnsOn(levelsById.get(a.id)!, dates));
   // Observations per year from the data, so daily, weekly or fund-NAV calendars annualize consistently.
   const years = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / (365 * 86_400_000);
   const N = years > 0 ? (dates.length - 1) / years : 252;
-  const benchReturns = bench.length ? simpleReturns(dates.map((d) => asOf(bench, d) ?? 0)) : null;
+  // Benchmark on the asset calendar where it has actual prints at both ends (NaN otherwise) — never forward-filled.
+  const benchWindow = bench.filter(([d]) => d >= from);
+  const benchReturns = benchWindow.length ? returnsOn(benchWindow, dates) : null;
   const { cov } = estimateInputs(series, N);
   const lw = ledoitWolf(series);
   const covShrunk = lw.cov.map((r) => r.map((x) => x * N));
@@ -140,10 +157,13 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
     covShrunk,
     shrinkage: lw.intensity,
     periodsPerYear: N,
-    covarianceWarnings,
-    ...(opts.withSeries ? { series: { returns: series, benchmark: benchReturns && benchReturns.every(Number.isFinite) ? benchReturns : null, dates } } : {}),
+    covarianceWarnings: [...covarianceWarnings, ...seriesWarnings],
+    returnBasis: basis,
+    ...(opts.withSeries ? { series: { returns: series, benchmark: benchReturns, dates } } : {}),
     assets: usable.map((a, i) => {
-      const b = benchReturns && benchReturns.every((x) => Number.isFinite(x)) ? calcBeta(series[i], benchReturns) : null;
+      // β on common actual prints of asset and benchmark (compounding across benchmark gaps).
+      const al = benchWindow.length ? alignWithBenchmark(levelsById.get(a.id)!, benchWindow, dates) : null;
+      const b = al && al.dates.length > 2 ? calcBeta(al.asset, al.benchmark) : null;
       return {
         symbol: a.symbol,
         name: a.name,
@@ -191,11 +211,12 @@ export interface OptimizeParams {
   covMethod?: "sample" | "ledoit_wolf";
   blackLitterman?: { marketWeights: Record<string, number>; marketRiskAversion?: number; tau?: number; views?: BlView[]; posteriorCovariance?: boolean };
   robust?: { bootstrap?: number; returnShock?: number; seed?: number };
+  returnBasis?: ReturnBasis;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
-  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true });
+  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis });
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
@@ -272,7 +293,9 @@ export async function optimizePortfolio(p: OptimizeParams) {
       const hist = sample.map((s) => mean(s) * N);
       const b = bench ? rows.map((t) => bench[t]) : null;
       const capm = sample.map((s, i) => {
-        const beta = b ? calcBeta(s, b) : null;
+        // Only pairs where the benchmark had prints at both ends (no forward fill).
+        const keep = b ? b.map((v, k) => Number.isFinite(v) && Number.isFinite(s[k])) : [];
+        const beta = b ? calcBeta(s.filter((_, k) => keep[k]), b.filter((_, k) => keep[k])) : null;
         return beta != null ? u.riskFree + beta * u.equityRiskPremium : hist[i];
       });
       let m = method === "historical" ? hist : method === "capm" ? capm : method === "blend" ? hist.map((h, i) => 0.5 * h + 0.5 * capm[i]) : hist;

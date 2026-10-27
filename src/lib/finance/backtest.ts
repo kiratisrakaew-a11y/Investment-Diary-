@@ -16,6 +16,7 @@ import { rebalance, type CostBreakdown, type TradingCosts } from "./rebalance";
 import { beta as calcBeta } from "./risk";
 import { mean } from "./stats";
 import { computeMetrics, type PerformanceMetrics } from "./metrics";
+import { alignWithBenchmark } from "./return-series";
 
 export type BacktestStrategy = "buy_and_hold" | "equal_weight" | "min_variance" | "max_sharpe" | "black_litterman" | "custom";
 
@@ -85,15 +86,8 @@ export function backtest(x: BacktestInput): BacktestResult {
 
   // Returns r[i][k] from price k to k+1.
   const R = x.prices.map((p) => p.slice(1).map((v, k) => v / p[k] - 1));
-  const benchAt = (() => {
-    if (!x.benchmark?.series.length) return null;
-    const s = x.benchmark.series;
-    let j = 0;
-    return x.dates.map((d) => {
-      while (j + 1 < s.length && s[j + 1][0] <= d) j++;
-      return s[j][0] <= d ? s[j][1] : null;
-    });
-  })();
+  // Benchmark actual prints only (no forward fill); β uses common actual dates (return-series.ts).
+  const benchSeries = x.benchmark?.series.length ? x.benchmark.series : null;
   const yearsPer = (a: number, b: number) => (Date.parse(x.dates[b]) - Date.parse(x.dates[a])) / (365 * 86_400_000);
 
   /** Target weights decided at index t with data up to price t − 1 only. */
@@ -113,14 +107,12 @@ export function backtest(x: BacktestInput): BacktestResult {
     const cov: Matrix = x.covMethod === "ledoit_wolf" ? ledoitWolf(win).cov.map((r) => r.map((v) => v * N)) : estimateInputs(win, N).cov;
     const hist = win.map((r) => mean(r) * N);
     let mu = hist;
-    if (x.returnMethod !== "historical" && benchAt) {
-      const b = Array.from({ length: x.window }, (_, k) => {
-        const a0 = benchAt[k0 + k];
-        const a1 = benchAt[k0 + k + 1];
-        return a0 && a1 ? a1 / a0 - 1 : NaN;
-      });
-      const capm = win.map((r, i) => {
-        const be = b.every(Number.isFinite) ? calcBeta(r, b) : null;
+    if (x.returnMethod !== "historical" && benchSeries) {
+      // Window prices k0 … k1 (= t − 1): data strictly before the trade date.
+      const wDates = x.dates.slice(k0, k1 + 1);
+      const capm = win.map((_, i) => {
+        const al = alignWithBenchmark(wDates.map((d, k) => [d, x.prices[i][k0 + k]] as [string, number]), benchSeries.filter(([d]) => d <= x.dates[k1]), wDates);
+        const be = al.dates.length > 2 ? calcBeta(al.asset, al.benchmark) : null;
         return be != null ? x.rf + be * x.erp : hist[i];
       });
       mu = x.returnMethod === "capm" ? capm : hist.map((h, i) => 0.5 * h + 0.5 * capm[i]);

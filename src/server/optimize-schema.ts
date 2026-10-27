@@ -34,6 +34,10 @@ export const optimizeInput = z
   .object({
   symbols: z.array(z.string()).optional().describe("Universe; defaults to every asset with enough price history"),
   lookbackDays: z.number().int().min(90).max(3650).optional(),
+  returnBasis: z
+    .enum(["price_return", "total_return"])
+    .optional()
+    .describe("Return series for μ/Σ: price_return (closes, default) or total_return (provider dividend-adjusted closes; assets without full adj_close coverage are skipped)"),
   returnMethod: z.enum(["historical", "capm", "blend", "black_litterman"]).optional().describe("How expected returns are estimated (default blend). black_litterman needs blackLitterman.marketWeights"),
   blackLitterman: blackLittermanInput.optional(),
   robust: z

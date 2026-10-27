@@ -38,6 +38,17 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - Unrecorded splits: the data-quality check "แตกพาร์" flags day-to-day gaps within 8% of 2, 3, 4, 5, 10, 20 or their inverses on held assets with no split within ±7 days. These moves are impossible under SET's ±30% daily limit. Yahoo split events from a sync point to the same fix.
 - The daily updater `updateAllPrices` uses the same functions incrementally (it re-fetches the last 5 days with overwrite).
 
+## 1c. Return conventions (v3) — `src/lib/finance/return-series.ts`
+
+- price_return = split-consistent closes, no dividends.
+- total_return = provider adjusted closes **or** closes + per-unit distributions on ex-dates — never both (rejected).
+- THB return = (1 + local)(1 + FX), with FX on the same date or ≤ 5 days earlier (flagged); THB assets are never converted; missing FX → unavailable.
+- Series are aligned on common actual prints, compounding across gaps; there is no forward fill for assets, FX or the benchmark.
+- β uses common actual asset/benchmark dates.
+- Portfolio NAV/TWR (ledger) is unchanged and already includes income.
+- Stored bond prices are treated as clean.
+- See `docs/roadmap-v3/01_RETURN_CONVENTIONS.md`.
+
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`
 
 | Measure | Formula / rule |

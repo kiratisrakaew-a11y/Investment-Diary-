@@ -26,6 +26,8 @@ export async function bondHoldings() {
         marketValueThb: pos?.marketValueThb ?? 0,
         couponFrequency: a.couponFrequency,
         dayCount: a.dayCount,
+        /** Price basis: stored per-unit price is treated as a CLEAN price (× 100 / face); accrued interest is added for the dirty price. */
+        priceBasis: "clean_assumed" as const,
         /** Conventions the analytics had to assume because the asset does not store them. */
         assumed: specFromBondAsset(a, settlement).assumed,
       };

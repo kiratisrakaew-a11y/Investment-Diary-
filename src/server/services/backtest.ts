@@ -4,7 +4,8 @@ import { backtest } from "@/lib/finance/backtest";
 import { lotFor, tradingCostsSchema } from "@/lib/finance/rebalance";
 import { blackLittermanInput } from "../optimize-schema";
 import { listAssets } from "./assets";
-import { loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { buildLevelSeries, commonDates } from "@/lib/finance/return-series";
 import { getSettings, getTradingCosts } from "./settings";
 
 export const backtestInput = z
@@ -25,6 +26,10 @@ export const backtestInput = z
     useCosts: z.boolean().default(true).describe("Deduct the trading cost model from Settings"),
     costs: tradingCostsSchema.partial().optional().describe("Override costs for this backtest"),
     useLots: z.boolean().default(false).describe("Round trades to whole lots (default: fractional units)"),
+    returnBasis: z
+      .enum(["price_return", "total_return"])
+      .default("price_return")
+      .describe("price_return = closes (dividends excluded); total_return = provider dividend-adjusted closes (dividends reinvested), requires full adj_close coverage"),
   })
   .refine((v) => v.strategy !== "black_litterman" || v.blackLitterman, { message: "black_litterman requires blackLitterman.marketWeights", path: ["blackLitterman"] })
   .refine((v) => v.strategy !== "custom" || v.weights, { message: "custom requires weights", path: ["weights"] });
@@ -63,12 +68,41 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   });
   if (!pool.length) throw new Error("ไม่มีสินทรัพย์ที่มีข้อมูลครบช่วง");
   const end = x.endDate ?? "9999-12-31";
-  // Common calendar: dates on which every asset has an actual print (no forward-filled prices).
-  const sets = pool.map((a) => new Set(prices.get(a.id)!.filter(([d]) => d >= start && d <= end).map(([d]) => d)));
-  const dates = [...sets[0]].filter((d) => sets.every((s) => s.has(d))).sort();
+  // Shared conventions (return-series.ts): THB levels per actual print, FX applied once, total return
+  // only from the provider's adjusted closes; then the common calendar of actual prints.
+  const adj = x.returnBasis === "total_return" ? await loadAdjPriceHistory() : null;
+  const levels = new Map<number, { levels: [string, number][]; scale: number }>();
+  pool = pool.filter((a) => {
+    const window = prices.get(a.id)!.filter(([d]) => d >= start && d <= end);
+    const adjMap = adj ? new Map(adj.get(a.id) ?? []) : null;
+    const lv = buildLevelSeries({
+      label: a.symbol,
+      observations: window.map(([date, close]) => ({ date, close, adjClose: adjMap?.get(date) ?? null })),
+      basis: x.returnBasis,
+      totalReturnSource: x.returnBasis === "total_return" ? "adjusted_close" : undefined,
+      currency: a.currency,
+      fx,
+    });
+    if (!lv.ok) {
+      excluded.push({ symbol: a.symbol, reason: `${lv.reason}${lv.required ? ` — ต้องการ: ${lv.required}` : ""}` });
+      return false;
+    }
+    // Trade at THB prices on the chosen basis: first price (× FX) × index level.
+    const first = window[0];
+    const p0 = (x.returnBasis === "total_return" ? adjMap!.get(first[0])! : first[1]) * (a.currency === "USD" ? (asOf(fx, first[0]) ?? NaN) : 1);
+    levels.set(a.id, { levels: lv.levels, scale: p0 });
+    return true;
+  });
+  if (!pool.length) throw new Error(`ไม่มีสินทรัพย์ที่ใช้ได้: ${excluded.map((e) => `${e.symbol} (${e.reason})`).join(", ")}`);
+  const dates = commonDates(pool.map((a) => levels.get(a.id)!.levels));
   if (dates.length < 3) throw new Error(`วันที่ทุกสินทรัพย์มีราคาพร้อมกันมีเพียง ${dates.length} วัน`);
   start = dates[0];
-  const px = pool.map((a) => dates.map((d) => (asOf(prices.get(a.id), d) ?? NaN) * (a.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1)));
+  const px = pool.map((a) => {
+    const { levels: lv, scale } = levels.get(a.id)!;
+    const m = new Map(lv);
+    return dates.map((d) => m.get(d)! * scale);
+  });
+  if (x.returnBasis === "total_return" && x.useLots) throw new Error("total_return ใช้ราคาปรับปันผลซึ่งไม่ใช่ราคาซื้อขายจริง — ปิด useLots");
   const years = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / (365 * 86_400_000);
   const obsPerYear = years > 0 ? (dates.length - 1) / years : 252;
   const every = Math.max(1, Math.round(obsPerYear / PER_YEAR[x.rebalance]));
@@ -110,7 +144,11 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     costModel: costs,
     limitations: [
       "Survivorship bias: ใช้เฉพาะสินทรัพย์ที่อยู่ในแอปวันนี้ — หุ้นที่ถูกถอดหรือเลิกกิจการในอดีตไม่ถูกรวม ผลจึงอาจดีกว่าความเป็นจริง",
-      "ราคาเป็นราคาปิดที่ไม่รวมเงินปันผล (Yahoo close ปรับ split แล้ว) — หุ้นปันผลสูงจะดูแย่กว่าผลตอบแทนรวมจริง; ดัชนีอ้างอิงเป็น " + (settings.benchmarkKind === "total_return" ? "ผลตอบแทนรวม" : "ดัชนีราคา"),
+      x.returnBasis === "total_return"
+        ? "ผลตอบแทนรวม: ใช้ราคาปรับปันผลของผู้ให้ข้อมูล (ปันผลถูกนำไปลงทุนต่อ ณ วัน XD) — ระดับราคาถูกปรับย้อนหลังโดยผู้ให้ข้อมูล แต่อัตราผลตอบแทนแต่ละช่วงไม่ใช้ข้อมูลอนาคต; ไม่หักภาษีปันผล; พันธบัตร/กองทุนที่ไม่มี adj_close ถูกตัดออก"
+        : "ราคาเป็นราคาปิดที่ไม่รวมเงินปันผล (Yahoo close ปรับ split แล้ว) — หุ้นปันผลสูงจะดูแย่กว่าผลตอบแทนรวมจริง; ดอกเบี้ยพันธบัตรไม่รวม (ราคาสะอาด)",
+      `ดัชนีอ้างอิงเป็น${settings.benchmarkKind === "total_return" ? "ผลตอบแทนรวม" : "ดัชนีราคา (ไม่รวมปันผล)"}${x.returnBasis === "total_return" && settings.benchmarkKind !== "total_return" ? " — เทียบกับพอร์ตผลตอบแทนรวมจะได้เปรียบเกินจริง" : ""}`,
+      ...(x.strategy === "black_litterman" ? ["Black–Litterman: น้ำหนักตลาดที่ใส่เป็นค่าปัจจุบันและใช้ทุกช่วงย้อนหลัง (ไม่ใช่ข้อมูล ณ วันนั้น) — เป็น look-ahead ในอินพุต"] : []),
       "ซื้อขายที่ราคาปิดวันปรับพอร์ต ไม่มี market impact นอกจาก slippage ที่ตั้งไว้ · ไม่คิดภาษีเงินปันผล",
       `ปฏิทินร่วม: ใช้เฉพาะวันที่ทุกสินทรัพย์มีราคา (${dates.length} วัน)${excluded.length ? ` · ไม่รวม ${excluded.map((e) => e.symbol).join(", ")}` : ""}`,
       "ผลในอดีตไม่รับประกันผลในอนาคต",
