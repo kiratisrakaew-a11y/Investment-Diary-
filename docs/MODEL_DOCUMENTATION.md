@@ -237,6 +237,50 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
   - valuations saved under an older formula version
   - bonds without conventions
 
+## 6b. Scenarios and probabilistic valuation (PR11–PR15) — `valuation-scenarios.ts`, `valuation-analytics.ts`, `valuation-montecarlo.ts`
+
+- **Input:** `assumptions.scenarioSet` (optional, `version: 1`) with scenarios `{ id, name, probability, inputOverrides { path: value }, rationale?, sources?, noteTh? }`.
+  - Paths are allow-listed per method (`SCENARIO_PATHS`).
+  - SOTP segments are addressed as `segments[<id|entity|name>]`, never by position.
+  - Virtual drivers: `growthShift` and `marginShift` (DCF, every year or stage), `discountRate` (DCF, via `dcfAtRate`), `roeShift` (RIM; same rules as the RIM scenario engine), `yieldShiftBp` (bond).
+- **Evaluation:** each scenario applies its overrides to a copy of the inputs and re-validates them with `valuationInput`. It is then valued by `evaluateLean`, which is the same `evaluateCore` without the sensitivity, reverse or explanation extras.
+  - SOTP reruns every segment model and the bridge. The reconciliation must balance within 1e-6 × equity.
+- **Base and weighted values:**
+  - `baseCaseValue` = the inputs as entered (the stored `intrinsicValue`).
+  - `probabilityWeightedValue` = Σ pᵢ·Vᵢ over scenarios with p > 0. It is shown only when probabilities are finite, in [0, 1], have unique ids, sum to 1 within 1e-8, and every positive-probability scenario has a value.
+  - There is no automatic normalisation: the UI shows the proposed weights and waits for confirmation.
+  - Weights apply to scenarios of one method only, never across methods.
+- **Per scenario:**
+  - upside = V / P − 1;
+  - margin of safety = (V − P) / V, only when V > 0 and P > 0, otherwise N/A with a reason.
+  - Bonds report clean price per 100, not an equity value.
+- **Quality:**
+  - `insufficient_data` when the base fails.
+  - `preliminary` when a material SOTP code is present (MINORITY_DOUBLE_COUNT, MISSING_MINORITY, DEBT_DOUBLE_COUNT, DEBT_OMITTED, CASH/INVESTMENT_DOUBLE_COUNT, DUPLICATE_ENTITY, EV_NEEDS_OWN_DEBT, MISSING_SEGMENT_DEBT, SEGMENT_DEBT_IGNORED) or when `inputMeta.asOf` is missing.
+  - Otherwise `verified_inputs` (automatic checks only).
+- **SOTP `from_segments`:** one SOTP scenario per scenario name shared by the segment models.
+  - Segment probabilities must match.
+  - Segments without scenarios (e.g. a market-valued stake) keep their base value.
+- **Sensitivity:** 1-D or 2-D grid with at most 121 cells. Axes use shift, absolute or pct mode. Invalid cells are N/A. The base cell must equal the base value, and each row is labelled monotonic or mixed.
+  - Defaults: WACC × g, Ke (premium) × g, ROE × Ke, P/E × EPS, yield shift, SOTP segment premium × g.
+- **Reverse DCF:** FCFF, FCFE and SOTP DCF-segment drivers only.
+  - A 61-point bounded scan, then bisection of the single bracket, stopping at a tolerance of 1e-10 × price.
+  - Zero brackets → `no_solution`; more than one → `ambiguous`. Residual and iterations are reported.
+  - Other methods are `unsupported`; their implied multiples remain in the main result.
+- **Monte Carlo:**
+  - mulberry32 seed with Box–Muller normals and a Gaussian copula. Correlation must be symmetric with a unit diagonal; a non-PSD matrix is repaired by eigenvalue clipping and reported.
+  - Marginals: uniform, triangular, truncated normal, and empirical (needs ≥ 20 samples and a source).
+  - Default 2,000 draws, at most 10,000, with a time budget and cancellation.
+  - Invalid draws are counted with reasons. The result is unusable above `maxInvalidShare` (default 20%).
+  - Outputs: P5–P95 (type-7 percentiles), mean, SD, share above price, histogram and ECDF.
+  - Saved as config plus summary; raw draws are never stored. It never replaces the base or weighted value.
+- **Persistence:**
+  - `result.scenarioAnalysis` holds base and weighted values, per-scenario values and resolved inputs, warnings, generated Thai notes, `inputHash`, `modelVersion` and `asOf`. `result.monteCarlo` holds the summary.
+  - Recomputed on the server at save. Invalid probabilities refuse the save.
+  - Old records are untouched and get no weighted value until the user adds scenarios and saves.
+- **Thai notes:** six sections: สรุปง่าย ๆ / ข้อมูลจริง / สมมติฐาน / วิธีคำนวณ / ข้อจำกัด / ความหมาย. They are generated from inputs only and say so when there is no source. The analyst's `noteTh` is never overwritten; regenerating shows a line diff first.
+- **Out of scope:** decision trees and event-driven valuation.
+
 ## 7. Validation
 
 `npm test` runs unit, regression and end-to-end tests (`src/lib/e2e.test.ts`). The regression tests for each remediation PR were run first on the code before the fix and failed there. Reports are in `docs/validation/PR1_REPORT.md` … `PR5_REPORT.md`.

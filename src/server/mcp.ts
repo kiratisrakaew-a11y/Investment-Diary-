@@ -13,6 +13,8 @@ import { recordPrice } from "./services/prices";
 import { createTransaction, listTransactions } from "./services/transactions";
 import { getAllocation, getMptAnalysis, getPerformance, getPortfolioSummary } from "./services/portfolio";
 import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
+import { analyzeRequest, analyzeValuation, hasScenarios } from "@/lib/valuation-analyze";
+import { SCENARIO_PATHS } from "@/lib/valuation-scenarios";
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
@@ -378,7 +380,26 @@ export function createMcpServer() {
       inputSchema: { valuation: valuationInput },
       annotations: { readOnlyHint: true },
     },
-    safe(async ({ valuation }) => evaluate(valuation)),
+    safe(async ({ valuation }) => {
+      const r = evaluate(valuation);
+      return hasScenarios(valuation) ? { ...r, scenarioAnalysis: analyzeValuation({ valuation }).scenarioAnalysis } : r;
+    }),
+  );
+
+  server.registerTool(
+    "analyze_valuation",
+    {
+      title: "Scenario / sensitivity / reverse DCF / Monte Carlo",
+      description:
+        "Same evaluator as value_security. Scenarios: valuation.assumptions.scenarioSet {mode custom|from_segments, scenarios [{id, name, probability (decimal, Σ = 1 within 1e-8), inputOverrides {path: value}, rationale?, sources?, noteTh?}]} " +
+        "or the `scenarios` argument. Returns baseCaseValue (the unmodified inputs) and probabilityWeightedValue separately, per-scenario value / upside / margin of safety, qualityStatus and a generated Thai note per scenario. " +
+        "Paths per method: " + JSON.stringify(SCENARIO_PATHS) + ". SOTP segments are targeted by id/entity/name, never by index. " +
+        "sensitivity: 'default' or {x:{path, mode shift|absolute|pct, values}, y?}; reverse: 'default' or {path, lo, hi, targetPrice?} (DCF / SOTP DCF segments only); " +
+        "monteCarlo: 'saved' or {seed, draws ≤ 10000, variables [{path, mode, dist uniform|triangular|normal|empirical}], correlation?}. Analysis only — not a recommendation.",
+      inputSchema: analyzeRequest.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (x) => analyzeValuation(analyzeRequest.parse(x))),
   );
 
   server.registerTool(

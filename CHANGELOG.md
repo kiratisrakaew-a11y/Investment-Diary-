@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-27 — PR11–PR15: scenarios, sensitivity, reverse DCF, Monte Carlo
+- Every valuation method gets an optional `scenarioSet`: Bear/Base/Bull/Custom with allow-listed path overrides, Σp = 1 within 1e-8, and no silent normalisation.
+  - `baseCaseValue` (unchanged meaning) and `probabilityWeightedValue` are separate fields.
+  - Upside and margin of safety are reported per scenario, with a quality status (`preliminary` while material SOTP warnings remain).
+- SOTP: each scenario reruns segment models and the whole bridge. Segments are targeted by stable id (new optional `id`; the editor assigns one when scenarios are added). `from_segments` turns the segment models' own Bear/Base/Bull into SOTP scenarios (the PLANB #31 gap).
+- Generic sensitivity grid (≤ 121 cells, N/A with reasons), reverse DCF with bounded root search (`no_solution` / `ambiguous` reported), and seeded Monte Carlo (Gaussian copula, PSD check, invalid-draw accounting, ≤ 10,000 draws, time budget). Monte Carlo runs on the server.
+- Editable Thai note per scenario in six sections. The analyst's text is never overwritten automatically, and a line diff is shown before replacing.
+- Saved records:
+  - The server recomputes `result.scenarioAnalysis` / `result.monteCarlo` with `inputHash`, and the editor flags a stale snapshot. Invalid probabilities refuse the save.
+  - `intrinsicValue` stays the base value. Old records are unchanged.
+  - The stock page shows the weighted value under the base value when present.
+- API / MCP:
+  - New REST endpoint `POST /api/v1/valuation/analyze`.
+  - `/evaluate` and MCP `value_security` add `scenarioAnalysis` only when a scenarioSet is given.
+  - New MCP tool `analyze_valuation`.
+- `npm run check:scenario-parity` checks against the database and a running server: legacy record intact, refused invalid save, base vs weighted, notes, and REST / MCP parity with 401s without the key.
+- No database migration: scenario data lives in the existing JSON columns.
+
 ## 2026-10-27 — PR9 + PR10: asset hide / archive / guarded delete
 - Assets gain `hidden_in_holdings_at` and `archived_at` and a new `asset_lifecycle_events` log. Migration 0014 is additive.
 - Typed results: `HIDDEN`, `ARCHIVED`, `RESTORED`, `DELETED`, `BLOCKED_HAS_DEPENDENCIES`, `FORBIDDEN`, `NOT_FOUND`. The server checks every rule again inside a transaction with a row lock, and the result is logged.

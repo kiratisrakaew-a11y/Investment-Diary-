@@ -6,7 +6,7 @@ import { priceHistoryFor } from "@/server/services/prices";
 import { getStatements } from "@/server/services/statements";
 import { getTimestampPolicy } from "@/server/services/settings";
 import { priceDateAt, statementsAsOfAt, timestampFlags } from "@/lib/governance";
-import { SavedValuationList } from "@/components/SavedValuationList";
+import { SavedValuationList, type SavedValuationRow } from "@/components/SavedValuationList";
 import { PageHeader, Section } from "@/components/ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
@@ -123,6 +123,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
               priceAtValuation: r.priceAtValuation,
               assumptions: r.assumptions,
               modelVersion: (r.result as { modelVersion?: string } | null)?.modelVersion,
+              scenario: (r.result as { scenarioAnalysis?: SavedValuationRow["scenario"] } | null)?.scenarioAnalysis ?? null,
               isLatestForMethod: latestIds.has(r.id),
               timestampFlags: flagsFor(r),
             }))}

@@ -7,6 +7,8 @@ import { DEFAULT_DCF } from "@/lib/finance/valuation";
 import type { SotpIssue, SotpResult } from "@/lib/finance/sotp";
 import { evaluate, valuationInput, type ValuationInput } from "@/lib/valuation-schemas";
 import { saveValuationAction } from "@/app/(app)/valuation/actions";
+import { ScenarioWorkbench } from "./ScenarioWorkbench";
+import type { ScenarioSet } from "@/lib/valuation-scenario-schema";
 import { exportValuationFile, parseValuationImport } from "@/lib/governance";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 import { NumField, SelectField } from "./fields";
@@ -127,6 +129,7 @@ export function SotpEditor({
   title: initialTitle,
   note: initialNote,
   defaults,
+  saved,
 }: {
   id?: number;
   symbol: string;
@@ -135,6 +138,7 @@ export function SotpEditor({
   title?: string;
   note?: string;
   defaults: EditorDefaults;
+  saved?: { inputHash?: string; savedAt?: string } | null;
 }) {
   const router = useRouter();
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -171,6 +175,20 @@ export function SotpEditor({
   }, [a]);
 
   const set = <K extends keyof Sotp>(k: K, v: Sotp[K]) => setA((x) => ({ ...x, [k]: v }));
+  const scenarioInput = useMemo(() => ({ method: "sotp" as const, assumptions: a }), [a]);
+  // Scenarios address segments by a stable id: give segments without one an id from entity / name.
+  const setScenarioSet = (scenarioSet: ScenarioSet | undefined) =>
+    setA((x) => {
+      const used = new Set(x.segments.map((s) => s.id).filter(Boolean));
+      const segments = x.segments.map((s) => {
+        if (s.id) return s;
+        let id = (s.entity || s.name).toLowerCase().replace(/[^a-z0-9ก-๙_-]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "seg";
+        while (used.has(id)) id += "-2";
+        used.add(id);
+        return { ...s, id };
+      });
+      return { ...x, segments, scenarioSet };
+    });
   const setSeg = (i: number, patch: Partial<Segment>) => setA((x) => ({ ...x, segments: x.segments.map((s, k) => (k === i ? { ...s, ...patch } : s)) }));
 
   function save() {
@@ -351,6 +369,7 @@ export function SotpEditor({
           )}
         </section>
       </div>
+      <ScenarioWorkbench input={scenarioInput} onChange={setScenarioSet} saved={saved} />
     </div>
   );
 }

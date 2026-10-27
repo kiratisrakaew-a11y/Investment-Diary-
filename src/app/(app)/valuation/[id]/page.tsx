@@ -14,7 +14,7 @@ export default async function EditValuationPage({ params }: { params: Promise<{ 
     return (
       <>
         <PageHeader title={`SOTP ${v.symbol}`} subtitle={`บันทึกเมื่อ ${v.date}${v.title ? ` · ${v.title}` : ""}`} />
-        <SotpEditor id={v.id} symbol={v.symbol} symbols={symbols} assumptions={v.assumptions} title={v.title} note={v.note} defaults={defaults} />
+        <SotpEditor id={v.id} symbol={v.symbol} symbols={symbols} assumptions={v.assumptions} title={v.title} note={v.note} defaults={defaults} saved={v.result as { inputHash?: string; savedAt?: string }} />
       </>
     );
   }
@@ -32,6 +32,7 @@ export default async function EditValuationPage({ params }: { params: Promise<{ 
         note={v.note}
         defaults={defaults}
         statements={statements}
+        saved={v.result as { inputHash?: string; savedAt?: string }}
       />
     </>
   );

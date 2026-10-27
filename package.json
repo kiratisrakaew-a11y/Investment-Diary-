@@ -16,7 +16,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "prices:update": "tsx src/scripts/update-prices.ts",
     "check:valuation-roundtrip": "tsx src/scripts/valuation-roundtrip.ts",
-    "check:asset-lifecycle": "tsx src/scripts/asset-lifecycle-check.ts"
+    "check:asset-lifecycle": "tsx src/scripts/asset-lifecycle-check.ts",
+    "check:scenario-parity": "tsx src/scripts/scenario-parity-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

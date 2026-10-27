@@ -4,6 +4,9 @@ import { evaluate, evaluateMultiStageRi, isHorizonSnapshot, multiStageRiToolInpu
 import { today } from "@/lib/validation";
 import { MODEL_VERSION } from "@/lib/governance";
 import { getAssetBySymbol } from "./assets";
+import { analyzeValuation, hasScenarios, scenarioSnapshot } from "@/lib/valuation-analyze";
+import { validateProbabilities } from "@/lib/valuation-scenarios";
+import type { ScenarioSet } from "@/lib/valuation-scenario-schema";
 
 export async function listValuations(opts: { symbol?: string; limit?: number } = {}) {
   const v = schema.valuations;
@@ -38,6 +41,17 @@ export async function saveValuation(input: SaveValuationInput) {
     const errs = (summary.details.errors as { message: string }[] | undefined)?.map((e) => e.message);
     throw new Error(`บันทึกไม่ได้: คำนวณมูลค่าไม่ได้ — ${errs?.join("; ") || "ตรวจสอบว่าอัตราคิดลด > growth และข้อมูลครบ"}`);
   }
+  // Scenarios / Monte Carlo are recomputed here on the server (client numbers are never trusted).
+  // Invalid probabilities block the save so no weighted value is published.
+  const set = (parsed.assumptions as { scenarioSet?: ScenarioSet }).scenarioSet;
+  const analysis = hasScenarios(parsed) || set?.monteCarlo ? analyzeValuation({ valuation: parsed, monteCarlo: set?.monteCarlo ? "saved" : undefined }) : null;
+  const scen = analysis?.scenarioAnalysis;
+  if (scen) {
+    const probErrors = validateProbabilities(scen.scenarios.map((x) => ({ id: x.scenarioId, probability: x.probability })));
+    if (probErrors.length) throw new Error(`บันทึกไม่ได้: scenario ไม่ผ่านการตรวจ — ${probErrors.join("; ")}`);
+    if (scen.derivedFromSegments && scen.errors.length && !scen.scenarios.length) throw new Error(`บันทึกไม่ได้: ${scen.errors.join("; ")}`);
+  }
+  const savedAt = new Date().toISOString();
   const symbol = input.symbol.trim().toUpperCase();
   const asset = await getAssetBySymbol(symbol);
   const values = {
@@ -53,10 +67,12 @@ export async function saveValuation(input: SaveValuationInput) {
       price: summary.price,
       upside: summary.upside,
       modelVersion: MODEL_VERSION,
-      savedAt: new Date().toISOString(),
+      savedAt,
       warnings: [...((summary.details.sanityWarnings as string[] | undefined) ?? []), ...(parsed.method === "sotp" ? (summary.details.warnings as string[]) : [])],
       // SOTP: segment results and the EV-to-equity bridge as computed at save time.
       ...(parsed.method === "sotp" ? sotpSnapshot(summary.details) : {}),
+      // Base value stays `value` / intrinsicValue; the weighted value is a separate field.
+      ...(analysis ? scenarioSnapshot(analysis, savedAt) : {}),
     },
     intrinsicValue: summary.value,
     priceAtValuation: summary.price,
@@ -66,10 +82,10 @@ export async function saveValuation(input: SaveValuationInput) {
   const db = getDb();
   if (input.id) {
     const [row] = await db.update(schema.valuations).set(values).where(eq(schema.valuations.id, input.id)).returning();
-    return { valuation: row, summary };
+    return { valuation: row, summary, ...(analysis ? { analysis } : {}) };
   }
   const [row] = await db.insert(schema.valuations).values(values).returning();
-  return { valuation: row, summary };
+  return { valuation: row, summary, ...(analysis ? { analysis } : {}) };
 }
 
 function sotpSnapshot(d: Record<string, unknown>) {

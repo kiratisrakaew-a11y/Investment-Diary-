@@ -5,7 +5,7 @@
  * marginals. The output describes the user's distributions; it is not a calibrated probability.
  */
 import type { ValuationInput } from "./valuation-schemas";
-import { applyOverrides, valueOf, virtualBase, type OverrideMode } from "./valuation-scenarios";
+import { applyOverrides, segmentKey, valueOf, virtualBase, type OverrideMode } from "./valuation-scenarios";
 import { covarianceDiagnostics } from "./finance/mpt";
 import { MC_MAX_DRAWS, type DistributionSpec, type MonteCarloConfig } from "./valuation-scenario-schema";
 
@@ -242,4 +242,27 @@ export function monteCarlo(input: ValuationInput, cfg: MonteCarloConfig, opts: {
   else if (res.valid < minValid) res.errors.push(`มีผลที่ใช้ได้ ${res.valid} รอบ น้อยเกินไป`);
   res.ok = res.usable;
   return res;
+}
+
+/** Starting variable per method (an illustrative ±range around the base; edit before relying on it). */
+export function defaultMonteCarloVariable(input: ValuationInput): MonteCarloConfig["variables"][number] {
+  const tri = (min: number, max: number) => ({ type: "triangular" as const, min, mode: 0, max });
+  switch (input.method) {
+    case "dcf_fcff":
+    case "dcf_fcfe":
+      return { path: "growthShift", mode: "absolute", dist: tri(-0.02, 0.02) };
+    case "residual_income":
+      return { path: "roeShift", mode: "absolute", dist: tri(-0.02, 0.02) };
+    case "ddm":
+      return { path: "highGrowth", mode: "shift", dist: tri(-0.02, 0.02) };
+    case "multiples":
+      return { path: "targetPE", mode: "shift", dist: tri(-2, 2) };
+    case "bond":
+      return { path: "yieldShiftBp", mode: "absolute", dist: tri(-50, 50) };
+    case "sotp": {
+      const seg = input.assumptions.segments.find((s) => s.source.type === "model" && ["dcf_fcff", "dcf_fcfe"].includes(s.source.valuation.method));
+      if (seg) return { path: `segments[${segmentKey(seg)}].model.growthShift`, mode: "absolute", dist: tri(-0.02, 0.02) };
+      return { path: "holdingDiscount", mode: "shift", dist: tri(-0.05, 0.05) };
+    }
+  }
 }

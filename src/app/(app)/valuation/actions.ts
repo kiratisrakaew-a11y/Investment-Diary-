@@ -8,6 +8,17 @@ import { getAssetBySymbol } from "@/server/services/assets";
 import { deleteValuation, saveValuation } from "@/server/services/valuations";
 import { deleteYear, getStatementsWithMeta, saveYears } from "@/server/services/statements";
 import type { FinancialYear } from "@/lib/financials";
+import { analyzeRequest, analyzeValuation, type AnalyzeRequest, type AnalyzeResult } from "@/lib/valuation-analyze";
+
+/** Server-side analyses (Monte Carlo runs here so large SOTP simulations do not block the browser). */
+export async function analyzeValuationAction(req: AnalyzeRequest): Promise<{ ok: true; result: AnalyzeResult } | { ok: false; error: string }> {
+  try {
+    return { ok: true, result: analyzeValuation(analyzeRequest.parse(req)) };
+  } catch (e) {
+    if (e instanceof ZodError) return { ok: false, error: e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ") };
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 export async function saveValuationAction(payload: {
   id?: number;

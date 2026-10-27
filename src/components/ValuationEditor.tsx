@@ -29,6 +29,8 @@ import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 import { exportValuationFile, parseValuationImport, statementsAsOfAt, timestampFlags, type InputProvenance, type TimestampPolicy } from "@/lib/governance";
 import { CardTitle } from "./ExplainButton";
+import { ScenarioWorkbench } from "./ScenarioWorkbench";
+import type { ScenarioSet } from "@/lib/valuation-scenario-schema";
 import { compact } from "@/lib/explain-data";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
@@ -68,6 +70,7 @@ export function ValuationEditor({
   note: initialNote,
   defaults,
   statements,
+  saved,
 }: {
   id?: number;
   symbol: string;
@@ -78,6 +81,8 @@ export function ValuationEditor({
   note?: string;
   defaults: EditorDefaults;
   statements: StatementsData;
+  /** Snapshot from the saved record (to flag a stale scenario result). */
+  saved?: { inputHash?: string; savedAt?: string } | null;
 }) {
   const router = useRouter();
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -142,6 +147,14 @@ export function ValuationEditor({
         : m === "residual_income"
           ? { method: m, assumptions: ri }
           : { method: m, assumptions: mult };
+
+  const currentInput = useMemo(() => input(method), [method, dcfA, ddm, ri, mult]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setScenarioSet = (s: ScenarioSet | undefined) => {
+    if (method === "dcf_fcff" || method === "dcf_fcfe") setDcfA((a) => ({ ...a, scenarioSet: s }));
+    else if (method === "ddm") setDdm((a) => ({ ...a, scenarioSet: s }));
+    else if (method === "residual_income") setRi((a) => ({ ...a, scenarioSet: s }));
+    else setMult((a) => ({ ...a, scenarioSet: s }));
+  };
 
   const result = useMemo(() => {
     try {
@@ -648,6 +661,7 @@ export function ValuationEditor({
           onSelect={setRimHorizon}
         />
       )}
+      <ScenarioWorkbench input={currentInput} onChange={setScenarioSet} saved={saved} />
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
   );

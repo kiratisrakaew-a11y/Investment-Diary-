@@ -25,6 +25,8 @@ export interface SavedValuationRow {
   /** Formula version the stored value was computed with (absent before PR 5). */
   modelVersion?: string;
   isLatestForMethod: boolean;
+  /** Scenario snapshot saved with the record (absent for older records — never back-filled). */
+  scenario?: { probabilityWeightedValue: number | null; qualityStatus: string; scenarios: unknown[] } | null;
   /** Date-consistency flags computed on the server (inputs, price and statements vs the valuation date). */
   timestampFlags?: string[];
 }
@@ -104,7 +106,13 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                   )}
                 </span>
                 <span className="text-right">
-                  <span className="font-semibold tabular-nums">{fmtNum(v.intrinsicValue)}</span>
+                  <span className="font-semibold tabular-nums" title="มูลค่ากรณีฐาน">{fmtNum(v.intrinsicValue)}</span>
+                  {v.scenario && (
+                    <span className={clsx("block text-[11px] tabular-nums", v.scenario.qualityStatus === "preliminary" ? "text-warn" : "text-muted")}>
+                      ถ่วงน้ำหนัก {v.scenario.scenarios.length} scenario: {v.scenario.probabilityWeightedValue != null ? fmtNum(v.scenario.probabilityWeightedValue) : "—"}
+                      {v.scenario.qualityStatus === "preliminary" && " (เบื้องต้น)"}
+                    </span>
+                  )}
                   <span className="block text-[11px] text-muted">
                     ราคาวันประเมิน {fmtNum(v.priceAtValuation)} ({fmtPct(upThen, 1)}) · ตอนนี้ <span className={signClass(upNow)}>{fmtPct(upNow, 1)}</span>
                   </span>
