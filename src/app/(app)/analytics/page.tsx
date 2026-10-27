@@ -2,6 +2,7 @@ import { getMptAnalysis, getPerformance } from "@/server/services/portfolio";
 import { FrontierChart, GrowthChart } from "@/components/charts";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { fmtPct, fmtRatio, signClass } from "@/lib/format";
+import { compact, downsample } from "@/lib/explain-data";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { StressPanel } from "@/components/StressPanel";
 
@@ -31,6 +32,24 @@ function corrColor(c: number) {
 
 export default async function AnalyticsPage() {
   const [perf, mpt] = await Promise.all([getPerformance(), getMptAnalysis()]);
+
+  // Values sent to the "อธิบาย" buttons — the same figures each section renders.
+  const returnRisk = compact({
+    ช่วงข้อมูล: `${perf.startDate} → ${perf.endDate}`,
+    จำนวนงวด: perf.periods,
+    TWR_สะสม: perf.cumulativeReturn,
+    TWR_ต่อปี: perf.annualizedReturn,
+    ผลตอบแทนเฉลี่ยต่อปี_arithmetic: perf.arithmeticAnnualReturn,
+    XIRR: perf.xirr.rate,
+    RiskFree: perf.riskFreeRate,
+    ExcessReturnต่อปี: perf.realizedExcessReturn,
+    ความผันผวนต่อปี: perf.volatility,
+    DownsideDeviation: perf.downsideDeviation,
+    MaxDrawdown: perf.maxDrawdown,
+    VaR_ES: perf.varTable.map((v) => ({ ความเชื่อมั่น: v.confidence, VaR_1วัน: v.var, ES_1วัน: v.es, จำนวนข้อมูล: v.observations, เชื่อถือได้: v.reliable, VaR_10วัน_ประมาณ: v.horizon.tenPeriodScaled.var })),
+    BacktestVaR: perf.varBacktest.map((b) => ("unavailable" in b ? { ความเชื่อมั่น: b.confidence, ไม่มีผล: b.unavailable } : { ความเชื่อมั่น: b.confidence, วันที่ขาดทุนเกินVaR: b.exceptions, ที่คาดไว้: b.expected, Kupiec_p: b.kupiec.pValue, Christoffersen_p: "pValue" in b.christoffersen ? b.christoffersen.pValue : null })),
+  });
+  const capm = compact({ Sharpe: perf.sharpe, Sortino: perf.sortino, Calmar: perf.calmar, benchmark: perf.benchmark ? { ...perf.benchmark, warnings: undefined } : null });
   const b = perf.benchmark;
 
   return (
@@ -52,7 +71,7 @@ export default async function AnalyticsPage() {
       <DataQualityPanel warnings={[...perf.dataQuality.warnings, ...(b?.warnings ?? [])]} />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="ผลตอบแทนและความเสี่ยง" className="min-w-0">
+        <Section title="ผลตอบแทนและความเสี่ยง" className="min-w-0" explain={{ data: returnRisk, hint: "VaR = ขาดทุนที่ไม่ควรเกินในวันปกติตามระดับความเชื่อมั่น; ES = ขาดทุนเฉลี่ยในวันที่แย่กว่า VaR; Kupiec p < 0.05 แปลว่า VaR พลาดบ่อยหรือน้อยผิดปกติ" }}>
           <div className="overflow-x-auto">
             <table className="table">
               <tbody>
@@ -107,7 +126,7 @@ export default async function AnalyticsPage() {
           </div>
         </Section>
 
-        <Section title="Risk-adjusted & CAPM" className="min-w-0">
+        <Section title="Risk-adjusted & CAPM" className="min-w-0" explain={{ data: capm, hint: "Sharpe/Sortino/Calmar = ผลตอบแทนต่อหน่วยความเสี่ยง; Beta/Alpha จาก regression เทียบดัชนี; Treynor, Information ratio, Tracking error" }}>
           <div className="overflow-x-auto">
             <table className="table">
               <tbody>
@@ -151,11 +170,27 @@ export default async function AnalyticsPage() {
         </Section>
       </div>
 
-      <Section title="ผลตอบแทนสะสม (TWR) เทียบดัชนี">
+      <Section title="ผลตอบแทนสะสม (TWR) เทียบดัชนี" explain={{ data: compact({ ดัชนี: perf.benchmark?.symbol, การเติบโตของเงิน1บาท: downsample(perf.growth, 16) }) }}>
         <GrowthChart data={perf.growth} benchmark={b?.symbol} />
       </Section>
 
-      <Section title="Modern Portfolio Theory — Efficient frontier">
+      <Section
+        title="Modern Portfolio Theory — Efficient frontier"
+        explain={
+          mpt.ok
+            ? {
+                data: compact({
+                  สินทรัพย์: mpt.assets.map((a, i) => ({ ...a, น้ำหนักปัจจุบัน: mpt.current.weights[i], น้ำหนักMinVariance: mpt.minVariance.weights[i], น้ำหนักMaxSharpe: mpt.tangency?.weights[i] })),
+                  พอร์ตปัจจุบัน: { ...mpt.current, weights: undefined },
+                  MinVariance: { ...mpt.minVariance, weights: undefined },
+                  MaxSharpe: mpt.tangency ? { ...mpt.tangency, weights: undefined } : null,
+                  ช่วงข้อมูล: `${mpt.from} → ${mpt.to}`,
+                }),
+                hint: "Efficient frontier = พอร์ตที่ให้ผลตอบแทนคาดหวังสูงสุดในแต่ละระดับความเสี่ยง; ค่าคาดหวังประมาณจากข้อมูลในอดีต",
+              }
+            : undefined
+        }
+      >
         {!mpt.ok ? (
           <Empty>{mpt.reason}</Empty>
         ) : (
@@ -225,7 +260,7 @@ export default async function AnalyticsPage() {
       </Section>
 
       {mpt.ok && (
-        <Section title="Correlation matrix">
+        <Section title="Correlation matrix" explain={{ data: compact({ symbols: mpt.symbols, correlation: mpt.correlation }, 3), hint: "ค่าใกล้ 1 = ขึ้นลงพร้อมกัน, ใกล้ 0 = ไม่สัมพันธ์, ติดลบ = สวนทาง — ยิ่งต่ำยิ่งช่วยกระจายความเสี่ยง" }}>
           <div className="overflow-x-auto">
             <table className="text-xs">
               <thead>
@@ -254,7 +289,7 @@ export default async function AnalyticsPage() {
       )}
 
       {mpt.ok && (
-        <Section title="ส่วนร่วมความเสี่ยง (Risk contribution)">
+        <Section title="ส่วนร่วมความเสี่ยง (Risk contribution)" explain={{ data: compact({ ...mpt.risk, componentES95: mpt.risk.componentES95 }), hint: "เทียบ % น้ำหนักกับ % ของความเสี่ยงที่แต่ละตัวสร้าง — ตัวที่สร้างความเสี่ยงเกินน้ำหนักมาก ๆ ทำให้พอร์ตกระจุก" }}>
           <div className="overflow-x-auto">
             <table className="table">
               <thead>

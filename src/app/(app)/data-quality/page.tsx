@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { dataQualityReport } from "@/server/services/data-quality";
 import { PageHeader, Section } from "@/components/ui";
+import { compact } from "@/lib/explain-data";
 
 const ICON = { ok: "✅", warn: "⚠️", error: "❌" } as const;
 
@@ -12,7 +13,7 @@ export default async function DataQualityPage() {
         title="คุณภาพข้อมูลและสมมติฐาน"
         subtitle={`สถานะรวม: ${r.status === "ok" ? "ครบถ้วน" : r.status === "warnings" ? "มีคำเตือน" : "มีข้อผิดพลาด"} · สูตรเวอร์ชัน ${r.modelVersion}`}
       />
-      <Section title="รายการตรวจสอบ">
+      <Section title="รายการตรวจสอบ" explain={{ data: compact(r), hint: "อธิบายว่าแต่ละรายการตรวจสอบหมายถึงอะไร กระทบตัวเลขไหน และควรแก้อย่างไร" }}>
         <ul className="divide-y divide-border">
           {r.checks.map((c) => (
             <li key={c.area} className="flex flex-wrap items-start justify-between gap-2 py-3 text-sm">

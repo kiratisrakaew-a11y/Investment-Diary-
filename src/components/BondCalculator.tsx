@@ -21,6 +21,8 @@ import {
 } from "@/lib/finance/bonds";
 import { NumField, SelectField } from "./fields";
 import { fmtNum, fmtPct } from "@/lib/format";
+import { CardTitle } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 export interface BondCalcInit {
   maturity?: string;
@@ -224,7 +226,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
         </section>
 
         <section className="card lg:col-span-3">
-          <h2 className="mb-3 font-semibold">ผลลัพธ์</h2>
+          <CardTitle title="ผลลัพธ์" explain={r.ok ? { data: compact({ พันธบัตร: spec, ราคา: price, ผลวิเคราะห์: { ...r.a, cashflows: undefined } }), hint: "YTM = ผลตอบแทนต่อปีถ้าถือจนครบกำหนด; duration = ราคาเปลี่ยนกี่ % เมื่อดอกเบี้ยเปลี่ยน 1%; convexity = ความโค้ง" } : null} />
           {!r.ok ? (
             <p className="text-sm text-neg">{r.error}</p>
           ) : (

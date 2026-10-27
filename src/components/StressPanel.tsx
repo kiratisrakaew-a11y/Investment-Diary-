@@ -4,6 +4,8 @@ import { useState } from "react";
 import clsx from "clsx";
 import { NumField } from "./fields";
 import { fmtPct, fmtThb, signClass } from "@/lib/format";
+import { ExplainButton } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 type Result = {
   name: string;
@@ -83,6 +85,14 @@ export function StressPanel() {
       {error && <p className="text-sm text-neg">{error}</p>}
       {res && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExplainButton
+              topic="ผล Stress test"
+              label="อธิบายผล Stress test"
+              data={compact({ NAV: res.nav, สถานการณ์: res.results.map((x) => ({ ชื่อ: x.name, กำไรขาดทุนบาท: x.pnl, ต่อNAV: x.pnlPct, แยกตามปัจจัย: x.byFactor, correlation: x.correlation })), ย้อนหลังจริง: res.history, สมมติฐาน: res.assumptions })}
+              hint="Stress test = ถ้าเกิดเหตุการณ์แรง ๆ ตามสมมติ พอร์ตจะขาดทุนเท่าไร แยกว่ามาจากหุ้น ดอกเบี้ย ค่าเงิน หรือเครดิต"
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="table">
               <thead>

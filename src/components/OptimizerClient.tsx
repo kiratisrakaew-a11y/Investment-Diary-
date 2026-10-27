@@ -12,6 +12,8 @@ import { RebalancePanel } from "./RebalancePanel";
 import { buildConstraints, exposureReport, type ConstraintsInput } from "@/lib/finance/exposure";
 import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
+import { CardTitle } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
 
@@ -352,7 +354,14 @@ export function OptimizerClient({
 
           <div className="grid gap-6 lg:grid-cols-3">
             <section className="card space-y-1">
-              <h2 className="mb-2 font-semibold">พอร์ตที่แนะนำ</h2>
+              <CardTitle
+                title="พอร์ตที่แนะนำ"
+                className="mb-2"
+                explain={{
+                  data: compact({ เป้าหมาย: r.objective, ผลตอบแทนคาดหวังต่อปี: r.final.expectedReturn, ความเสี่ยงต่อปี: r.final.volatility, Sharpe: r.final.sharpe, สัดส่วนสินทรัพย์เสี่ยง: r.riskyShare, สัดส่วนสินทรัพย์ไร้ความเสี่ยง: r.riskFreeShare, พอร์ตปัจจุบัน: r.current ? { expectedReturn: r.current.expectedReturn, volatility: r.current.volatility, sharpe: r.current.sharpe } : null, คำเตือน: r.warnings }),
+                  hint: "ผลตอบแทนคาดหวังและความเสี่ยงประมาณจากข้อมูลในอดีต/สมมติฐานที่ผู้ใช้ตั้ง ไม่ใช่การรับประกัน",
+                }}
+              />
               <KV k="ผลตอบแทนคาดหวัง" v={fmtPct(r.final.expectedReturn)} />
               <KV k="ความเสี่ยง σ" v={fmtPct(r.final.volatility)} />
               <KV k="Sharpe" v={fmtRatio(r.final.sharpe)} />
@@ -387,7 +396,10 @@ export function OptimizerClient({
             </section>
 
             <section className="card overflow-x-auto lg:col-span-2">
-              <h2 className="mb-3 font-semibold">น้ำหนักที่แนะนำและรายการปรับพอร์ต</h2>
+              <CardTitle
+                title="น้ำหนักที่แนะนำและรายการปรับพอร์ต"
+                explain={{ data: compact({ รายการ: r.allocations, exposure: result?.exposure ?? null }), hint: "weight = น้ำหนักแนะนำ, currentWeight = ปัจจุบัน, trade = จำนวนเงิน (บาท) ที่ต้องซื้อ(+)/ขาย(−)" }}
+              />
               <table className="table">
                 <thead>
                   <tr>

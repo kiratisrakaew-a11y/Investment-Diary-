@@ -11,6 +11,7 @@ import { Empty, PageHeader, Section } from "@/components/ui";
 import { DataQualityPanel } from "@/components/DataQuality";
 import type { Position } from "@/lib/finance/portfolio";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
+import { compact } from "@/lib/explain-data";
 
 function PriceBadges({ p }: { p: Position }) {
   const badges: string[] = [];
@@ -43,7 +44,13 @@ export default async function HoldingsPage() {
 
       <DataQualityPanel issues={summary.issues} reconciliation={summary.reconciliation} />
 
-      <Section title="พอร์ตปัจจุบัน">
+      <Section
+        title="พอร์ตปัจจุบัน"
+        explain={{
+          data: compact(summary.positions.filter((p) => p.quantity > 0).map((p) => ({ สินทรัพย์: p.symbol, ประเภท: p.assetClass, จำนวน: p.quantity, ต้นทุนเฉลี่ยบาท: p.avgCostThb, ราคาล่าสุด: p.lastPrice, สกุล: p.currency, มูลค่าบาท: p.marketValueThb, กำไรยังไม่รับรู้บาท: p.unrealizedPnlThb, กำไรยังไม่รับรู้เปอร์เซ็นต์: p.unrealizedPnlPct, กำไรรับรู้แล้วบาท: p.realizedPnlThb, ปันผลดอกเบี้ยบาท: p.incomeThb, น้ำหนักเปอร์เซ็นต์: p.weightPct, สถานะราคา: p.priceStatus }))),
+          hint: "กำไรยังไม่รับรู้ = มูลค่าตลาด − ต้นทุน (ยังไม่ได้ขาย); กำไรรับรู้แล้ว = จากที่ขายไปแล้ว",
+        }}
+      >
         {open.length === 0 ? (
           <Empty>ยังไม่มีสินทรัพย์ในพอร์ต</Empty>
         ) : (

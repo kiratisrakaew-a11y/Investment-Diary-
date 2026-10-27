@@ -7,6 +7,7 @@ import { getStatements } from "@/server/services/statements";
 import { SavedValuationList } from "@/components/SavedValuationList";
 import { PageHeader, Section, Stat } from "@/components/ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
+import { compact } from "@/lib/explain-data";
 
 const ALL_METHODS = ["dcf_fcff", "dcf_fcfe", "ddm", "residual_income", "multiples", "sotp"];
 
@@ -57,7 +58,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
       </div>
 
       {group && (
-        <Section title="เทียบแต่ละวิธี (ฉบับล่าสุด)">
+        <Section title="เทียบแต่ละวิธี (ฉบับล่าสุด)" explain={{ data: compact({ symbol, ราคาล่าสุด: hist.at(-1) ?? null, ต่ำสุด: group.low, สูงสุด: group.high, เฉลี่ย: group.average, มัธยฐาน: group.median, รายวิธี: group.latestByMethod.map((v) => ({ วิธี: v.method, วันที่: v.date, มูลค่าต่อหุ้น: v.intrinsicValue })) }), hint: "แต่ละวิธีใช้สมมติฐานต่างกัน ช่วงมูลค่าที่กว้างแปลว่าความไม่แน่นอนสูง" }}>
           <div className="space-y-2">
             {group.latestByMethod.map((r) => (
               <div key={r.id} className="text-xs">

@@ -5,6 +5,8 @@ import clsx from "clsx";
 import { NumField, SelectField, Toggle } from "./fields";
 import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import type { RebalanceResult } from "@/lib/finance/rebalance";
+import { ExplainButton } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 type Objective = "track" | "after_cost" | "min_cost" | "min_turnover";
 type Response = RebalanceResult & { disclaimer: string; costModel: { commissionPct: number; minCommission: number; vatPct: number; slippageBps: number; sellTaxPct: number } };
@@ -138,6 +140,14 @@ export function RebalancePanel({ suggested, extraCash }: { suggested: { symbol: 
 
       {res && (
         <div className="space-y-2">
+          <div className="flex justify-end">
+            <ExplainButton
+              topic="ข้อเสนอการปรับพอร์ต (Rebalance)"
+              label="อธิบายข้อเสนอนี้"
+              data={compact({ คำสั่ง: res.trades, รวม: res.totals, เงินสด: res.cash, มูลค่าพอร์ต: res.total, ระยะห่างจากเป้า: res.distance, ข้อจำกัดที่ละเมิด: res.violations, คำเตือน: res.warnings, ต้นทุน: res.costModel })}
+              hint="เป็นข้อเสนอเท่านั้น ไม่ได้บันทึกรายการจริง; ต้นทุนรวมค่าคอม VAT slippage"
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="table">
               <thead>

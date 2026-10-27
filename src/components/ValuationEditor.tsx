@@ -25,6 +25,8 @@ import { explainValuation, type Explanation } from "@/lib/valuation-explain";
 import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 import { exportValuationFile, parseValuationImport, type InputProvenance } from "@/lib/governance";
+import { CardTitle } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
 type Ddm = Extract<ValuationInput, { method: "ddm" }>["assumptions"];
@@ -476,7 +478,10 @@ export function ValuationEditor({
 
         <div className="space-y-6 lg:col-span-2">
           <section className="card">
-            <h2 className="mb-3 font-semibold">ผลลัพธ์</h2>
+            <CardTitle
+              title="ผลลัพธ์"
+              explain={result?.value != null ? { data: compact({ วิธี: method, มูลค่าต่อหุ้น: result.value, upside: result.upside, สมมติฐาน: input(method) }), hint: "มูลค่าที่เหมาะสมต่อหุ้นจากสมมติฐานที่ใส่; upside = มูลค่า/ราคาปัจจุบัน − 1; เปลี่ยนสมมติฐานเล็กน้อยผลเปลี่ยนได้มาก" } : null}
+            />
             {result?.value != null ? (
               <>
                 <div className="text-xs text-muted">มูลค่าที่เหมาะสมต่อหุ้น</div>
@@ -516,7 +521,7 @@ export function ValuationEditor({
           </section>
 
           <section className="card">
-            <h2 className="mb-3 font-semibold">เทียบทุกวิธี</h2>
+            <CardTitle title="เทียบทุกวิธี" explain={{ data: compact({ ราคาปัจจุบัน: dcfA.currentPrice, ผลแต่ละวิธี: allResults.map((x) => ({ วิธี: x.label, มูลค่าต่อหุ้น: x.result })) }), hint: "football field: ช่วงมูลค่าจากหลายวิธีเทียบราคาตลาด" }} />
             <FootballField rows={allResults} price={dcfA.currentPrice} active={method} onOpen={(r) => r.explanation && setDrawer(r.explanation)} />
             <p className="mt-2 text-xs text-muted">กดที่แต่ละวิธีเพื่อดูสมมติฐานและวิธีคำนวณ · แต่ละวิธีใช้สมมติฐานในแท็บของตัวเอง — สลับวิธีด้านบนเพื่อแก้ไข</p>
           </section>

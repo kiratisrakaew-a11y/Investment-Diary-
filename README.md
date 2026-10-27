@@ -70,6 +70,7 @@ npm run dev                   # http://localhost:3000
    | `SEC_API_KEY` | (ไม่บังคับ) subscription key จาก https://api-portal.sec.or.th สำหรับ NAV กองทุน |
    | `ANTHROPIC_API_KEY` | (สำหรับ AI ที่ปรึกษา และการอ่านงบการเงินจากไฟล์) สร้างที่ https://console.anthropic.com — คิดค่าใช้จ่ายตามการใช้งาน |
    | `ADVISOR_EFFORT` | (ไม่บังคับ) `low` / `medium` (ค่าเริ่มต้น) / `high` — คุณภาพการวิเคราะห์ vs ค่าใช้จ่าย |
+   | `EXPLAIN_EFFORT` | (ไม่บังคับ) ระดับการคิดของปุ่ม "อธิบาย" — ค่าเริ่มต้น `low` (เร็วและประหยัด) · `EXPLAIN_MODEL` เปลี่ยนโมเดลได้ (ค่าเริ่มต้นตาม `ADVISOR_MODEL`) |
 
 4. Migration รันอัตโนมัติทุกครั้งที่ Vercel build (`vercel-build` = `db:migrate` แล้ว `next build`) — ถ้าต้องการรันเอง: `DATABASE_URL=<neon url> npm run db:migrate`
 5. Deploy → เข้าเว็บ → ตั้ง risk-free rate และเป้า allocation ในหน้า **ตั้งค่า** → เพิ่มสินทรัพย์ → กด **ดึงราคาล่าสุด**

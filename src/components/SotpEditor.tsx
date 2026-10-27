@@ -298,7 +298,7 @@ export function SotpEditor({
               <p key={i} className="text-sm text-neg">✕ {e.message}</p>
             ))}
             {d?.warnings.map((w, i) => (
-              <p key={i} className="text-xs text-amber-600 dark:text-amber-400">⚠ {w}</p>
+              <p key={i} className="text-xs text-warn">⚠ {w}</p>
             ))}
           </div>
           {d && d.waterfall.length > 0 && <Waterfall steps={d.waterfall} unit={unit} />}
@@ -465,7 +465,7 @@ function SegmentCard({
             <p key={i} className="text-neg">✕ {e}</p>
           ))}
           {row.warnings.map((w, i) => (
-            <p key={i} className="text-amber-600 dark:text-amber-400">⚠ {w}</p>
+            <p key={i} className="text-warn">⚠ {w}</p>
           ))}
         </div>
       )}

@@ -6,6 +6,7 @@ import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import { CreditProfileForm } from "@/components/CreditProfileForm";
 import { listAssets } from "@/server/services/assets";
 import { today } from "@/lib/validation";
+import { compact } from "@/lib/explain-data";
 
 type SP = Promise<{ maturity?: string; coupon?: string; price?: string }>;
 
@@ -17,7 +18,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
     <>
       <PageHeader title="พันธบัตรและหุ้นกู้" subtitle="ราคา ↔ YTM / YTC / YTW, accrued interest ตาม day count ของตราสาร, duration, convexity, Z-spread และ horizon return" />
 
-      <Section title="พันธบัตรในพอร์ต">
+      <Section title="พันธบัตรในพอร์ต" explain={{ data: compact({ settlement, พอร์ตพันธบัตร: portfolio, รายตัว: bonds.map((b) => ({ symbol: b.symbol, ราคา: b.lastPrice, analytics: b.analytics ? { ...b.analytics, cashflows: undefined } : null })) }), hint: "YTM = ผลตอบแทนต่อปีถ้าถือจนครบกำหนด; modified duration = ราคาลดลงประมาณ D% เมื่อดอกเบี้ยขึ้น 1%" }}>
         {portfolio && (
           <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label="มูลค่ารวม" value={fmtThb(portfolio.marketValueThb)} />
@@ -95,7 +96,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
       </Section>
 
       {bonds.length > 0 && (
-        <Section title="ความเสี่ยงเครดิต (credit)">
+        <Section title="ความเสี่ยงเครดิต (credit)" explain={{ data: compact(bonds.map((b) => ({ symbol: b.symbol, credit: b.credit }))), hint: "PD = โอกาสผิดนัด, LGD = ส่วนที่เสียเมื่อผิดนัด, Expected loss = PD × LGD × มูลค่า; ค่ามาจากที่ผู้ใช้กรอก" }}>
           <div className="space-y-4">
             {bonds.map((b) => {
               const c = b.credit;

@@ -1,41 +1,53 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #f7f7f5;
+:root,
+:root[data-theme="dim"] {
+  /* Default "dim": soft navy-slate, lower contrast than a pure-black dashboard. */
+  --bg: #1d2331;
+  --panel: #262d3d;
+  --panel-2: #2d3547;
+  --text: #e3e7ef;
+  --muted: #9aa3b5;
+  --border: #374053;
+  --accent: #f0a35e;
+  --accent-ink: #2a1c0f;
+  --pos: #6fcf9f;
+  --neg: #f09393;
+  --warn: #e9c46a;
+  --info: #7fa8e8;
+  --series-1: #7fa8e8;
+  --series-2: #f0a35e;
+  --series-3: #6fcf9f;
+  --series-4: #e9c46a;
+  --series-5: #d79ad8;
+  --series-6: #8fb8a8;
+  --grid: #333c4e;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f3f4f7;
   --panel: #ffffff;
-  --text: #1c1c1a;
-  --muted: #6b6b66;
-  --border: #e4e4df;
-  --accent: #0f766e;
-  --pos: #15803d;
-  --neg: #b91c1c;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --grid: #e4e4df;
+  --panel-2: #f7f8fa;
+  --text: #1f2430;
+  --muted: #687083;
+  --border: #e1e4ea;
+  --accent: #dd8541;
+  --accent-ink: #ffffff;
+  --pos: #23845a;
+  --neg: #c2474a;
+  --warn: #a87a12;
+  --info: #3c6fbf;
+  --series-1: #3c78d8;
+  --series-2: #e07a35;
+  --series-3: #2a9d6f;
+  --series-4: #c99510;
+  --series-5: #b05fb0;
+  --series-6: #5a8f7b;
+  --grid: #e7e9ee;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121211;
-    --panel: #1b1b19;
-    --text: #ececea;
-    --muted: #a1a19b;
-    --border: #2c2c29;
-    --accent: #2dd4bf;
-    --pos: #4ade80;
-    --neg: #f87171;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #d55181;
-    --series-6: #008300;
-    --grid: #2c2c29;
-  }
-}
+
+@custom-variant dark (&:where([data-theme="dim"], [data-theme="dim"] *, :root:not([data-theme]) *));
 
 @theme inline {
   --color-bg: var(--bg);
@@ -43,7 +55,11 @@
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-panel-2: var(--panel-2);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
   --color-pos: var(--pos);
   --color-neg: var(--neg);
   --font-sans: "IBM Plex Sans Thai", ui-sans-serif, system-ui, sans-serif;
@@ -55,16 +71,16 @@ body {
 }
 
 .card {
-  @apply rounded-xl border border-border bg-panel p-4;
+  @apply rounded-2xl border border-border bg-panel p-4 shadow-[0_1px_2px_rgb(0_0_0/0.08)];
 }
 .btn {
-  @apply inline-flex items-center justify-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 dark:text-black;
+  @apply inline-flex items-center justify-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:opacity-90 disabled:opacity-50;
 }
 .btn-ghost {
-  @apply inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-border/40;
+  @apply inline-flex items-center gap-1 rounded-lg border border-border bg-panel-2 px-3 py-1.5 text-sm hover:border-accent/60;
 }
 .input {
-  @apply w-full rounded-lg border border-border bg-panel px-2.5 py-1.5 text-sm outline-none focus:border-accent;
+  @apply w-full rounded-lg border border-border bg-panel-2 px-2.5 py-1.5 text-sm outline-none focus:border-accent;
 }
 .label {
   @apply mb-1 block text-xs font-medium text-muted;
@@ -73,10 +89,13 @@ body {
   @apply w-full text-sm;
 }
 .table th {
-  @apply border-b border-border px-2 py-2 text-left text-xs font-medium whitespace-nowrap text-muted;
+  @apply border-b border-border px-2 py-2 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-muted uppercase;
 }
 .table td {
   @apply border-b border-border/60 px-2 py-2 whitespace-nowrap;
+}
+.table tbody tr:hover td {
+  @apply bg-panel-2/60;
 }
 .num {
   @apply text-right tabular-nums;

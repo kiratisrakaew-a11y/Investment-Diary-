@@ -7,6 +7,8 @@ import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtNum, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
 import type { BacktestResult, BacktestStrategy } from "@/lib/finance/backtest";
 import type { AssetClass } from "@/db/schema";
+import { CardTitle, ExplainButton } from "./ExplainButton";
+import { compact } from "@/lib/explain-data";
 
 type Asset = { symbol: string; assetClass: AssetClass; from: string; to: string; count: number };
 type Response = BacktestResult & { universe: string[]; excluded: { symbol: string; reason: string }[]; limitations: string[]; input: { rebalanceEveryObservations: number } };
@@ -211,7 +213,11 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
 
       {compare && (
         <section className="card overflow-x-auto">
-          <h2 className="mb-2 font-semibold">เปรียบเทียบกลยุทธ์ (เงื่อนไขเดียวกัน)</h2>
+          <CardTitle
+            title="เปรียบเทียบกลยุทธ์ (เงื่อนไขเดียวกัน)"
+            className="mb-2"
+            explain={{ data: compact(compare.map((c) => (c.r ? { กลยุทธ์: c.strategy, ช่วง: c.r.period, ผลตอบแทนสะสม: c.r.metrics.cumulativeReturn, ต่อปี: c.r.metrics.annualizedReturn, ความผันผวน: c.r.metrics.volatility, Sharpe: c.r.metrics.sharpe, MaxDrawdown: c.r.metrics.maxDrawdown, ต้นทุนรวม: c.r.costs.total } : { กลยุทธ์: c.strategy, error: c.error }))) }}
+          />
           <table className="table">
             <thead>
               <tr>
@@ -254,6 +260,28 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
 
       {res && m && (
         <>
+          <div className="flex justify-end">
+            <ExplainButton
+              topic={`ผล Backtest (${res.strategy})`}
+              label="อธิบายผล Backtest"
+              data={compact({
+                กลยุทธ์: res.strategy,
+                ช่วง: res.period,
+                ผลตอบแทนสะสม: m.cumulativeReturn,
+                ผลตอบแทนต่อปี: m.annualizedReturn,
+                ความผันผวน: m.volatility,
+                Sharpe: m.sharpe,
+                Sortino: m.sortino,
+                MaxDrawdown: m.maxDrawdown,
+                Beta: m.benchmark?.regressionBeta,
+                Alphaต่อปี: m.benchmark?.regressionAlphaAnnual,
+                ต้นทุนซื้อขาย: res.costs,
+                turnover: res.turnover,
+                ข้อจำกัด: res.limitations,
+              })}
+              hint="Backtest = จำลองว่าถ้าใช้กลยุทธ์นี้ในอดีตจะได้ผลอย่างไร (มี survivorship bias และไม่รับประกันอนาคต)"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
             <Stat k={m.annualizationApplicable ? "ผลตอบแทนต่อปี (CAGR)" : "ผลตอบแทนสะสม"} v={fmtPct(m.annualizationApplicable ? m.annualizedReturn : m.cumulativeReturn, 2)} tone={signClass(m.cumulativeReturn)} />
             <Stat k="ความผันผวน" v={fmtPct(m.volatility, 1)} />

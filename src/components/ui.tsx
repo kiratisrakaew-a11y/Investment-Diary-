@@ -1,43 +1,125 @@
 import clsx from "clsx";
+import { ExplainButton, type ExplainSpec } from "./ExplainButton";
 
-export function Stat({ label, value, sub, hint, tone }: { label: string; value: React.ReactNode; sub?: React.ReactNode; hint?: string; tone?: string }) {
+export type Tone = "orange" | "blue" | "green" | "yellow" | "purple" | "red";
+const TONE_VAR: Record<Tone, string> = {
+  orange: "var(--accent)",
+  blue: "var(--info)",
+  green: "var(--pos)",
+  yellow: "var(--warn)",
+  purple: "var(--series-5)",
+  red: "var(--neg)",
+};
+
+/** Circular gauge; `value` 0..1 fills the ring, null draws a plain ring (no implied progress). */
+export function Ring({ value, color = "orange", children, size = 48, className }: { value?: number | null; color?: Tone; children?: React.ReactNode; size?: number; className?: string }) {
+  const r = 20;
+  const c = 2 * Math.PI * r;
+  const v = value == null || !Number.isFinite(value) ? null : Math.min(1, Math.max(0, value));
   return (
-    <div className="card" title={hint}>
-      <div className="text-xs text-muted">{label}</div>
-      <div className={clsx("mt-1 text-xl font-semibold tabular-nums", tone)}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
+    <div className={clsx("relative grid shrink-0 place-items-center", className)} style={{ width: size, height: size, color: TONE_VAR[color] }}>
+      <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90" aria-hidden>
+        <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeOpacity={0.18} strokeWidth="4" />
+        {v != null && <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${v * c} ${c}`} />}
+      </svg>
+      <div className="relative text-[11px] font-semibold">{children}</div>
     </div>
   );
 }
 
-export function Section({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+export function Stat({
+  label,
+  value,
+  sub,
+  hint,
+  tone,
+  color,
+  ring,
+  ringLabel,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  hint?: string;
+  /** Text colour class for the value (e.g. signClass). */
+  tone?: string;
+  /** Accent of the gauge; omit for a plain card. */
+  color?: Tone;
+  /** 0..1 fill of the gauge; only pass a real proportion. */
+  ring?: number | null;
+  ringLabel?: React.ReactNode;
+}) {
+  return (
+    <div className="card relative overflow-hidden" title={hint}>
+      {color && <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: TONE_VAR[color], opacity: 0.7 }} />}
+      <div className="text-[11px] font-semibold tracking-wide text-muted uppercase">{label}</div>
+      <div className="mt-2 flex items-center gap-3">
+        {color && (
+          <Ring value={ring} color={color} className="hidden sm:grid">
+            {ringLabel}
+          </Ring>
+        )}
+        <div className="min-w-0">
+          <div className={clsx("text-lg font-semibold break-words tabular-nums sm:text-xl", tone)}>{value}</div>
+          {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Section({
+  title,
+  subtitle,
+  action,
+  explain,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  action?: React.ReactNode;
+  /** Adds the "อธิบาย" button: AI explains these values in plain language. */
+  explain?: ExplainSpec;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <section className={clsx("card", className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="font-semibold">{title}</h2>
-        {action}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold tracking-wide">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          {explain && <ExplainButton topic={title} data={explain.data} hint={explain.hint} />}
+          {action}
+        </div>
       </div>
       {children}
     </section>
   );
 }
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+export function PageHeader({ title, subtitle, action, explain }: { title: string; subtitle?: string; action?: React.ReactNode; explain?: ExplainSpec & { topic?: string } }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel px-5 py-4">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-wide">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
       </div>
-      {action}
+      <div className="flex flex-wrap items-center gap-2">
+        {explain && <ExplainButton topic={explain.topic ?? title} data={explain.data} hint={explain.hint} label="อธิบายหน้านี้" />}
+        {action}
+      </div>
     </div>
   );
 }
 
 export function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={clsx("inline-block rounded-full border border-border px-2 py-0.5 text-[11px] text-muted", className)}>{children}</span>;
+  return <span className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-[11px] text-muted", className)}>{children}</span>;
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">{children}</div>;
 }
