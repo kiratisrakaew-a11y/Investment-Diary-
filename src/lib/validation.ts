@@ -1,5 +1,6 @@
 /** zod schemas shared by the UI server actions, the REST API and the MCP tools. */
 import { z } from "zod";
+import { bondTermsSchema } from "./finance/bond-meta";
 import { creditProfileSchema } from "./finance/credit-risk";
 
 export const isoDate = z
@@ -79,6 +80,7 @@ export const assetProfileInput = z
     sectorSource: z.string().max(200).nullable().optional().describe("Classification source, e.g. SET industry group"),
     sectorAsOf: isoDate.nullable().optional(),
     credit: creditProfileSchema.nullable().optional().describe("Bond credit profile (rating + agency + date; PD with type/source/date; LGD with source/date). null clears"),
+    bondTerms: bondTermsSchema.nullable().optional().describe("Bond metadata: issuerType, issuerCountry, couponType, callable, identifiers, riskFreeProxyEligible (eligibility flag only). null clears"),
   })
   .refine((v) => !v.sector || (v.sectorSource && v.sectorAsOf), { message: "sector needs sectorSource and sectorAsOf", path: ["sectorSource"] });
 
@@ -86,6 +88,8 @@ export const yieldCurveInput = z.object({
   points: z.array(z.object({ years: z.number().positive().max(50), rate: z.number().min(-0.05).max(0.5) })).min(1).max(30).describe("Zero rates (decimal, annual compounding) by maturity in years"),
   source: z.string().min(1).max(200).describe("e.g. ThaiBMA government zero curve"),
   asOf: isoDate,
+  currency: z.string().length(3).toUpperCase().optional().describe("Currency of the curve, e.g. THB (curves saved before this field have none and are reported as unknown)"),
+  kind: z.enum(["nominal", "real"]).optional().describe("Nominal (default) or real (inflation-linked) rates"),
 });
 
 export const priceInput = z.object({

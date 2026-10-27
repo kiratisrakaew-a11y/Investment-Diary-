@@ -44,7 +44,8 @@ Legend: **Done** = verified at HEAD, reused · **Extend** = exists, needs additi
 | Asset master | Done | `assets` (id, unique symbol); single user, no shared master |
 | Holdings "สินทรัพย์อื่น ๆ (ขายหมดแล้ว / ยังไม่ได้ซื้อ)" chips | Extend | `holdings/page.tsx`: `closed` (positions qty 0 with history) + `untouched` (no transactions), rendered as links only |
 | Watchlist | Missing (absent) | no watchlist module; "Remove from Watchlist" is not offered, not invented |
-| Hide / archive / delete | Missing | no asset delete anywhere (UI, REST, MCP) |
+| Hide / archive | Missing | none |
+| **Existing unsafe delete** | Risk → PR9 | `holdings/[id]` button "ลบสินทรัพย์" → `deleteAssetAction` → `deleteAsset(id)` = `DELETE FROM assets`, behind one confirm ("ลบสินทรัพย์นี้พร้อมรายการและราคาทั้งหมด?"). With the cascades below it erases trades and prices. PR9 replaces it with the dependency-checked delete. Not exposed in REST or MCP |
 | **Cascade risk** | Risk | FKs: `transactions.asset_id` and `prices.asset_id` are **ON DELETE CASCADE**; `valuations`, `financial_statements` and `dividend_events` are SET NULL; `notes.asset_ids` is an array with no FK. A naive `DELETE FROM assets` would erase trades and prices, so deletion must check every dependency first in one transaction |
 | Optimizer universe | Extend | `loadUniverse` takes every non-cash asset with enough prices; PR10 adds archived exclusion with a skip reason |
 | Import | Extend | price import never creates assets; `add_asset` / createAsset by symbol |

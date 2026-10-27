@@ -13,6 +13,7 @@ import { ConfirmButton } from "@/components/ConfirmButton";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { AssetProfileForm } from "@/components/AssetProfileForm";
 import { today } from "@/lib/validation";
+import { readBondTerms, riskFreeEligibility } from "@/lib/finance/bond-meta";
 import { deleteAssetAction, updateBondTermsAction } from "../../actions";
 import { ASSET_CLASS_LABEL, TX_TYPE_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
@@ -28,6 +29,8 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     listAssets(),
   ]);
   const pos = summary.positions.find((p) => p.assetId === id);
+  const terms = readBondTerms(asset.bondTerms);
+  const eligibility = riskFreeEligibility(asset, terms);
 
   return (
     <>
@@ -68,6 +71,66 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               <input name="faceValue" type="number" step="any" className="input" defaultValue={asset.faceValue ?? ""} />
             </div>
             <BondConventionFields frequency={asset.couponFrequency} dayCount={asset.dayCount} />
+            <div className="sm:col-span-5 mt-1 border-t border-border pt-3 text-xs font-medium text-muted">ข้อมูลผู้ออกและลักษณะตราสาร (ไม่บังคับ — ใช้ตรวจความเหมาะสมเป็นตัวแทนปลอดความเสี่ยง)</div>
+            <div>
+              <label className="label" htmlFor="issuerType">ประเภทผู้ออก</label>
+              <select id="issuerType" name="issuerType" className="input" defaultValue={terms.issuerType ?? ""}>
+                <option value="">ไม่ระบุ</option>
+                <option value="sovereign">รัฐบาล (sovereign)</option>
+                <option value="agency">หน่วยงานรัฐ (agency)</option>
+                <option value="state_enterprise">รัฐวิสาหกิจ</option>
+                <option value="corporate">เอกชน</option>
+                <option value="financial">สถาบันการเงิน</option>
+                <option value="supranational">องค์กรระหว่างประเทศ</option>
+                <option value="other">อื่น ๆ</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="issuerCountry">ประเทศผู้ออก (ISO 2 ตัว)</label>
+              <input id="issuerCountry" name="issuerCountry" maxLength={2} className="input" placeholder="TH" defaultValue={terms.issuerCountry ?? ""} />
+            </div>
+            <div>
+              <label className="label" htmlFor="couponType">ประเภทคูปอง</label>
+              <select id="couponType" name="couponType" className="input" defaultValue={terms.couponType ?? ""}>
+                <option value="">ไม่ระบุ</option>
+                <option value="fixed">คงที่</option>
+                <option value="floating">ลอยตัว</option>
+                <option value="zero">ศูนย์ (zero coupon)</option>
+                <option value="step">ขั้นบันได</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="isin">ISIN</label>
+              <input id="isin" name="isin" className="input" defaultValue={terms.identifiers?.isin ?? ""} />
+            </div>
+            <div>
+              <label className="label" htmlFor="thaiBma">ThaiBMA symbol</label>
+              <input id="thaiBma" name="thaiBma" className="input" defaultValue={terms.identifiers?.thaiBma ?? ""} />
+            </div>
+            <div>
+              <label className="label" htmlFor="termsSource">แหล่งที่มา</label>
+              <input id="termsSource" name="termsSource" className="input" placeholder="เช่น หนังสือชี้ชวน / ThaiBMA" defaultValue={terms.source ?? ""} />
+            </div>
+            <div>
+              <label className="label" htmlFor="termsAsOf">ตรวจสอบ ณ วันที่</label>
+              <input id="termsAsOf" name="termsAsOf" type="date" className="input" defaultValue={terms.asOf ?? ""} />
+            </div>
+            <div className="flex flex-col justify-end gap-1 pb-1 text-sm sm:col-span-2">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="callable" defaultChecked={!!terms.callable} /> Callable (ผู้ออกไถ่ถอนก่อนได้)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="puttable" defaultChecked={!!terms.puttable} /> Puttable
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="riskFreeProxyEligible" defaultChecked={!!terms.riskFreeProxyEligible} /> ใช้เป็นตัวแทนปลอดความเสี่ยงได้ (eligibility เท่านั้น)
+              </label>
+            </div>
+            <p className="text-xs text-muted sm:col-span-5">
+              {eligibility.eligible
+                ? "ผ่านเกณฑ์ตัวแทนปลอดความเสี่ยง — ระบบไม่ได้นำ YTM ของพันธบัตรนี้ไปใช้เป็น Rf ให้อัตโนมัติ (Rf มาจาก yield curve / หน้าตั้งค่า) และพันธบัตรที่ถือยังมีความเสี่ยงราคาก่อนครบกำหนด"
+                : `ยังไม่ผ่านเกณฑ์ตัวแทนปลอดความเสี่ยง: ${eligibility.reasons.join(" · ")}`}
+            </p>
           </ActionForm>
         </Section>
       )}

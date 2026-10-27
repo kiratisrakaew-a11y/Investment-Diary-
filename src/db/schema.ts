@@ -63,6 +63,8 @@ export const assets = pgTable("assets", {
   sectorAsOf: date("sector_as_of"),
   /** Bond credit profile (rating with agency/date, PD with type/source/date, LGD) — creditProfileSchema. */
   credit: jsonb("credit"),
+  /** Bond metadata (issuer type / country, coupon type, call features, identifiers, risk-free proxy flag) — bondTermsSchema. */
+  bondTerms: jsonb("bond_terms"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

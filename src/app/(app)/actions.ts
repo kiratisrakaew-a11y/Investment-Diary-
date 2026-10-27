@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import type { AssetClass } from "@/db/schema";
-import { createAsset, deleteAsset, updateAsset } from "@/server/services/assets";
+import { createAsset, deleteAsset, getAsset, updateAsset, updateAssetProfile } from "@/server/services/assets";
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
@@ -118,6 +118,24 @@ export async function updateBondTermsAction(id: number, _: ActionState, f: FormD
       couponFrequency: num(f, "couponFrequency") as 1 | 2 | 4 | 12 | undefined,
       dayCount: str(f, "dayCount") as "ACT/ACT-ICMA" | undefined,
     });
+    const asset = await getAsset(id);
+    if (asset) {
+      // Metadata is replaced as a whole from the form; empty fields are left out (never invented).
+      const terms = Object.fromEntries(
+        Object.entries({
+          issuerType: str(f, "issuerType"),
+          issuerCountry: str(f, "issuerCountry")?.toUpperCase(),
+          couponType: str(f, "couponType"),
+          callable: f.get("callable") === "on" ? true : undefined,
+          puttable: f.get("puttable") === "on" ? true : undefined,
+          identifiers: str(f, "isin") || str(f, "thaiBma") ? { isin: str(f, "isin")?.toUpperCase(), thaiBma: str(f, "thaiBma") } : undefined,
+          riskFreeProxyEligible: f.get("riskFreeProxyEligible") === "on" ? true : undefined,
+          source: str(f, "termsSource"),
+          asOf: str(f, "termsAsOf"),
+        }).filter(([, v]) => v !== undefined),
+      );
+      await updateAssetProfile({ symbol: asset.symbol, bondTerms: Object.keys(terms).length ? (terms as never) : null });
+    }
     revalidatePath("/", "layout");
     return done("บันทึกเงื่อนไขพันธบัตรแล้ว");
   } catch (e) {

@@ -2,12 +2,15 @@ import { BondLadderPanel } from "@/components/BondLadderPanel";
 import Link from "next/link";
 import { bondHoldings } from "@/server/services/bonds";
 import { BondCalculator } from "@/components/BondCalculator";
-import { Empty, PageHeader, Section, Stat } from "@/components/ui";
+import { Badge, Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import { CreditProfileForm } from "@/components/CreditProfileForm";
 import { listAssets } from "@/server/services/assets";
 import { today } from "@/lib/validation";
 import { compact } from "@/lib/explain-data";
+
+const ISSUER_LABEL: Record<string, string> = { sovereign: "รัฐบาล", agency: "หน่วยงานรัฐ", state_enterprise: "รัฐวิสาหกิจ", corporate: "เอกชน", financial: "สถาบันการเงิน", supranational: "องค์กรระหว่างประเทศ", other: "อื่น ๆ" };
+const FLAG_LABEL: Record<string, string> = { STALE_PRICE: "ราคาเก่า", NO_PRICE: "ไม่มีราคา", INCOMPLETE_TERMS: "เงื่อนไขไม่ครบ", CALLABLE: "Callable", FLOATING: "คูปองลอยตัว", FX_EXPOSURE: "ความเสี่ยงค่าเงิน", NO_PROVENANCE: "ไม่มีแหล่งที่มา", MATURED: "ครบกำหนดแล้ว" };
 
 type SP = Promise<{ maturity?: string; coupon?: string; price?: string }>;
 
@@ -52,6 +55,25 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                     <td>
                       <span className="font-medium">{b.symbol}</span>
                       <div className="text-xs text-muted">{b.name}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {b.terms.issuerType && <Badge>{ISSUER_LABEL[b.terms.issuerType]}</Badge>}
+                        {b.riskFreeEligibility.eligible ? (
+                          <Badge className="border-pos/40 text-pos" title="ใช้เป็นตัวแทนปลอดความเสี่ยงได้ (ไม่ได้ตั้ง Rf ให้อัตโนมัติ)">
+                            ตัวแทน Rf ได้
+                          </Badge>
+                        ) : (
+                          b.riskFreeEligibility.userFlag && (
+                            <Badge className="border-warn/40 text-warn" title={b.riskFreeEligibility.reasons.join(" · ")}>
+                              ตัวแทน Rf: ไม่ผ่าน
+                            </Badge>
+                          )
+                        )}
+                        {b.flags.map((f) => (
+                          <Badge key={f.code} className="border-warn/40 text-warn" title={f.message}>
+                            {FLAG_LABEL[f.code]}
+                          </Badge>
+                        ))}
+                      </div>
                     </td>
                     <td className="num">{b.couponRate != null ? `${b.couponRate}%` : "–"}</td>
                     <td>{b.maturityDate ?? "–"}</td>

@@ -92,6 +92,13 @@
       "when": 1793089931302,
       "tag": "0012_valuation_timestamp_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793097954740,
+      "tag": "0013_asset_bond_terms",
+      "breakpoints": true
     }
   ]
 }

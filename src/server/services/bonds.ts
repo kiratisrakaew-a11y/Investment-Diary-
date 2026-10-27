@@ -7,6 +7,8 @@ import { loadPriceHistory } from "./prices";
 import { getPortfolioSummary } from "./portfolio";
 import { getSettings, getYieldCurve } from "./settings";
 import { bondCredit, creditProfileSchema } from "@/lib/finance/credit-risk";
+import { bondDataFlags, readBondTerms, riskFreeEligibility } from "@/lib/finance/bond-meta";
+import { readTimestampPolicy } from "@/lib/governance";
 
 /** YTM, duration and convexity for every bond asset that has coupon, maturity and a price. */
 export async function bondHoldings() {
@@ -35,6 +37,16 @@ export async function bondHoldings() {
         issuer: a.issuer,
         /** Conventions the analytics had to assume because the asset does not store them. */
         assumed: specFromBondAsset(a, settlement).assumed,
+        terms: readBondTerms(a.bondTerms),
+        /** Eligibility as a risk-free PROXY only — the risk-free rate itself always comes from the resolver. */
+        riskFreeEligibility: riskFreeEligibility(a, readBondTerms(a.bondTerms), settings.baseCurrency),
+        flags: bondDataFlags(a, readBondTerms(a.bondTerms), {
+          lastPriceDate: last?.[0] ?? null,
+          asOf: settlement,
+          maxPriceAgeDays: readTimestampPolicy(settings.timestampPolicy).priceMaxGapDays,
+          baseCurrency: settings.baseCurrency,
+          creditRatingDate: (a.credit as { ratingDate?: string } | null)?.ratingDate ?? null,
+        }),
       };
       if (a.couponRate == null || !a.maturityDate || !last || a.maturityDate <= settlement) {
         return { ...base, analytics: null, credit: null, missing: "ต้องมีอัตราคูปอง วันครบกำหนด และราคาล่าสุด" };
