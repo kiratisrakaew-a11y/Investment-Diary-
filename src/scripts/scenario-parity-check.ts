@@ -134,6 +134,15 @@ async function main() {
     check("REST / MCP reverse and sensitivity = service", close(rj?.reverse.solution, (svc.reverse as { solution: number }).solution) && close(mj?.sensitivity.basePointValue, (svc.sensitivity as { basePointValue: number }).basePointValue));
     check("REST / MCP as-of and Thai notes = service", rj?.scenarioAnalysis.asOf === svc.scenarioAnalysis!.asOf && mj?.generatedNotesTh.bear === svc.generatedNotesTh.bear);
     check("REST evaluate keeps value = base and adds scenarioAnalysis", close((ev.json as { value: number }).value, base) && close((ev.json as A).scenarioAnalysis.probabilityWeightedValue, svc.scenarioAnalysis!.probabilityWeightedValue));
+    // Correlated Monte Carlo: service (UI server action) = REST = MCP.
+    const mcCfg = { seed: 11, draws: 1000, variables: [
+      { path: "segments[core].model.growthShift", mode: "absolute", dist: { type: "triangular", min: -0.02, mode: 0, max: 0.02 } },
+      { path: "segments[com7].source.price", mode: "shift", dist: { type: "uniform", min: -3, max: 3 } },
+    ], correlation: [[1, 0.6], [0.6, 1]] };
+    const mcSvc = analyzeValuation({ valuation: withScen, monteCarlo: mcCfg as never }).monteCarlo as { mean: number; percentiles: Record<string, number> };
+    const mcRest = (await http("/api/v1/valuation/analyze", { valuation: withScen, monteCarlo: mcCfg })).json as { monteCarlo: typeof mcSvc } | null;
+    const mcMcp = (await mcp("analyze_valuation", { valuation: withScen, monteCarlo: mcCfg })).data as { monteCarlo: typeof mcSvc } | null;
+    check("correlated Monte Carlo: REST = MCP = service (same seed)", close(mcRest?.monteCarlo.mean, mcSvc.mean, 1e-12) && close(mcMcp?.monteCarlo.mean, mcSvc.mean, 1e-12) && mcRest?.monteCarlo.percentiles.p90 === mcSvc.percentiles.p90);
     check("MCP value_security = REST evaluate", close((mv.data as { value: number }).value, base) && close((mv.data as A).scenarioAnalysis.probabilityWeightedValue, svc.scenarioAnalysis!.probabilityWeightedValue));
   } finally {
     for (const id of ids) await deleteValuation(id);

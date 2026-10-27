@@ -142,7 +142,7 @@ export default async function AnalyticsPage() {
                 <tbody>
                   {perf.varHorizons.map((h) => {
                     const pick = h.nonOverlapping.var95 != null ? h.nonOverlapping : h.overlapping.var95 != null ? h.overlapping : null;
-                    const kind = pick === h.nonOverlapping ? `ช่วงไม่ทับกัน ${h.nonOverlapping.windows} ช่วง` : pick ? `ช่วงทับกัน ${h.overlapping.windows} ช่วง` : "";
+                    const kind = pick === h.nonOverlapping ? `ช่วงไม่ทับกัน ${h.nonOverlapping.windows} ช่วง` : "";
                     return (
                       <tr key={h.key}>
                         <td>
@@ -154,7 +154,7 @@ export default async function AnalyticsPage() {
                         <td className="num">{fmtPct(pick?.var99 ?? null)}</td>
                         <td className="num">{pick?.var95 != null && navNow > 0 ? Math.round(pick.var95 * navNow).toLocaleString() : "–"}</td>
                         <td className="whitespace-normal text-[11px] text-muted">
-                          {h.unavailable ?? `${kind}${h.notes.length ? ` · ${h.notes.join(" · ")}` : ""}`}
+                          {h.unavailable ?? (pick === h.nonOverlapping ? kind : h.notes.join(" · "))}
                           {h.periods > 1 && h.sqrtScaledVar95 != null && ` · เทียบ √h (สมมติอิสระกัน): ${fmtPct(h.sqrtScaledVar95)}`}
                         </td>
                       </tr>

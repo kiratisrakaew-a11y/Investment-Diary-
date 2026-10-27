@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-27 — Financial model audit and hardening
+- Audit published in `docs/FINANCIAL_MODEL_AUDIT.md`; fixes and evidence in `docs/FINANCIAL_MODEL_IMPLEMENTATION_REPORT.md`.
+- Stress test: a long position's loss is floored at −100%. The linear figure and a warning are shown alongside, and factor lines are scaled to the floored total.
+- VaR / ES by horizon (1 period … 5 years) from compounded returns. Shown only with enough independent history, with no √h extrapolation, plus THB amounts on the analytics page.
+- Risk statistics (σ, Sharpe, Sortino, VaR) are computed on dates where every holding has an actual price. TWR and XIRR are unchanged.
+- Monte Carlo correlation editor:
+  - Independent or manual matrix, with symmetric editing and a locked diagonal.
+  - PSD check; a repair is applied only after confirmation.
+  - The matrix is no longer cleared when variables are edited.
+- Bond calculator:
+  - Bear/Base/Bull/custom scenarios with full repricing, weighted clean price and weighted horizon return. Kept on the page only and not saved.
+  - Horizon return is split into coupon, reinvestment and price change.
+- FCFE `netIncomeBasis` (optional), a single-stage RIM growth-consistency warning, and a Sortino MAR setting (migration 0015; empty = Rf).
+
 ## 2026-10-27 — PR11–PR15: scenarios, sensitivity, reverse DCF, Monte Carlo
 - Every valuation method gets an optional `scenarioSet`: Bear/Base/Bull/Custom with allow-listed path overrides, Σp = 1 within 1e-8, and no silent normalisation.
   - `baseCaseValue` (unchanged meaning) and `probabilityWeightedValue` are separate fields.
