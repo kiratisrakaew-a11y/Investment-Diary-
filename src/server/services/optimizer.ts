@@ -14,6 +14,7 @@ import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { MIN_OBS_BY_FREQUENCY, bondReturnInputs, resampleLevels, type SampleFrequency } from "@/lib/finance/bond-returns";
 import { alignWithBenchmark, buildLevelSeries, commonDates, returnsOn, type ReturnBasis } from "@/lib/finance/return-series";
 import { getSettings } from "./settings";
 import { getRiskFree } from "./risk-free";
@@ -61,6 +62,8 @@ export interface OptimizerUniverse {
   periodsPerYear: number;
   covarianceWarnings: string[];
   returnBasis?: ReturnBasis;
+  /** Sampling of the common calendar: daily (default) or last actual observation per week / month. */
+  frequency?: SampleFrequency;
   /** Aligned periodic returns (only with `withSeries`): per asset, the benchmark, and price dates (returns end on dates[t + 1]). */
   series?: { returns: number[][]; benchmark: number[] | null; dates: string[] };
 }
@@ -72,8 +75,10 @@ export interface OptimizerUniverse {
  * and the covariance matrix. Default basis: price return (closes); total_return uses the
  * provider's adjusted closes and excludes assets without full coverage.
  */
-export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis; riskFree?: RiskFreeRequest } = {}): Promise<OptimizerUniverse> {
+export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis; riskFree?: RiskFreeRequest; frequency?: SampleFrequency } = {}): Promise<OptimizerUniverse> {
   const basis = opts.returnBasis ?? "price_return";
+  const frequency = opts.frequency ?? "daily";
+  const minObs = MIN_OBS_BY_FREQUENCY[frequency];
   const [assets, txRows, prices, fx, settings, adj] = await Promise.all([
     listAssets(),
     allTransactions(),
@@ -102,26 +107,41 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
   const seriesWarnings: string[] = [];
   const usable = candidates.filter((a) => {
     const window = prices.get(a.id)?.filter(([d]) => d >= from) ?? [];
-    if (window.length < MIN_OBS) {
-      skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${window.length} วัน (ต้องการ ≥ ${MIN_OBS})` });
+    if (frequency === "daily" ? window.length < MIN_OBS : window.length < 2) {
+      skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${window.length} วัน (ต้องการ ≥ ${frequency === "daily" ? MIN_OBS : 2})` });
       return false;
     }
     const adjMap = adj ? new Map(adj.get(a.id) ?? []) : null;
+    // Bonds on a total-return basis: dirty price + coupons from the bond's own schedule (not adj_close).
+    const bondTr = basis === "total_return" && a.assetClass === "bond" ? bondReturnInputs(a, window.map(([date, close]) => ({ date, close }))) : null;
+    if (bondTr && !bondTr.ok) {
+      skipped.push({ symbol: a.symbol, reason: `ผลตอบแทนรวมพันธบัตร: ${bondTr.reason}` });
+      return false;
+    }
     // Never convert at FX = 1: USD assets need a USDTHB fixing on (or within 5 days before) each date.
-    const lv = buildLevelSeries({
-      label: a.symbol,
-      observations: window.map(([date, close]) => ({ date, close, adjClose: adjMap?.get(date) ?? null })),
-      basis,
-      totalReturnSource: basis === "total_return" ? "adjusted_close" : undefined,
-      currency: a.currency,
-      fx,
-    });
+    const lv = bondTr?.ok
+      ? buildLevelSeries({ label: a.symbol, observations: bondTr.observations, distributions: bondTr.distributions, basis, totalReturnSource: "distributions", source: "bond schedule", currency: a.currency, fx })
+      : buildLevelSeries({
+          label: a.symbol,
+          observations: window.map(([date, close]) => ({ date, close, adjClose: adjMap?.get(date) ?? null })),
+          basis,
+          totalReturnSource: basis === "total_return" ? "adjusted_close" : undefined,
+          currency: a.currency,
+          fx,
+        });
     if (!lv.ok) {
       skipped.push({ symbol: a.symbol, reason: `${lv.reason}${lv.required ? ` — ต้องการ: ${lv.required}` : ""}` });
       return false;
     }
     seriesWarnings.push(...lv.warnings);
-    levelsById.set(a.id, lv.levels);
+    if (bondTr?.ok) seriesWarnings.push(`${a.symbol}: ผลตอบแทนรวม = ราคา dirty + คูปอง · ${bondTr.notes.join(" · ")}${bondTr.assumed.length ? ` · สมมติ: ${bondTr.assumed.join(", ")}` : ""}`);
+    else if (a.assetClass === "bond") seriesWarnings.push(`${a.symbol}: price_return ใช้ราคาอย่างเดียว ไม่รวมคูปอง/ดอกเบี้ยค้างรับ — เลือก returnBasis total_return สำหรับผลตอบแทนรวมของพันธบัตร`);
+    const levels = resampleLevels(lv.levels, frequency);
+    if (frequency !== "daily" && levels.length < minObs) {
+      skipped.push({ symbol: a.symbol, reason: `มีข้อมูลราย${frequency === "weekly" ? "สัปดาห์" : "เดือน"}เพียง ${levels.length} งวด (ต้องการ ≥ ${minObs})` });
+      return false;
+    }
+    levelsById.set(a.id, levels);
     return true;
   });
 
@@ -146,14 +166,15 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
 
   // Common calendar: only dates on which every asset has an actual price (no forward-filled zero returns).
   const dates = commonDates(usable.map((a) => levelsById.get(a.id)!));
-  if (dates.length < MIN_OBS) return { ...empty, reason: `วันที่ทุกสินทรัพย์มีราคาพร้อมกันมีเพียง ${dates.length} วัน (ต้องการ ≥ ${MIN_OBS})` };
+  if (dates.length < minObs)
+    return { ...empty, reason: `${frequency === "daily" ? "วันที่" : "งวดที่"}ทุกสินทรัพย์มีราคาพร้อมกันมีเพียง ${dates.length} (ต้องการ ≥ ${minObs})${frequency === "daily" ? " — ลองความถี่รายสัปดาห์/รายเดือนถ้าพันธบัตร/กองทุนซื้อขายไม่ทุกวัน" : ""}` };
 
   const series = usable.map((a) => returnsOn(levelsById.get(a.id)!, dates));
   // Observations per year from the data, so daily, weekly or fund-NAV calendars annualize consistently.
   const years = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / (365 * 86_400_000);
   const N = years > 0 ? (dates.length - 1) / years : 252;
   // Benchmark on the asset calendar where it has actual prints at both ends (NaN otherwise) — never forward-filled.
-  const benchWindow = bench.filter(([d]) => d >= from);
+  const benchWindow = resampleLevels(bench.filter(([d]) => d >= from), frequency);
   const benchReturns = benchWindow.length ? returnsOn(benchWindow, dates) : null;
   const { cov } = estimateInputs(series, N);
   const lw = ledoitWolf(series);
@@ -176,6 +197,7 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
     periodsPerYear: N,
     covarianceWarnings: [...covarianceWarnings, ...seriesWarnings],
     returnBasis: basis,
+    frequency,
     ...(opts.withSeries ? { series: { returns: series, benchmark: benchReturns, dates } } : {}),
     assets: usable.map((a, i) => {
       // β on common actual prints of asset and benchmark (compounding across benchmark gaps).
@@ -257,11 +279,13 @@ export interface OptimizeParams {
   cvarConfidence?: number;
   /** Risk-free source for Sharpe / CAL (default auto: currency-matched curve, else Settings). */
   riskFree?: RiskFreeRequest;
+  /** Common-calendar sampling (default daily). */
+  frequency?: SampleFrequency;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
-  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis, riskFree: p.riskFree });
+  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis, riskFree: p.riskFree, frequency: p.frequency });
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;

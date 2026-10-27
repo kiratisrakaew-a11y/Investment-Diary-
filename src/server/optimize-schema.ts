@@ -65,6 +65,10 @@ export const optimizeInput = z
   useRiskFree: z.boolean().optional().describe("Mix the tangency portfolio with the risk-free asset (complete portfolio y*)"),
   extraCash: z.number().min(0).optional().describe("Extra THB to invest on top of current holdings"),
   covMethod: z.enum(["sample", "ledoit_wolf"]).optional().describe("Covariance estimator (default sample; ledoit_wolf shrinks toward a scaled identity)"),
+  frequency: z
+    .enum(["daily", "weekly", "monthly"])
+    .optional()
+    .describe("Return sampling on the common calendar: daily (default) or the last actual observation per week / month (no fill); annualization uses the observed periods per year"),
   riskFree: z
     .object({
       source: z.enum(["auto", "curve", "settings", "manual"]).optional().describe("auto (default) = currency-matched sovereign zero curve at the horizon, else the Settings rate; never an owned bond's YTM"),
