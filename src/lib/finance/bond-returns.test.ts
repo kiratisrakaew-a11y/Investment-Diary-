@@ -4,7 +4,7 @@ import { buildLevelSeries } from "./return-series";
 
 // 6% annual coupon, ACT/365F, coupon dates 30 Jun, per-100 prices (face 100).
 const bond = { couponRate: 6, maturityDate: "2030-06-30", faceValue: 100, couponFrequency: 1, dayCount: "ACT/365F" };
-const lvl = (b: typeof bond, obs: { date: string; close: number }[], ex?: number, currency = "THB", fx?: [string, number][]) => {
+const lvl = (b: typeof bond, obs: { date: string; close: number }[], ex?: number, currency: "THB" | "USD" = "THB", fx?: [string, number][]) => {
   const r = bondReturnInputs(b, obs, { exCouponDays: ex });
   if (!r.ok) throw new Error(r.reason);
   const s = buildLevelSeries({ label: "B", observations: r.observations, distributions: r.distributions, basis: "total_return", totalReturnSource: "distributions", currency, fx });
