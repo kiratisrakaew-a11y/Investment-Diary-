@@ -16,6 +16,7 @@
   --panel: rgb(22 38 66 / 0.52);
   --panel-2: rgb(118 169 255 / 0.1);
   --panel-solid: #0f1c33;
+  --panel-strong: rgb(13 25 46 / 0.78);
   --field: rgb(9 19 36 / 0.9);
   --grid-bg: rgb(11 22 40 / 0.88);
   --text: #eaf2ff;
@@ -51,6 +52,7 @@
   --panel: rgb(255 255 255 / 0.58);
   --panel-2: rgb(118 169 255 / 0.1);
   --panel-solid: #ffffff;
+  --panel-strong: rgb(255 255 255 / 0.84);
   --field: rgb(255 255 255 / 0.94);
   --grid-bg: rgb(255 255 255 / 0.9);
   --text: #0f1b2d;
@@ -78,11 +80,20 @@
   color-scheme: light;
 }
 
+/* Small screens: lighter blur (cheaper to paint, less scroll jank). Placed after the themes so it wins. */
+@media (max-width: 640px) {
+  :root,
+  :root[data-theme] {
+    --glass-blur: 10px;
+  }
+}
+
 /* Accessibility fallbacks: solid surfaces when transparency is unwanted or unsupported. */
 @media (prefers-reduced-transparency: reduce) {
   :root,
   :root[data-theme] {
     --panel: var(--panel-solid);
+    --panel-strong: var(--panel-solid);
     --glass-blur: 0px;
   }
 }
@@ -90,6 +101,7 @@
   :root,
   :root[data-theme] {
     --panel: var(--panel-solid);
+    --panel-strong: var(--panel-solid);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -147,6 +159,11 @@ body {
   background-color: var(--panel);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+/* Floating inspector: stronger fill behind text, thin accent edge. */
+@utility glass-strong {
+  background-color: var(--panel-strong);
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 /* Recessed, near-opaque well for charts and dense grids inside a glass card. */
 @utility glass-inset {

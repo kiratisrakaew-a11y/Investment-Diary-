@@ -32,86 +32,107 @@ export interface SavedValuationRow {
 /** Every saved valuation of one stock; each row expands into its full calculation. */
 export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuationRow[]; currentPrice: number | null }) {
   const [open, setOpen] = useState<number | null>(rows[0]?.id ?? null);
+  const [tab, setTab] = useState<string>("all");
+  const methods = [...new Set(rows.map((r) => r.method))];
+  const visible = tab === "all" ? rows : rows.filter((r) => r.method === tab);
   return (
-    <div className="divide-y divide-border">
-      {rows.map((v) => {
-        const isOpen = open === v.id;
-        const upThen = v.intrinsicValue && v.priceAtValuation ? v.intrinsicValue / v.priceAtValuation - 1 : null;
-        const upNow = v.intrinsicValue && currentPrice ? v.intrinsicValue / currentPrice - 1 : null;
-        let explanation = null;
-        try {
-          // Parse so fields added after the valuation was saved get their defaults.
-          const raw = { method: v.method, assumptions: v.assumptions };
-          const parsed = valuationInput.safeParse(raw);
-          explanation = explainValuation(parsed.success ? parsed.data : (raw as ValuationInput));
-        } catch {
-          explanation = null;
-        }
-        const oldVersion = v.modelVersion !== MODEL_VERSION;
-        const snap = (v.assumptions as { horizonSnapshot?: { horizon: number; sourceYears: number } } | null)?.horizonSnapshot;
-        const changed =
-          explanation != null && v.intrinsicValue != null && (explanation.value == null || Math.abs(explanation.value - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue)));
-        const inputsAsOf = (v.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf;
-        const tsFlags = v.timestampFlags ?? timestampFlags({ valuationDate: v.date, inputsAsOf });
-        return (
-          <div key={v.id} className={clsx(!v.isLatestForMethod && !snap && "opacity-70")}>
-            <button type="button" onClick={() => setOpen(isOpen ? null : v.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-3 text-left text-sm">
-              <span className="w-4 text-muted">{isOpen ? "▾" : "▸"}</span>
-              <span className="w-24 tabular-nums text-muted">{v.date}</span>
-              <Badge className="border-accent/40 text-accent">{METHOD_LABEL[v.method] ?? v.method}</Badge>
-              <span className="min-w-32 flex-1 truncate">
-                {v.title || <span className="text-muted">ไม่มีชื่อ scenario</span>}
-                {snap ? (
-                  <Badge className="ml-2 border-info/40 text-info" title="ไม่นับเป็น valuation ล่าสุดของวิธีนี้ (ไม่อยู่ในค่าเฉลี่ย/มัธยฐาน)">
-                    ภาพ {snap.horizon} ปี จาก {snap.sourceYears} ปี
-                  </Badge>
-                ) : (
-                  !v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>
-                )}
-                {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
-                {oldVersion &&
-                  (changed ? (
-                    <Badge className="ml-2 border-neg/40 text-neg">สูตรเวอร์ชันก่อน · ค่าเปลี่ยน</Badge>
-                  ) : (
-                    <Badge className="ml-2" title="คำนวณใหม่ด้วยสูตรปัจจุบันได้ค่าเท่าเดิม">
-                      สูตรเวอร์ชันก่อน · ค่าเท่าเดิม
-                    </Badge>
-                  ))}
-                {tsFlags.length > 0 && (
-                  <Badge className="ml-2 border-warn/40 text-warn" title={tsFlags.join("\n")}>
-                    วันที่ข้อมูลไม่ตรง
-                  </Badge>
-                )}
-              </span>
-              <span className="text-right">
-                <span className="font-semibold tabular-nums">{fmtNum(v.intrinsicValue)}</span>
-                <span className="block text-[11px] text-muted">
-                  ราคาวันประเมิน {fmtNum(v.priceAtValuation)} ({fmtPct(upThen, 1)}) · ตอนนี้ <span className={signClass(upNow)}>{fmtPct(upNow, 1)}</span>
-                </span>
-              </span>
+    <div>
+      {methods.length > 1 && (
+        <div role="tablist" aria-label="กรองตามวิธีประเมิน" className="glass sticky top-2 z-10 mb-2 flex gap-1 overflow-x-auto rounded-xl border border-border p-1 text-xs print:hidden">
+          {[["all", `ทั้งหมด (${rows.length})`] as const, ...methods.map((m) => [m, `${METHOD_LABEL[m] ?? m} (${rows.filter((r) => r.method === m).length})`] as const)].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={clsx("rounded-lg px-3 py-1 whitespace-nowrap", tab === key ? "bg-accent text-accent-ink" : "text-muted hover:bg-panel-2 hover:text-text")}
+            >
+              {label}
             </button>
-            {isOpen && (
-              <div className="mb-4 ml-8 space-y-3">
-                <div className="flex flex-wrap items-center gap-3 text-xs print:hidden">
-                  <Link href={`/valuation/${v.id}`} className="btn-ghost text-xs">แก้ไขสมมติฐาน</Link>
-                  <ConfirmButton onConfirm={deleteValuationAction.bind(null, v.id)} label="ลบ valuation นี้" />
-                </div>
-                {tsFlags.map((f) => (
-                  <p key={f} className="text-xs text-warn">⚠️ {f}</p>
-                ))}
-                {changed && (
-                    <p className="rounded-lg bg-bg p-3 text-xs text-neg">
-                      ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation?.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
-                    </p>
+          ))}
+        </div>
+      )}
+      <div className="divide-y divide-border">
+        {visible.map((v) => {
+          const isOpen = open === v.id;
+          const upThen = v.intrinsicValue && v.priceAtValuation ? v.intrinsicValue / v.priceAtValuation - 1 : null;
+          const upNow = v.intrinsicValue && currentPrice ? v.intrinsicValue / currentPrice - 1 : null;
+          let explanation = null;
+          try {
+            // Parse so fields added after the valuation was saved get their defaults.
+            const raw = { method: v.method, assumptions: v.assumptions };
+            const parsed = valuationInput.safeParse(raw);
+            explanation = explainValuation(parsed.success ? parsed.data : (raw as ValuationInput));
+          } catch {
+            explanation = null;
+          }
+          const oldVersion = v.modelVersion !== MODEL_VERSION;
+          const snap = (v.assumptions as { horizonSnapshot?: { horizon: number; sourceYears: number } } | null)?.horizonSnapshot;
+          const changed =
+            explanation != null && v.intrinsicValue != null && (explanation.value == null || Math.abs(explanation.value - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue)));
+          const inputsAsOf = (v.assumptions as { inputMeta?: { asOf?: string } } | null)?.inputMeta?.asOf;
+          const tsFlags = v.timestampFlags ?? timestampFlags({ valuationDate: v.date, inputsAsOf });
+          return (
+            <div key={v.id} className={clsx(!v.isLatestForMethod && !snap && "opacity-70")}>
+              <button type="button" onClick={() => setOpen(isOpen ? null : v.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-3 text-left text-sm">
+                <span className="w-4 text-muted">{isOpen ? "▾" : "▸"}</span>
+                <span className="w-24 tabular-nums text-muted">{v.date}</span>
+                <Badge className="border-accent/40 text-accent">{METHOD_LABEL[v.method] ?? v.method}</Badge>
+                <span className="min-w-32 flex-1 truncate">
+                  {v.title || <span className="text-muted">ไม่มีชื่อ scenario</span>}
+                  {snap ? (
+                    <Badge className="ml-2 border-info/40 text-info" title="ไม่นับเป็น valuation ล่าสุดของวิธีนี้ (ไม่อยู่ในค่าเฉลี่ย/มัธยฐาน)">
+                      ภาพ {snap.horizon} ปี จาก {snap.sourceYears} ปี
+                    </Badge>
+                  ) : (
+                    !v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>
                   )}
-                <p className="text-[11px] text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
-                {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
-                {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
-              </div>
-            )}
-          </div>
-        );
-      })}
+                  {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
+                  {oldVersion &&
+                    (changed ? (
+                      <Badge className="ml-2 border-neg/40 text-neg">สูตรเวอร์ชันก่อน · ค่าเปลี่ยน</Badge>
+                    ) : (
+                      <Badge className="ml-2" title="คำนวณใหม่ด้วยสูตรปัจจุบันได้ค่าเท่าเดิม">
+                        สูตรเวอร์ชันก่อน · ค่าเท่าเดิม
+                      </Badge>
+                    ))}
+                  {tsFlags.length > 0 && (
+                    <Badge className="ml-2 border-warn/40 text-warn" title={tsFlags.join("\n")}>
+                      วันที่ข้อมูลไม่ตรง
+                    </Badge>
+                  )}
+                </span>
+                <span className="text-right">
+                  <span className="font-semibold tabular-nums">{fmtNum(v.intrinsicValue)}</span>
+                  <span className="block text-[11px] text-muted">
+                    ราคาวันประเมิน {fmtNum(v.priceAtValuation)} ({fmtPct(upThen, 1)}) · ตอนนี้ <span className={signClass(upNow)}>{fmtPct(upNow, 1)}</span>
+                  </span>
+                </span>
+              </button>
+              {isOpen && (
+                <div className="mb-4 ml-8 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3 text-xs print:hidden">
+                    <Link href={`/valuation/${v.id}`} className="btn-ghost text-xs">แก้ไขสมมติฐาน</Link>
+                    <ConfirmButton onConfirm={deleteValuationAction.bind(null, v.id)} label="ลบ valuation นี้" />
+                  </div>
+                  {tsFlags.map((f) => (
+                    <p key={f} className="text-xs text-warn">⚠️ {f}</p>
+                  ))}
+                  {changed && (
+                      <p className="rounded-lg bg-bg p-3 text-xs text-neg">
+                        ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation?.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
+                      </p>
+                    )}
+                  <p className="text-[11px] text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
+                  {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
+                  {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

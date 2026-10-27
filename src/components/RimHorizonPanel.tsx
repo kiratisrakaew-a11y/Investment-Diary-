@@ -25,6 +25,8 @@ export function RimHorizonPanel({
   onSaveHorizon,
   saving,
   saveMsg,
+  selected,
+  onSelect,
 }: {
   details: Record<string, unknown>;
   bookValue: number;
@@ -35,6 +37,9 @@ export function RimHorizonPanel({
   onSaveHorizon?: (h: number) => void;
   saving?: boolean;
   saveMsg?: { ok: boolean; text: string; href?: string } | null;
+  /** Controlled horizon selection (the editor header's 5Y|10Y control); uncontrolled when omitted. */
+  selected?: number | null;
+  onSelect?: (h: number) => void;
 }) {
   const cmp = details.horizonComparison as RimHorizonComparison | null | undefined;
   const payoutSens = details.payoutSensitivity as PayoutSens | null | undefined;
@@ -42,7 +47,9 @@ export function RimHorizonPanel({
   const persist = details.persistenceSensitivity as Persist | null | undefined;
   const sens = details.sensitivity as Sens | null | undefined;
   const valid = cmp?.rows.filter((r) => r.status === "ok") ?? [];
-  const [sel, setSel] = useState<number | null>(null);
+  const [ownSel, setOwnSel] = useState<number | null>(null);
+  const sel = selected !== undefined ? selected : ownSel;
+  const setSel = onSelect ?? setOwnSel;
   if (!cmp) return null;
   const active = valid.find((r) => r.horizon === sel) ?? valid[valid.length - 1];
 
@@ -131,19 +138,29 @@ export function RimHorizonPanel({
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="card min-w-0">
             <CardTitle title={`ที่มาของมูลค่า (${active.horizon} ปี)`} />
-            <RiWaterfallChart
-              steps={[
-                { label: "B₀", delta: bookValue, kind: "book" },
-                ...active.years.map((y) => ({ label: `RI${y.year}`, delta: y.pv, kind: "ri" as const })),
-                { label: "CV", delta: active.pvContinuingValue ?? 0, kind: "cv" },
-                { label: "มูลค่า", delta: active.value ?? 0, kind: "total" },
-              ]}
-            />
+            <figure aria-label={`ที่มาของมูลค่า ${active.horizon} ปี: B₀ ${fmtNum(bookValue)}, PV ของ RI รวม ${fmtNum(active.pvResidualIncome)}, PV continuing value ${fmtNum(active.pvContinuingValue)}, มูลค่า ${fmtNum(active.value)}`}>
+              <figcaption className="sr-only">
+                Book value เริ่มต้น {fmtNum(bookValue)}; PV ของ residual income รายปี {active.years.map((y) => `ปี ${y.year} ${fmtNum(y.pv)}`).join(", ")}; PV continuing value {fmtNum(active.pvContinuingValue)}; มูลค่ารวม {fmtNum(active.value)} ต่อหุ้น
+              </figcaption>
+              <RiWaterfallChart
+                steps={[
+                  { label: "B₀", delta: bookValue, kind: "book" },
+                  ...active.years.map((y) => ({ label: `RI${y.year}`, delta: y.pv, kind: "ri" as const })),
+                  { label: "CV", delta: active.pvContinuingValue ?? 0, kind: "cv" },
+                  { label: "มูลค่า", delta: active.value ?? 0, kind: "total" },
+                ]}
+              />
+            </figure>
             <p className="mt-1 text-xs text-muted">แท่งเขียว/แดง = PV ของกำไรส่วนเกินแต่ละปี (บวก/ลบ) · ม่วง = continuing value หลังปี {active.horizon}</p>
           </section>
           <section className="card min-w-0">
             <CardTitle title="ROE เทียบ Ke" />
-            <RoeKeChart data={active.years.map((y) => ({ year: `ปี ${y.year}`, roe: y.roe }))} ke={active.ke} />
+            <figure aria-label={`ROE เทียบ Ke ${fmtPct(active.ke, 2)}: ${active.years.map((y) => `ปี ${y.year} ${fmtPct(y.roe, 1)}`).join(", ")}`}>
+              <figcaption className="sr-only">
+                ROE รายปี {active.years.map((y) => `ปี ${y.year} ${fmtPct(y.roe, 1)}${y.roe > active.ke ? " (สูงกว่า Ke)" : " (ไม่เกิน Ke)"}`).join(", ")}; Ke {fmtPct(active.ke, 2)}
+              </figcaption>
+              <RoeKeChart data={active.years.map((y) => ({ year: `ปี ${y.year}`, roe: y.roe }))} ke={active.ke} />
+            </figure>
             <p className="mt-1 text-xs text-muted">RI เกิดเมื่อ ROE &gt; Ke เท่านั้น — ช่วงที่ ROE ต่ำกว่า Ke ทำให้มูลค่าต่ำกว่า book value</p>
           </section>
         </div>

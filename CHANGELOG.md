@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-27 — Phase 4: valuation UI to the roadmap layout
+- **`/valuation` overview:** one glass surface with text metrics (valued, upside > 0, stale prices, values changed by the new formulas), search by stock or method, and sorting by upside / date / name.
+  - Each row shows the last stored price date. A stale-price badge uses the Settings price threshold.
+  - A badge appears when a value would change under today's formulas.
+- **Stock page:** one metric strip instead of four KPI cards, a football field on an opaque well with the price date, and method tabs over the valuation history.
+- **Editor:**
+  - 5Y | 10Y control in the step bar (residual income with data for that horizon only); it drives the horizon card.
+  - Result inspector at ~78% (dim) / 84% (light) opacity with a thin accent edge.
+  - Glass blur reduced to 10px under 640px. Solid fallbacks also cover the inspector.
+- Screen-reader summaries for the RI waterfall, ROE vs Ke and stage timeline charts.
+
 ## 2026-10-27 — Phase 5: missing valuation tests
 - `valuation-phase5.test.ts` covers two areas:
   - SOTP with staged FCFF / FCFE and multi-stage RIM segments (debt counted once, errors surfaced).

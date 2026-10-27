@@ -157,3 +157,16 @@ export async function valuationsForSymbol(symbol: string): Promise<StockValuatio
 export async function latestValuationBySymbol() {
   return new Map((await listValuationsGrouped()).map((g) => [g.symbol, g]));
 }
+
+/** Does today's formula give a different value from the stored one? null when it cannot be recomputed. */
+export function valueChangedSinceSave(v: { method: string; assumptions: unknown; intrinsicValue: number | null }): boolean | null {
+  const parsed = valuationInput.safeParse({ method: v.method, assumptions: v.assumptions });
+  if (!parsed.success) return null;
+  try {
+    const now = evaluate(parsed.data).value;
+    if (v.intrinsicValue == null || now == null) return now !== v.intrinsicValue;
+    return Math.abs(now - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue));
+  } catch {
+    return null;
+  }
+}

@@ -233,6 +233,9 @@ export function ValuationEditor({
     });
   }
 
+  const [rimHorizon, setRimHorizon] = useState<number | null>(null);
+  const rimHorizons = (((result?.details.horizonComparison as { rows: { horizon: number; status: string }[] } | null | undefined)?.rows ?? []).filter((r) => r.status === "ok").map((r) => r.horizon));
+  const activeHorizon = rimHorizons.includes(rimHorizon ?? -1) ? rimHorizon : (rimHorizons[rimHorizons.length - 1] ?? null);
   const [snapMsg, setSnapMsg] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
   /** Save the first h years as a new, labelled residual_income valuation; the editor stays as it is. */
   function saveHorizon(h: number) {
@@ -348,6 +351,24 @@ export function ValuationEditor({
             {label}
           </a>
         ))}
+        {method === "residual_income" && rimHorizons.length > 0 && (
+          <div role="group" aria-label="เลือก horizon ของ Residual income" className="ml-auto flex shrink-0 items-center gap-1 rounded-xl border border-border bg-panel-2 p-0.5">
+            {rimHorizons.map((h) => (
+              <button
+                key={h}
+                type="button"
+                aria-pressed={activeHorizon === h}
+                onClick={() => {
+                  setRimHorizon(h);
+                  document.getElementById("val-rim")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className={clsx("rounded-lg px-2.5 py-1 whitespace-nowrap", activeHorizon === h ? "bg-accent text-accent-ink" : "text-muted hover:text-text")}
+              >
+                {h}Y
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
 
       <div className="grid gap-6 lg:grid-cols-5">
@@ -550,7 +571,7 @@ export function ValuationEditor({
         </section>
 
         <div className="min-w-0 space-y-6 lg:col-span-2">
-          <section id="val-result" aria-live="polite" className="card scroll-mt-16 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
+          <section id="val-result" aria-live="polite" className="card glass-strong scroll-mt-16 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
             <CardTitle
               title="ผลลัพธ์"
               explain={result?.value != null ? { data: compact({ วิธี: method, มูลค่าต่อหุ้น: result.value, upside: result.upside, สมมติฐาน: input(method) }), hint: "มูลค่าที่เหมาะสมต่อหุ้นจากสมมติฐานที่ใส่; upside = มูลค่า/ราคาปัจจุบัน − 1; เปลี่ยนสมมติฐานเล็กน้อยผลเปลี่ยนได้มาก" } : null}
@@ -623,6 +644,8 @@ export function ValuationEditor({
           onSaveHorizon={symbol ? saveHorizon : undefined}
           saving={pending}
           saveMsg={snapMsg}
+          selected={activeHorizon}
+          onSelect={setRimHorizon}
         />
       )}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />

@@ -210,7 +210,7 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
   let acc = 0;
   return (
     <figure className="glass-inset rounded-xl p-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-24 w-full" role="img" aria-label="เส้นทาง growth และ EBIT margin รายปีตามช่วง">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-24 w-full" role="img" aria-label={`เส้นทาง growth และ EBIT margin รายปี: ${(a.stages ?? []).map((st, k) => `${st.name || `ช่วง ${k + 1}`} ${st.years} ปี growth ${fmtPct(st.revenueGrowthStart, 1)} ถึง ${fmtPct(st.revenueGrowthEnd, 1)} margin ${fmtPct(st.ebitMarginStart, 1)} ถึง ${fmtPct(st.ebitMarginEnd, 1)}`).join("; ")}`}>
         {(a.stages ?? []).map((s, k) => {
           const x0 = (acc / d.length) * W;
           acc += Math.max(0, s.years);
