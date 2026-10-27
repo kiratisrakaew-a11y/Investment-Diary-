@@ -12,7 +12,7 @@
  *   utility maximization U = E[R] − ½Aσ², and the optimal complete portfolio
  *   y* = (E[R_T] − R_f) / (A σ_T²) along the Capital Allocation Line.
  */
-import { portfolioStats, type Matrix, type PortfolioPoint } from "./mpt";
+import { covarianceDiagnostics, portfolioStats, type Matrix, type PortfolioPoint } from "./mpt";
 
 export interface Bounds {
   min: number; // e.g. 0 for long-only
@@ -22,6 +22,8 @@ export interface Bounds {
   upper?: (number | null)[];
   /** Optional linear constraints lo ≤ aᵀw ≤ hi (issuer / sector / bucket caps, duration limits). */
   linear?: LinearConstraint[];
+  /** Max gross exposure Σ|wᵢ| (long/short only; ≥ 1 under the Σw = 1 budget). Enforced with auxiliary variables. */
+  gross?: number;
   /** Asset labels for constraint names in messages. */
   names?: string[];
 }
@@ -34,7 +36,7 @@ export interface LinearConstraint {
 }
 
 /** True when the problem needs the general-constraint solver (anything beyond one shared box). */
-export const isGeneral = (b: Bounds) => !!(b.linear?.length || b.lower?.some((x) => x != null) || b.upper?.some((x) => x != null));
+export const isGeneral = (b: Bounds) => !!(b.gross != null || b.linear?.length || b.lower?.some((x) => x != null) || b.upper?.some((x) => x != null));
 const loOf = (b: Bounds, i: number) => b.lower?.[i] ?? b.min;
 const hiOf = (b: Bounds, i: number) => b.upper?.[i] ?? b.max;
 
@@ -128,6 +130,7 @@ export type OptimizerIssueCode =
   | "INFEASIBLE_TARGET_RETURN"
   | "INFEASIBLE_TARGET_RISK"
   | "NO_EXCESS_RETURN"
+  | "SHORT_SELLING_DISABLED"
   | "INVALID_INPUT";
 
 export interface OptimizerIssue {
@@ -166,6 +169,8 @@ export function validateBounds(n: number, b: Bounds): OptimizerIssue | null {
       if (c.lo != null && c.hi != null && c.lo > c.hi + 1e-12) return { code: "INFEASIBLE_CONSTRAINTS", message: `ข้อจำกัด ${c.name}: ต่ำสุด > สูงสุด`, constraints: [c.name] };
     }
     if (sumHi < 1 - 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักสูงสุดรวมทุกตัว ${pct(sumHi)} < 100%`, suggestion: "เพิ่มน้ำหนักสูงสุดของบางสินทรัพย์" };
+    if (b.gross != null && !(b.gross >= 1 - 1e-12))
+      return { code: "INFEASIBLE_CONSTRAINTS", message: `Gross exposure สูงสุด ${pct(b.gross)} < 100% — ลงทุนครบ 100% ต้องมี Σ|w| ≥ 100%`, constraints: ["Gross exposure"] };
     if (sumLo > 1 + 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักต่ำสุดรวมทุกตัว ${pct(sumLo)} > 100%`, suggestion: "ลดน้ำหนักต่ำสุดของบางสินทรัพย์" };
     return null;
   }
@@ -200,9 +205,10 @@ export function checkWeights(w: number[], b: Bounds) {
     const v = dot(c.a, w);
     return Math.max(c.lo != null ? c.lo - v : 0, c.hi != null ? v - c.hi : 0);
   });
+  const grossExcess = b.gross != null ? w.reduce((a, x) => a + Math.abs(x), 0) - b.gross : 0;
   return {
     sumError: Math.abs(w.reduce((a, x) => a + x, 0) - 1),
-    maxBoundViolation: Math.max(0, ...w.map((x, i) => Math.max(loOf(b, i) - x, x - hiOf(b, i))), ...linear),
+    maxBoundViolation: Math.max(0, ...w.map((x, i) => Math.max(loOf(b, i) - x, x - hiOf(b, i))), ...linear, grossExcess),
   };
 }
 
@@ -406,11 +412,24 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
  * named (INFEASIBLE_CONSTRAINTS). G is made positive definite with a tiny ridge when needed.
  * Used only when per-asset bounds or linear constraints are given; the box-only path is unchanged.
  */
-export function solveGeneralQP(Gin: Matrix, c: number[], b: Bounds, maxIter = 2000): QpResult {
-  const n = c.length;
+export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 2000): QpResult {
+  const n = cw.length;
   assertBounds(n, b);
+  // Gross exposure Σ|wᵢ| ≤ G: auxiliary tᵢ with tᵢ ≥ wᵢ, tᵢ ≥ −wᵢ, Σtᵢ ≤ G. The objective is lifted as
+  // ½wᵀ(G − εI)w + ½ε‖t‖²: for fixed w the best t is tᵢ = |wᵢ|, so it equals ½wᵀGw exactly, while
+  // ε = ½·λmin(G) keeps the extended matrix as well conditioned as G. The budget row stays on w only.
+  const m = b.gross != null ? 2 * n : n;
+  const pad = (v: number[]) => (m > n ? [...v, ...Array<number>(n).fill(0)] : v);
+  const avgW = Gw.reduce((s, r, i) => s + Math.abs(r[i]), 0) / n || 1;
+  const lamMin = m > n ? covarianceDiagnostics(Gw).minEigenvalue : 0;
+  const eps = lamMin > 1e-10 * avgW ? 0.5 * lamMin : 1e-9 * avgW;
+  const Gin =
+    m > n
+      ? Array.from({ length: m }, (_, i) => Array.from({ length: m }, (__, j) => (i < n && j < n ? Gw[i][j] - (i === j && lamMin > 1e-10 * avgW ? eps : 0) : i === j ? eps : 0)))
+      : Gw;
+  const c = pad(cw);
   // Constraints as nᵀw ≥ β (equalities flagged).
-  const rows: { v: number[]; beta: number; eq: boolean; name: string }[] = [{ v: c.map(() => 1), beta: 1, eq: true, name: "ลงทุนครบ 100%" }];
+  const rows: { v: number[]; beta: number; eq: boolean; name: string }[] = [{ v: pad(cw.map(() => 1)), beta: 1, eq: true, name: "ลงทุนครบ 100%" }];
   for (let i = 0; i < n; i++) {
     const e = c.map((_, j) => (j === i ? 1 : 0));
     const lo = loOf(b, i);
@@ -420,8 +439,16 @@ export function solveGeneralQP(Gin: Matrix, c: number[], b: Bounds, maxIter = 20
     if (Number.isFinite(hi)) rows.push({ v: e.map((x) => -x), beta: -hi, eq: false, name: `${label} ≤ ${pct(hi)}` });
   }
   for (const k of b.linear ?? []) {
-    if (k.lo != null) rows.push({ v: [...k.a], beta: k.lo, eq: false, name: `${k.name} ≥ ${pct(k.lo)}` });
-    if (k.hi != null) rows.push({ v: k.a.map((x) => -x), beta: -k.hi, eq: false, name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}` });
+    if (k.lo != null) rows.push({ v: pad([...k.a]), beta: k.lo, eq: false, name: `${k.name} ≥ ${pct(k.lo)}` });
+    if (k.hi != null) rows.push({ v: pad(k.a.map((x) => -x)), beta: -k.hi, eq: false, name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}` });
+  }
+  if (m > n) {
+    for (let i = 0; i < n; i++) {
+      const label = b.names?.[i] ?? `สินทรัพย์ ${i + 1}`;
+      rows.push({ v: c.map((_, j) => (j === n + i ? 1 : j === i ? -1 : 0)), beta: 0, eq: false, name: `|${label}| (aux ≥ w)` });
+      rows.push({ v: c.map((_, j) => (j === n + i ? 1 : j === i ? 1 : 0)), beta: 0, eq: false, name: `|${label}| (aux ≥ −w)` });
+    }
+    rows.push({ v: c.map((_, j) => (j >= n ? -1 : 0)), beta: -b.gross!, eq: false, name: `Gross exposure ≤ ${pct(b.gross!)}` });
   }
   const avgDiag = Gin.reduce((s, r, i) => s + Math.abs(r[i]), 0) / n || 1;
   let ridge = 0;
@@ -559,9 +586,10 @@ export function solveGeneralQP(Gin: Matrix, c: number[], b: Bounds, maxIter = 20
   const g = matVec(G, x).map((v, i) => v + c[i]);
   active.forEach((k, j) => rows[k].v.forEach((v, i) => (g[i] -= u[j] * v)));
   const dualViol = Math.max(0, ...active.map((k, j) => (rows[k].eq ? 0 : -u[j])));
-  const chk = checkWeights(x, b);
+  const weights = x.slice(0, n);
+  const chk = checkWeights(weights, b);
   return {
-    weights: x,
+    weights,
     status: iterations < maxIter ? "optimal" : "max_iterations",
     iterations,
     kktResidual: Math.max(...g.map(Math.abs), dualViol),

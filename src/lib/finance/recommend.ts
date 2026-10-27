@@ -13,6 +13,7 @@ import {
   checkWeights,
   completePortfolio,
   constrainedFrontier,
+  tangencyPortfolio,
   targetReturnPortfolio,
   targetRiskPortfolio,
   utilityPortfolio,
@@ -46,6 +47,8 @@ export interface RecommendInput {
   totalWealth?: number;
   /** Mix the risky portfolio with the risk-free asset along the CAL (complete portfolio). */
   useRiskFree: boolean;
+  /** CAL borrowing (y > 1) at its own rate, capped; absent = no leverage (y ≤ 1). */
+  borrowing?: { rate: number; maxLeverage: number };
   /** risk_parity: risk budget per asset (default equal). */
   riskBudgets?: number[];
   /** min_cvar: per-period returns per asset (same periods), and confidence (default 0.95). */
@@ -113,6 +116,8 @@ export function recommend(input: RecommendInput): RecommendOutcome {
 
     let risky: OptimizedPoint;
     let riskyShare = 1;
+    /** Financing rate of the risk-free leg when it is negative (borrowing); null = lending at rf. */
+    let borrowRate: number | null = null;
     let riskBased: RiskBasedReport | undefined;
     const isRisk = (RISK_OBJECTIVES as string[]).includes(input.objective);
     if (isRisk && input.useRiskFree) {
@@ -196,9 +201,42 @@ export function recommend(input: RecommendInput): RecommendOutcome {
         default:
           y = completePortfolio(tangency, rf, input.riskAversion).riskyShare;
       }
-      if (y > 1 + 1e-12) warnings.push(`ต้องลงทุนในสินทรัพย์เสี่ยง ${pct(y)} ของเงินทุน (กู้ยืมเพิ่ม) — จำกัดที่ 100% เพราะไม่ใช้ margin ผลลัพธ์จึงไม่ถึงเป้า`);
+      if (y > 1 + 1e-12 && input.borrowing) {
+        // Kinked CAL: borrowing costs rb ≠ rf, so the levered segment uses the tangency at rb.
+        const rb = input.borrowing.rate;
+        let tB: OptimizedPoint | null = null;
+        try {
+          tB = tangencyPortfolio(mu, cov, rb, bounds);
+        } catch (e) {
+          if (!(e instanceof OptimizerError)) throw e;
+        }
+        const yB = !tB
+          ? 0
+          : input.objective === "target_return"
+            ? ((input.targetReturn ?? tB.expectedReturn) - rb) / (tB.expectedReturn - rb)
+            : input.objective === "target_risk"
+              ? (input.targetRisk ?? tB.volatility) / tB.volatility
+              : completePortfolio(tB, rb, input.riskAversion).riskyShare;
+        if (tB && yB > 1 + 1e-12) {
+          risky = tB;
+          if (yB > input.borrowing.maxLeverage + 1e-12) warnings.push(`ต้องการสินทรัพย์เสี่ยง ${pct(yB)} — จำกัดที่ maxLeverage ${pct(input.borrowing.maxLeverage)}`);
+          y = Math.min(yB, input.borrowing.maxLeverage);
+          borrowRate = rb;
+          warnings.push(`กู้ยืม ${pct(y - 1)} ของเงินทุนที่อัตรา ${pct(rb)} (ไม่ใช่ Rf ${pct(rf)}) — พอร์ตเสี่ยงคือ tangency ที่อัตรากู้`);
+        } else {
+          // Between the two tangencies the best mix holds no risk-free position: the frontier point itself.
+          risky =
+            input.objective === "target_return"
+              ? targetReturnPortfolio(mu, cov, rf, input.targetReturn ?? frontier.gmv.expectedReturn, bounds)
+              : input.objective === "target_risk"
+                ? targetRiskPortfolio(mu, cov, rf, input.targetRisk ?? frontier.gmv.volatility, bounds)
+                : utilityPortfolio(mu, cov, rf, Math.max(input.riskAversion, 0.1), bounds);
+          y = 1;
+          warnings.push("อยู่ช่วงหักมุมของ CAL (อัตรากู้สูงกว่า Rf) — ลงทุนในพอร์ตเสี่ยง 100% โดยไม่กู้และไม่ถือสินทรัพย์ปลอดความเสี่ยง");
+        }
+      } else if (y > 1 + 1e-12) warnings.push(`ต้องลงทุนในสินทรัพย์เสี่ยง ${pct(y)} ของเงินทุน (กู้ยืมเพิ่ม) — จำกัดที่ 100% เพราะไม่ได้เปิดการกู้ยืม ผลลัพธ์จึงไม่ถึงเป้า`);
       if (y < -1e-12) warnings.push(`y = ${pct(y)} (ขายชอร์ตพอร์ตเสี่ยง) — จำกัดที่ 0%`);
-      riskyShare = Math.min(Math.max(y, 0), 1);
+      riskyShare = Math.min(Math.max(y, 0), input.borrowing && borrowRate != null ? input.borrowing.maxLeverage : 1);
     } else {
       switch (input.objective) {
         case "min_variance":
@@ -236,7 +274,8 @@ export function recommend(input: RecommendInput): RecommendOutcome {
     if (risky.solver.regularized) warnings.push("Solver เติม ridge เล็กน้อยเพราะ covariance singular — น้ำหนักระหว่างสินทรัพย์ที่ซ้ำกันไม่ได้มีคำตอบเดียว");
     if (tangency && tangency.expectedReturn <= rf) warnings.push("ผลตอบแทนคาดหวังของสินทรัพย์เสี่ยงไม่สูงกว่า Rf — ตรวจสอบสมมติฐานผลตอบแทน");
 
-    const er = rf + riskyShare * (risky.expectedReturn - rf);
+    const finRate = riskyShare > 1 && borrowRate != null ? borrowRate : rf;
+    const er = finRate + riskyShare * (risky.expectedReturn - finRate);
     const vol = riskyShare * risky.volatility;
     const cur = input.currentValues;
     const curTotal = cur ? cur.reduce((a, b) => a + b, 0) : 0;
@@ -264,7 +303,7 @@ export function recommend(input: RecommendInput): RecommendOutcome {
       bullet: frontier.curve.map(({ volatility, expectedReturn, efficient }) => ({ volatility, expectedReturn, efficient })),
       solver: risky.solver,
       ...(riskBased ? { riskBased } : {}),
-      constraints: { n: mu.length, min: bounds.min, max: bounds.max, longOnly: bounds.min >= 0, riskFree: input.useRiskFree },
+      constraints: { n: mu.length, min: bounds.min, max: bounds.max, longOnly: bounds.min >= 0 && !(bounds.lower ?? []).some((l) => l != null && l < 0), riskFree: input.useRiskFree },
       covariance: { minEigenvalue: diag.minEigenvalue, maxEigenvalue: diag.maxEigenvalue, conditionNumber: diag.conditionNumber, psd: diag.psd },
       warnings,
     };

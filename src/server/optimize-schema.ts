@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { constraintsInput } from "@/lib/finance/exposure";
+import { shortPolicyInput } from "@/lib/finance/short-policy";
 
 const view = z.discriminatedUnion("type", [
   z.object({
@@ -60,7 +61,7 @@ export const optimizeInput = z
   riskAversion: z.number().min(0.5).max(20).optional().describe("A in U = E[R] − ½Aσ² (2 aggressive … 10 conservative)"),
   targetReturn: z.number().optional(),
   targetRisk: z.number().optional(),
-  minWeight: z.number().min(0).max(1).optional(),
+  minWeight: z.number().min(-1).max(1).optional().describe("Minimum weight per asset; below 0 only with allowShortSelling (otherwise rejected with SHORT_SELLING_DISABLED)"),
   maxWeight: z.number().min(0).max(1).optional(),
   useRiskFree: z.boolean().optional().describe("Mix the tangency portfolio with the risk-free asset (complete portfolio y*)"),
   extraCash: z.number().min(0).optional().describe("Extra THB to invest on top of current holdings"),
@@ -75,6 +76,7 @@ export const optimizeInput = z
     .describe("Bonds: same estimator as other assets (default) or forward horizon return from YTM (carry + pull-to-par, rolldown on the curve, optional rate shift, minus PD×LGD when given)"),
   bondHorizonYears: z.number().positive().max(30).optional().describe("Horizon for yield_horizon (default 1 year; capped at maturity)"),
   bondRateShiftBp: z.number().min(-500).max(500).optional().describe("Parallel yield shift scenario in bp for yield_horizon (default 0)"),
+  ...shortPolicyInput.partial().shape,
   riskFree: z
     .object({
       source: z.enum(["auto", "curve", "settings", "manual"]).optional().describe("auto (default) = currency-matched sovereign zero curve at the horizon, else the Settings rate; never an owned bond's YTM"),

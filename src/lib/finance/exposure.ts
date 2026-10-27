@@ -13,7 +13,10 @@ import type { Bounds, LinearConstraint } from "./optimizer";
 
 export const constraintsInput = z
   .object({
-    assetBounds: z.record(z.string(), z.object({ min: z.number().min(0).max(1).optional(), max: z.number().min(0).max(1).optional() })).optional().describe("Per-symbol weight bounds (decimal)"),
+    assetBounds: z
+      .record(z.string(), z.object({ min: z.number().min(-1).max(1).optional(), max: z.number().min(-1).max(1).optional() }))
+      .optional()
+      .describe("Per-symbol weight bounds (decimal); a negative min needs allowShortSelling"),
     maxPerIssuer: z.number().gt(0).max(1).optional().describe("Cap on the combined weight of each issuer (stocks + bonds of one economic issuer)"),
     maxPerSector: z.number().gt(0).max(1).optional().describe("Cap on each user-classified sector"),
     maxPerRating: z.record(z.string(), z.number().gt(0).max(1)).optional().describe("Cap by bond rating bucket, e.g. { unrated: 0.1, BBB: 0.2 }"),

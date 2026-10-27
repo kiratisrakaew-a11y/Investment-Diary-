@@ -15,6 +15,7 @@ import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
 import { bondExpectedReturn, type BondExpected } from "@/lib/finance/bond-expected";
+import { SHORT_DISCLAIMER, applyShortPolicy, exposureSummary, shortPolicyInput, withPolicyBounds, type ShortPolicy } from "@/lib/finance/short-policy";
 import { MIN_OBS_BY_FREQUENCY, bondReturnInputs, resampleLevels, type SampleFrequency } from "@/lib/finance/bond-returns";
 import { alignWithBenchmark, buildLevelSeries, commonDates, returnsOn, type ReturnBasis } from "@/lib/finance/return-series";
 import { getSettings, getYieldCurve } from "./settings";
@@ -322,8 +323,10 @@ export interface OptimizeParams {
   bondRateShiftBp?: number;
 }
 
+export type OptimizeRequest = OptimizeParams & Partial<ShortPolicy>;
+
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
-export async function optimizePortfolio(p: OptimizeParams) {
+export async function optimizePortfolio(p: OptimizeRequest) {
   const u = await loadUniverse(p.lookbackDays, p.symbols, {
     withSeries: true,
     returnBasis: p.returnBasis,
@@ -365,9 +368,22 @@ export async function optimizePortfolio(p: OptimizeParams) {
   const currentValues = u.assets.map((a) => a.currentValue);
   const wealth = currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0);
   // Risk-aware constraints (issuer / sector / rating / groups / duration / DV01) → linear rows for the same QP.
-  const built = buildConstraints(u.assets, { min: p.minWeight ?? 0, max: p.maxWeight ?? 1 }, p.constraints, wealth);
-  if (built.unsupported.length) throw new OptimizerError({ code: "UNSUPPORTED_CONSTRAINT", message: `ข้อจำกัดที่ไม่รองรับ: ${built.unsupported.join(" · ")}` });
+  // Short-selling policy first: OFF (default) keeps every weight ≥ 0 and rejects negative minimums.
+  const policy = applyShortPolicy(
+    p,
+    { minWeight: p.minWeight, maxWeight: p.maxWeight, assetMins: Object.fromEntries(Object.entries(p.constraints?.assetBounds ?? {}).map(([k, v]) => [k.toUpperCase(), v.min])) },
+    u.assets,
+    p.objective,
+  );
+  if (!policy.ok) throw new OptimizerError(policy.issue);
+  extraWarnings.push(...policy.notes);
+  const built0 = buildConstraints(u.assets, policy.base, p.constraints, wealth);
+  if (built0.unsupported.length) throw new OptimizerError({ code: "UNSUPPORTED_CONSTRAINT", message: `ข้อจำกัดที่ไม่รองรับ: ${built0.unsupported.join(" · ")}` });
+  const built = { ...built0, bounds: withPolicyBounds(built0.bounds, policy) };
   extraWarnings.push(...built.warnings);
+  const sp = shortPolicyInput.parse({ allowShortSelling: p.allowShortSelling, allowBorrowingAtRiskFree: p.allowBorrowingAtRiskFree, borrowingRate: p.borrowingRate, maxLeverage: p.maxLeverage });
+  if (sp.allowBorrowingAtRiskFree && (sp.borrowingRate == null || sp.maxLeverage == null))
+    throw new OptimizerError({ code: "INVALID_INPUT", message: "เปิดการกู้ยืมบนเส้น CAL ต้องระบุ borrowingRate และ maxLeverage (อัตรากู้ไม่ถือว่าเท่ากับ Rf)" });
   const constraints = {
     rf: u.riskFree,
     bounds: built.bounds,
@@ -378,6 +394,7 @@ export async function optimizePortfolio(p: OptimizeParams) {
     currentValues,
     totalWealth: wealth,
     useRiskFree: p.useRiskFree ?? false,
+    ...(sp.allowBorrowingAtRiskFree ? { borrowing: { rate: sp.borrowingRate!, maxLeverage: sp.maxLeverage! } } : {}),
     ...(p.riskBudgets ? { riskBudgets: symbols.map((s) => p.riskBudgets![s] ?? p.riskBudgets![s.toUpperCase()] ?? 0) } : {}),
     // min_cvar: historical per-period returns of the same universe and window (no new data loader).
     ...(p.objective === "min_cvar" ? { scenarios: u.series?.returns, cvarConfidence: p.cvarConfidence ?? 0.95 } : {}),
@@ -401,6 +418,9 @@ export async function optimizePortfolio(p: OptimizeParams) {
   }
   // Surfaces as REST 400 / MCP isError with the typed code; no weights are returned.
   if (!r.ok) throw new OptimizerError(r.issue);
+  // Defence in depth: with shorting OFF no weight may be negative, whatever path produced it.
+  if (!sp.allowShortSelling && r.allocations.some((a) => a.weight < -1e-9))
+    throw new OptimizerError({ code: "INVALID_INPUT", message: "ระบบตรวจพบน้ำหนักติดลบทั้งที่ปิดการขายชอร์ต — ไม่แสดงผลลัพธ์นี้", suggestion: "แจ้งปัญหานี้พร้อมพารามิเตอร์ที่ใช้" });
   const recommendedWeights = r.allocations.map((a) => a.weight);
   // Risk decomposition of the recommended risky sleeve (weights normalized within risky assets).
   const riskyW = r.risky.weights;
@@ -477,6 +497,13 @@ export async function optimizePortfolio(p: OptimizeParams) {
       : {}),
     riskyShare: r.riskyShare,
     riskFreeShare: r.riskFreeShare,
+    shortSelling: {
+      allowed: sp.allowShortSelling,
+      exposure: exposureSummary(r.allocations.map((a) => a.weight)),
+      limits: sp.allowShortSelling ? { maxShortPerAsset: p.maxShortPerAsset ?? null, maxGrossExposure: p.maxGrossExposure ?? null } : null,
+      disclaimer: sp.allowShortSelling ? SHORT_DISCLAIMER : null,
+    },
+    borrowing: { allowed: sp.allowBorrowingAtRiskFree, rate: sp.borrowingRate ?? null, maxLeverage: sp.maxLeverage ?? null },
     riskFreeSleeve: {
       share: r.riskFreeShare,
       note: "สัดส่วนปลอดความเสี่ยงเป็นสถานะจำลองบนเส้น CAL (เงินฝาก/ตั๋วระยะสั้นที่อัตรา Rf) — ไม่ได้ผูกกับพันธบัตรที่ถือ และไม่ถูกนับซ้ำกับน้ำหนักพันธบัตรในพอร์ตเสี่ยง",
