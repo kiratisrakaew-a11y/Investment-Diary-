@@ -121,7 +121,7 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card space-y-3">
-          <h2 className="font-semibold">กลยุทธ์</h2>
+          <h2 className="text-[15px] font-semibold">กลยุทธ์</h2>
           <SelectField label="กลยุทธ์" value={strategy} options={STRATEGIES} onChange={setStrategy} />
           <div className="grid grid-cols-2 gap-3">
             <label className="block">

@@ -139,6 +139,9 @@
 
 body {
   color: var(--text);
+  /* Compact fintech scale: body/forms 13px, tables 12px, metadata 10–11px (rem units stay 16px-based). */
+  font-size: 13px;
+  line-height: 1.5;
   background:
     radial-gradient(60rem 40rem at 10% -10%, var(--bg-glow-1), transparent 60%),
     radial-gradient(50rem 35rem at 100% 0%, var(--bg-glow-2), transparent 60%),
@@ -182,13 +185,13 @@ body {
   @apply inline-flex items-center gap-1 rounded-lg border border-border bg-panel-2 px-3 py-1.5 text-sm hover:border-accent/60 disabled:opacity-50;
 }
 .input {
-  @apply w-full rounded-lg border border-border bg-field px-2.5 py-1.5 text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40;
+  @apply w-full rounded-lg border border-border bg-field px-2.5 py-1.5 text-[13px] outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40;
 }
 .label {
   @apply mb-1 block text-xs font-medium text-muted;
 }
 .table {
-  @apply w-full text-sm;
+  @apply w-full text-xs;
 }
 .table th {
   @apply border-b border-border px-2 py-2 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-muted uppercase;

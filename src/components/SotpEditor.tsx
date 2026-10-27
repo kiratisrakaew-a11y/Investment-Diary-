@@ -237,7 +237,7 @@ export function SotpEditor({
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="space-y-4 lg:col-span-3">
           <div className="card space-y-3">
-            <h2 className="font-semibold">บริษัทแม่</h2>
+            <h2 className="text-[15px] font-semibold">บริษัทแม่</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <NumField label="จำนวนหุ้น (หน่วยเดียวกับมูลค่า)" value={a.sharesOutstanding} onChange={(v) => set("sharesOutstanding", v ?? 0)} hint="เช่น มูลค่าเป็นล้านบาท → หุ้นเป็นล้านหุ้น" />
               <NumField label="ราคาปัจจุบัน" value={a.currentPrice} onChange={(v) => set("currentPrice", v ?? 0)} />
@@ -279,7 +279,7 @@ export function SotpEditor({
           </button>
 
           <div className="card space-y-4">
-            <h2 className="font-semibold">รายการปรับ (EV → Equity bridge)</h2>
+            <h2 className="text-[15px] font-semibold">รายการปรับ (EV → Equity bridge)</h2>
             <LineItems title="บวก: สินทรัพย์นอกการดำเนินงาน (ที่ดิน, เงินลงทุนที่ไม่ได้แยกเป็นส่วนงาน)" items={a.nonOperatingAssets} onChange={(v) => set("nonOperatingAssets", v)} />
             <LineItems title="หัก: ภาระผูกพันอื่น (หุ้นบุริมสิทธิ, ภาระผูกพันพนักงาน)" items={a.otherClaims} onChange={(v) => set("otherClaims", v)} />
             <LineItems title="หัก: ตัดรายการระหว่างกัน (มูลค่าที่นับซ้ำในหลายส่วนงาน)" items={a.eliminations} onChange={(v) => set("eliminations", v)} />
@@ -288,7 +288,7 @@ export function SotpEditor({
 
         <section className="space-y-4 lg:col-span-2">
           <div className="card space-y-2">
-            <h2 className="font-semibold">มูลค่าต่อหุ้น (SOTP)</h2>
+            <h2 className="text-[15px] font-semibold">มูลค่าต่อหุ้น (SOTP)</h2>
             <div className="text-3xl font-semibold tabular-nums">{fmtNum(result.value)}</div>
             <div className="text-sm text-muted">
               ราคา {fmtNum(a.currentPrice)} · Upside <span className={signClass(result.upside)}>{fmtPct(result.upside, 1)}</span>

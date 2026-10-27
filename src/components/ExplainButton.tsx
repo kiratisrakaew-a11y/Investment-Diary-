@@ -153,7 +153,7 @@ function ExplainDrawer({
 export function CardTitle({ title, explain, className, children }: { title: string; explain?: ExplainSpec | null; className?: string; children?: React.ReactNode }) {
   return (
     <div className={clsx("mb-3 flex flex-wrap items-center justify-between gap-2", className)}>
-      <h2 className="font-semibold">
+      <h2 className="text-[15px] font-semibold">
         {title}
         {children}
       </h2>

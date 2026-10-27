@@ -10,6 +10,8 @@ import { applyTargetsAction } from "@/app/(app)/optimizer/actions";
 import { BulletChart } from "./charts";
 import { RebalancePanel } from "./RebalancePanel";
 import { buildConstraints, exposureReport, type ConstraintsInput } from "@/lib/finance/exposure";
+import { SHORT_DISCLAIMER, applyShortPolicy, exposureSummary, withPolicyBounds } from "@/lib/finance/short-policy";
+import type { ResolvedRiskFree } from "@/lib/finance/risk-free";
 import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
 import { CardTitle } from "./ExplainButton";
@@ -38,7 +40,10 @@ export function OptimizerClient({
   erp,
   period,
   scenarios,
+  rfInfo,
 }: {
+  /** Risk-free resolver output (source, tenor, date, warnings). */
+  rfInfo?: ResolvedRiskFree;
   /** Historical per-period returns per asset (same order as assets), for min CVaR. */
   scenarios?: number[][];
   assets: UniverseAsset[];
@@ -61,6 +66,14 @@ export function OptimizerClient({
   const [minW, setMinW] = useState(0);
   const [maxW, setMaxW] = useState(0.4);
   const [useRiskFree, setUseRiskFree] = useState(false);
+  // Short selling and CAL borrowing: two separate switches, both OFF by default.
+  const [allowShort, setAllowShort] = useState(false);
+  const [maxShort, setMaxShort] = useState(0.2);
+  const [maxGross, setMaxGross] = useState(1.5);
+  const [allowBondShorts, setAllowBondShorts] = useState(false);
+  const [allowBorrow, setAllowBorrow] = useState(false);
+  const [borrowRate, setBorrowRate] = useState<number | null>(null);
+  const [maxLev, setMaxLev] = useState(1.5);
   const [extraCash, setExtraCash] = useState(0);
   const [covMethod, setCovMethod] = useState<"sample" | "ledoit_wolf">("sample");
   const [maxIssuer, setMaxIssuer] = useState<number | null>(null);
@@ -112,9 +125,9 @@ export function OptimizerClient({
   const mu = assets.map((a, i) => overrides[a.symbol] ?? baseReturn(a, i));
 
   const params = useMemo(
-    () => ({ included, mu: mu.join(), objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration }),
+    () => ({ included, mu: mu.join(), objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration, allowShort, maxShort, maxGross, allowBondShorts, allowBorrow, borrowRate, maxLev }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [included, method, overrides, objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration],
+    [included, method, overrides, objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration, allowShort, maxShort, maxGross, allowBondShorts, allowBorrow, borrowRate, maxLev],
   );
 
   function compute() {
@@ -141,8 +154,23 @@ export function OptimizerClient({
           ...(maxDuration != null ? { maxDuration } : {}),
         };
         const wealth = cur.reduce((a, b) => a + b, 0) + extraCash;
-        // Same constraint builder as the server optimizer (issuer / sector / duration → linear rows).
-        const built = buildConstraints(idx.map((i) => assets[i]), { min: minW, max: maxW }, Object.keys(spec).length ? spec : undefined, wealth);
+        // Same short-selling policy and constraint builder as the server optimizer.
+        const policy = applyShortPolicy(
+          { allowShortSelling: allowShort, maxShortPerAsset: maxShort, maxGrossExposure: maxGross, allowBondShorts },
+          { minWeight: minW, maxWeight: maxW },
+          idx.map((i) => assets[i]),
+          objective,
+        );
+        if (!policy.ok) {
+          setResult({ r: { ok: false, issue: policy.issue, warnings: [] }, idx, prior: null, bl: null });
+          return;
+        }
+        if (allowBorrow && useRiskFree && borrowRate == null) {
+          setResult({ r: { ok: false, issue: { code: "INVALID_INPUT", message: "เปิดการกู้ยืมต้องระบุอัตรากู้ (ไม่ถือว่าเท่ากับ Rf)" }, warnings: [] }, idx, prior: null, bl: null });
+          return;
+        }
+        const built0 = buildConstraints(idx.map((i) => assets[i]), policy.base, Object.keys(spec).length ? spec : undefined, wealth);
+        const built = { ...built0, bounds: withPolicyBounds(built0.bounds, policy), warnings: [...policy.notes, ...built0.warnings] };
         const common = {
           symbols: idx.map((i) => assets[i].symbol),
           rf,
@@ -154,6 +182,7 @@ export function OptimizerClient({
           currentValues: cur,
           totalWealth: cur.reduce((a, b) => a + b, 0) + extraCash,
           useRiskFree,
+          ...(useRiskFree && allowBorrow && borrowRate != null ? { borrowing: { rate: borrowRate, maxLeverage: maxLev } } : {}),
           ...(objective === "min_cvar" && scenarios ? { scenarios: idx.map((i) => scenarios[i]), cvarConfidence: cvarConf } : {}),
         };
         const r = recommend({ ...common, mu: idx.map((i) => mu[i]), cov: isBl && postCov && bl?.posteriorCov ? bl.posteriorCov : subCov });
@@ -196,8 +225,8 @@ export function OptimizerClient({
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="card space-y-3">
-          <h2 className="font-semibold">เป้าหมายและข้อจำกัด</h2>
+        <section className="card min-w-0 space-y-3">
+          <h2 className="text-[15px] font-semibold">เป้าหมายและข้อจำกัด</h2>
           <SelectField label="Objective" value={objective} options={OBJECTIVES} onChange={setObjective} />
           {(objective === "utility" || useRiskFree) && (
             <label className="block">
@@ -214,11 +243,52 @@ export function OptimizerClient({
             <p className="text-xs text-muted">กลยุทธ์เน้นความเสี่ยง: เลือกน้ำหนักจากความเสี่ยง/ความสัมพันธ์ ไม่ใช้ผลตอบแทนคาดหวัง{objective === "risk_parity" ? " · ใช้ร่วมกับเพดานผู้ออก/หมวดไม่ได้" : ""}</p>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <NumField label="น้ำหนักต่ำสุด/ตัว" pct value={minW} onChange={(v) => setMinW(Math.max(0, v ?? 0))} />
+            <NumField label="น้ำหนักต่ำสุด/ตัว" pct value={minW} onChange={(v) => setMinW(v ?? 0)} hint={allowShort ? "ติดลบได้ไม่เกินขีดชอร์ตต่อตัว" : "ติดลบไม่ได้เมื่อปิดการขายชอร์ต (จะแจ้งข้อผิดพลาด ไม่ปรับให้เอง)"} />
             <NumField label="น้ำหนักสูงสุด/ตัว" pct value={maxW} onChange={(v) => setMaxW(Math.min(1, Math.max(0.01, v ?? 1)))} />
           </div>
+          <div className={clsx("rounded-xl border p-3", allowShort ? "border-warn/50 bg-warn/5" : "border-border")}>
+            <Toggle
+              label="อนุญาตให้ขายชอร์ต (น้ำหนักติดลบ)"
+              checked={allowShort}
+              onChange={(on) => {
+                setAllowShort(on);
+                // The minimum-weight field follows the switch visibly: −(max short) when on, 0 when off.
+                setMinW(on ? -maxShort : Math.max(0, minW));
+              }}
+            />
+            <p className="mt-1 text-[11px] text-muted">{allowShort ? SHORT_DISCLAIMER : "ปิดอยู่ (ค่าเริ่มต้น): ทุกน้ำหนัก ≥ 0 ในทุก objective"}</p>
+            {allowShort && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <NumField
+                  label="ชอร์ตสูงสุด/ตัว"
+                  pct
+                  value={maxShort}
+                  onChange={(v) => {
+                    const m = v ?? 0.2;
+                    if (minW < 0 && minW === -maxShort) setMinW(-m);
+                    setMaxShort(m);
+                  }}
+                />
+                <NumField label="Gross exposure สูงสุด" pct value={maxGross} onChange={(v) => setMaxGross(v ?? 1.5)} hint="Σ|w| — 100% = ไม่มีชอร์ต" />
+                <div className="col-span-2">
+                  <Toggle label="อนุญาตชอร์ตพันธบัตรโดยตรง" checked={allowBondShorts} onChange={setAllowBondShorts} />
+                </div>
+              </div>
+            )}
+          </div>
           <Toggle label="รวมสินทรัพย์ปลอดความเสี่ยง (Complete portfolio บน CML)" checked={useRiskFree} onChange={setUseRiskFree} />
-          {useRiskFree && <p className="text-xs text-muted">ส่วนเสี่ยง = tangency portfolio; objective กำหนดสัดส่วนบนเส้น CAL (ไม่กู้ยืม — สูงสุด 100%)</p>}
+          {useRiskFree && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted">ส่วนเสี่ยง = tangency portfolio; objective กำหนดสัดส่วนบนเส้น CAL · สัดส่วนปลอดความเสี่ยงเป็นสถานะจำลอง ไม่ผูกกับพันธบัตรที่ถือ</p>
+              <Toggle label="อนุญาตกู้ยืมเพื่อลงทุนเพิ่ม (y > 100%) — แยกจากการขายชอร์ต" checked={allowBorrow} onChange={setAllowBorrow} />
+              {allowBorrow && (
+                <div className="grid grid-cols-2 gap-2">
+                  <NumField label="อัตรากู้ต่อปี" pct nullable value={borrowRate} onChange={setBorrowRate} hint="ต้องระบุเอง — ไม่ถือว่าเท่ากับ Rf" />
+                  <NumField label="สัดส่วนสินทรัพย์เสี่ยงสูงสุด" pct value={maxLev} onChange={(v) => setMaxLev(Math.max(1, v ?? 1.5))} />
+                </div>
+              )}
+            </div>
+          )}
           <SelectField
             label="Covariance"
             value={covMethod}
@@ -234,14 +304,25 @@ export function OptimizerClient({
             <NumField label="สูงสุด/หมวด" pct nullable value={maxSector} onChange={setMaxSector} hint="ใช้หมวดที่ผู้ใช้ระบุพร้อมแหล่งที่มา — ตัวที่ไม่ระบุไม่ถูกจัดเข้าหมวด" />
             <NumField label="Duration สูงสุด (ปี)" nullable value={maxDuration} onChange={setMaxDuration} hint="Modified duration ของพอร์ตเสี่ยง (พันธบัตรจากราคาล่าสุด อื่น ๆ = 0)" />
           </div>
-          <p className="text-xs text-muted">
-            Rf {fmtPct(rf)} · ERP {fmtPct(erp)} · ข้อมูล {period} · {periodsPerYear.toFixed(1)} งวด/ปี · long-only, ลงทุนครบ 100%, ไม่มี margin
-          </p>
+          <div className="rounded-lg bg-panel-2 p-2 text-[11px] text-muted">
+            <div>
+              <b className="text-text">Rf {fmtPct(rf, 2)}</b> · {rfInfo ? `${rfInfo.label} · อายุ ${rfInfo.tenorYears} ปี · ${rfInfo.currency}` : "จากหน้าตั้งค่า"}
+            </div>
+            {rfInfo?.warnings.map((w) => (
+              <div key={w} className="text-warn">
+                ⚠️ {w}
+              </div>
+            ))}
+            <div>
+              ERP {fmtPct(erp)} · ข้อมูล {period} · {periodsPerYear.toFixed(1)} งวด/ปี · {allowShort ? `ชอร์ตได้ ≤ ${fmtPct(maxShort, 0)}/ตัว, gross ≤ ${fmtPct(maxGross, 0)}` : "long-only"} · ลงทุนครบ 100%
+              {useRiskFree && allowBorrow ? ` · กู้ได้ถึง ${fmtPct(maxLev, 0)}` : " · ไม่กู้ยืม"}
+            </div>
+          </div>
         </section>
 
-        <section className="card space-y-3 lg:col-span-2">
+        <section className="card min-w-0 space-y-3 lg:col-span-2">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
+            <h2 className="text-[15px] font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
             <div className="w-56">
               <SelectField
                 label="วิธีตั้งต้น"
@@ -290,6 +371,14 @@ export function OptimizerClient({
                     <td>
                       <span className="font-medium">{a.symbol}</span> <span className="text-xs text-muted">{ASSET_CLASS_LABEL[a.assetClass]}</span>
                       {a.held && <span className="ml-1 text-[11px] text-accent">ถืออยู่</span>}
+                      {a.assetClass === "bond" && (
+                        <div className="mt-0.5 flex flex-wrap gap-1 text-[10px]">
+                          {a.modifiedDuration != null && <span className="rounded border border-border px-1">D {a.modifiedDuration.toFixed(2)}</span>}
+                          {a.bondExpected?.ok && <span className="rounded border border-border px-1" title={a.bondExpected.notes.join(" · ")}>YTM {fmtPct(a.bondExpected.ytm, 2)} · E[R] ล่วงหน้า {fmtPct(a.bondExpected.expectedReturn, 2)}</span>}
+                          {a.rating && <span className="rounded border border-border px-1">{a.rating}</span>}
+                          <span className="rounded border border-warn/40 px-1 text-warn" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
+                        </div>
+                      )}
                     </td>
                     <td className="num">{fmtPct(a.historicalReturn, 1)}</td>
                     <td className="num">{fmtRatio(a.beta)}</td>
@@ -337,7 +426,7 @@ export function OptimizerClient({
       {error && <p className="text-sm text-neg">{error}</p>}
       {outcome && !outcome.ok && (
         <section className="card border-l-4 border-l-neg">
-          <h2 className="font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
+          <h2 className="text-[15px] font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
           <p className="mt-1 text-sm">{outcome.issue.message}</p>
           {outcome.issue.suggestion && <p className="mt-1 text-sm text-muted">แนะนำ: {outcome.issue.suggestion}</p>}
           <p className="mt-2 text-xs text-muted">ระบบไม่ผ่อนข้อจำกัดให้เอง เพื่อไม่ให้ได้น้ำหนักที่ขัดกับที่คุณตั้งไว้ ({outcome.issue.code})</p>
@@ -348,7 +437,7 @@ export function OptimizerClient({
         <>
           <section className="card">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>
+              <h2 className="text-[15px] font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>
               {computing && <span className="text-xs text-muted">กำลังคำนวณ…</span>}
             </div>
             <BulletChart
@@ -367,7 +456,7 @@ export function OptimizerClient({
           </section>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            <section className="card space-y-1">
+            <section className="card min-w-0 space-y-1">
               <CardTitle
                 title="พอร์ตที่แนะนำ"
                 className="mb-2"
@@ -424,18 +513,20 @@ export function OptimizerClient({
                 <p key={n} className="pt-2 text-xs text-neg">⚠️ {n}</p>
               ))}
               <div className="pt-3">
-                <button className="btn" onClick={applyTargets} disabled={applying || !r}>
+                <button className="btn" onClick={applyTargets} disabled={applying || !r || hasShortOrLeverage(r)}>
                   ใช้เป็นเป้าหมาย asset allocation
                 </button>
+                {hasShortOrLeverage(r) && <p className="mt-1 text-[11px] text-muted">มีสถานะชอร์ต/กู้ยืม — เป้าหมาย asset allocation รับได้เฉพาะ 0–100%</p>}
                 {applyMsg && <p className="mt-1 text-xs text-pos">{applyMsg}</p>}
               </div>
             </section>
 
-            <section className="card overflow-x-auto lg:col-span-2">
+            <section className="card min-w-0 overflow-x-auto lg:col-span-2">
               <CardTitle
                 title="น้ำหนักที่แนะนำและรายการปรับพอร์ต"
                 explain={{ data: compact({ รายการ: r.allocations, exposure: result?.exposure ?? null }), hint: "weight = น้ำหนักแนะนำ, currentWeight = ปัจจุบัน, trade = จำนวนเงิน (บาท) ที่ต้องซื้อ(+)/ขาย(−)" }}
               />
+              <LongShortExposure weights={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} riskFree={r.riskFreeShare} />
               <table className="table">
                 <thead>
                   <tr>
@@ -460,9 +551,9 @@ export function OptimizerClient({
                       </td>
                     </tr>
                   ))}
-                  {r.riskFreeShare > 0 && (
+                  {Math.abs(r.riskFreeShare) > 1e-9 && (
                     <tr>
-                      <td className="font-medium">สินทรัพย์ปลอดความเสี่ยง (เงินฝาก/T-bill)</td>
+                      <td className="font-medium">{r.riskFreeShare > 0 ? "สินทรัพย์ปลอดความเสี่ยง (เงินฝาก/T-bill · จำลอง)" : "เงินกู้ (ติดลบ = กู้ยืม)"}</td>
                       <td />
                       <td className="num font-medium">
                         <WeightBar w={r.riskFreeShare} />
@@ -514,7 +605,11 @@ export function OptimizerClient({
               </p>
             </section>
           </div>
-          <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} />
+          {hasShortOrLeverage(r) ? (
+            <section className="card text-sm text-muted">ข้อเสนอปรับพอร์ตไม่แสดงเมื่อผลลัพธ์มีการขายชอร์ตหรือกู้ยืม — ระบบไม่สร้างคำสั่งขายชอร์ตหรือกู้ยืม และไม่ส่งคำสั่งซื้อขายให้</section>
+          ) : (
+            <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} />
+          )}
         </>
       )}
     </div>
@@ -534,10 +629,43 @@ function WeightBar({ w }: { w: number }) {
   return (
     <div className="flex items-center justify-end gap-2">
       <div className="h-1.5 w-16 rounded-full bg-border/60">
-        <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, w * 100)}%`, background: "var(--series-1)" }} />
+        <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.abs(w) * 100)}%`, background: w < 0 ? "var(--series-2)" : "var(--series-1)" }} />
       </div>
-      <span className="w-12 text-right">{fmtPct(w, 1)}</span>
+      <span className={clsx("w-12 text-right", w < 0 && "text-neg")}>{fmtPct(w, 1)}</span>
     </div>
+  );
+}
+
+const hasShortOrLeverage = (r: { allocations: { weight: number }[]; riskFreeShare: number }) => r.allocations.some((a) => a.weight < -1e-9) || r.riskFreeShare < -1e-9;
+
+/** Long/short weights on both sides of a zero line, with gross and net (never a pie that hides negatives). */
+function LongShortExposure({ weights, riskFree }: { weights: { symbol: string; weight: number }[]; riskFree: number }) {
+  const e = exposureSummary(weights.map((x) => x.weight));
+  const scale = Math.max(0.01, ...weights.map((x) => Math.abs(x.weight)));
+  if (e.short < 1e-9 && riskFree >= -1e-9) return null;
+  return (
+    <figure className="mb-4" aria-label={`Long ${fmtPct(e.long, 1)} short ${fmtPct(e.short, 1)} gross ${fmtPct(e.gross, 1)} net ${fmtPct(e.net, 1)}`}>
+      <div className="mb-2 flex flex-wrap gap-x-5 text-xs">
+        <span>Long <b className="tabular-nums">{fmtPct(e.long, 1)}</b></span>
+        <span className="text-neg">Short <b className="tabular-nums">{fmtPct(e.short, 1)}</b></span>
+        <span>Gross <b className="tabular-nums">{fmtPct(e.gross, 1)}</b></span>
+        <span>Net <b className="tabular-nums">{fmtPct(e.net, 1)}</b></span>
+        {riskFree < -1e-9 && <span className="text-neg">กู้ยืม {fmtPct(-riskFree, 1)}</span>}
+      </div>
+      <div className="space-y-1">
+        {weights.map((x) => (
+          <div key={x.symbol} className="grid grid-cols-[4rem_1fr_1fr_3.5rem] items-center gap-1 text-[11px]">
+            <span className="truncate">{x.symbol}</span>
+            <div className="flex justify-end border-r border-border">
+              {x.weight < 0 && <div className="h-2 rounded-l bg-[var(--series-2)]" style={{ width: `${(Math.abs(x.weight) / scale) * 100}%` }} />}
+            </div>
+            <div className="flex">{x.weight > 0 && <div className="h-2 rounded-r bg-[var(--series-1)]" style={{ width: `${(x.weight / scale) * 100}%` }} />}</div>
+            <span className={clsx("text-right tabular-nums", x.weight < 0 && "text-neg")}>{fmtPct(x.weight, 1)}</span>
+          </div>
+        ))}
+      </div>
+      <figcaption className="mt-1 text-[10px] text-muted">ซ้ายของเส้นศูนย์ = ชอร์ต · ขวา = ซื้อ (long)</figcaption>
+    </figure>
   );
 }
 
@@ -617,7 +745,7 @@ function BlPanel({
   return (
     <section className="card space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="font-semibold">Black–Litterman</h2>
+        <h2 className="text-[15px] font-semibold">Black–Litterman</h2>
         <button type="button" className="btn-ghost text-xs" onClick={setEqual}>
           ตั้งน้ำหนักตลาดเท่ากันทุกตัว
         </button>

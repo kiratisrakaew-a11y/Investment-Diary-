@@ -373,7 +373,7 @@ export function ValuationEditor({
 
       <div className="grid gap-6 lg:grid-cols-5">
         <section id="val-inputs" className="card min-w-0 scroll-mt-16 space-y-4 lg:col-span-3">
-          <h2 className="font-semibold">สมมติฐาน</h2>
+          <h2 className="text-[15px] font-semibold">สมมติฐาน</h2>
           <Group title="ราคาและอัตราคิดลด (CAPM)">
             <NumField label="ราคาปัจจุบัน" value={dcfA.currentPrice} onChange={(v) => setShared("currentPrice", v ?? 0)} />
             <NumField label="Risk-free" pct value={dcfA.riskFree} onChange={(v) => setShared("riskFree", v ?? 0)} />
@@ -1041,7 +1041,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
       </section>
       <section className="card min-w-0 overflow-x-auto lg:col-span-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Sensitivity: มูลค่าต่อหุ้น</h2>
+          <h2 className="text-[15px] font-semibold">Sensitivity: มูลค่าต่อหุ้น</h2>
           <select className="input w-auto py-1 text-xs" value={axis} onChange={(e) => setAxis(e.target.value as SensitivityAxis)}>
             {(Object.keys(SENSITIVITY_AXES) as SensitivityAxis[])
               .filter((k) => model === "fcfe" || k !== "debtFinancingRatio")
@@ -1112,7 +1112,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
   return (
     <section id="val-scenarios" className="card scroll-mt-16 overflow-x-auto">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Scenarios (Bear / Base / Bull)</h2>
+        <h2 className="text-[15px] font-semibold">Scenarios (Bear / Base / Bull)</h2>
         <div className="flex items-center gap-3">
           {!!sc?.length && (
             <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onChange(defaultScenarios(a))} title="ตั้งค่าใหม่ตามรูปแบบประมาณการปัจจุบัน">

@@ -64,7 +64,7 @@ export function Stat({
           </Ring>
         )}
         <div className="min-w-0">
-          <div className={clsx("text-lg font-semibold break-words tabular-nums sm:text-xl", tone)}>{value}</div>
+          <div className={clsx("text-[22px] leading-tight font-semibold break-words tabular-nums sm:text-[24px]", tone)}>{value}</div>
           {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
         </div>
       </div>
@@ -109,7 +109,7 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel px-5 py-4">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-wide">{title}</h1>
+        <h1 className="text-[21px] leading-tight font-semibold tracking-wide">{title}</h1>
         {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">

@@ -119,7 +119,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="card space-y-3 lg:col-span-2">
-          <h2 className="font-semibold">ข้อมูลพันธบัตร / หุ้นกู้</h2>
+          <h2 className="text-[15px] font-semibold">ข้อมูลพันธบัตร / หุ้นกู้</h2>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="label">วันชำระราคา</span>
@@ -369,7 +369,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
       {r.ok && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="card space-y-3">
-            <h2 className="font-semibold">ผลตอบแทนจริงถ้าขายก่อนครบกำหนด (horizon return)</h2>
+            <h2 className="text-[15px] font-semibold">ผลตอบแทนจริงถ้าขายก่อนครบกำหนด (horizon return)</h2>
             <div className="grid grid-cols-3 gap-3">
               <DateField label="วันที่ขาย" value={horizonDate} onChange={setHorizonDate} />
               <NumField label="ลงทุนต่อคูปองที่" pct value={reinvest} onChange={(v) => setReinvest(v ?? 0)} />
@@ -388,7 +388,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
             {!horizonDate && <p className="text-xs text-muted">ใส่วันที่ขายเพื่อดูผลตอบแทนจริงซึ่งขึ้นกับ yield ตอนขายและอัตราที่นำคูปองไปลงทุนต่อ</p>}
           </section>
           <section className="card space-y-3">
-            <h2 className="font-semibold">มูลค่าจาก zero curve, Z-spread และ key-rate duration</h2>
+            <h2 className="text-[15px] font-semibold">มูลค่าจาก zero curve, Z-spread และ key-rate duration</h2>
             <label className="block">
               <span className="label">Zero rate (ปี: % ต่อปี ทบต้นรายปี) บรรทัดละจุด</span>
               <textarea className="input font-mono text-xs" rows={4} value={curveText} onChange={(e) => setCurveText(e.target.value)} />

@@ -159,7 +159,7 @@ export function FinancialStatementsPanel({
     <section className="card space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="text-left" onClick={() => setOpen((o) => !o)}>
-          <h2 className="font-semibold">
+          <h2 className="text-[15px] font-semibold">
             {open ? "▾" : "▸"} งบการเงินย้อนหลัง {sorted.length ? `(${sorted[0].fiscalYear}–${sorted[sorted.length - 1].fiscalYear})` : ""}
           </h2>
           <p className="text-xs text-muted">อัปโหลดงบ (PDF / Excel / CSV) แยกไฟล์ได้ — AI อ่านและกรอกตัวเลขให้ หน่วย: ล้าน (ต่อหุ้นเป็นบาท)</p>
