@@ -25,6 +25,7 @@ import {
 import { sotp, type MeasuredSegment } from "./finance/sotp";
 import { analyticsFromPrice, analyticsFromYield, horizonReturn, keyRateDurations, priceFromCurve, yieldToWorst, zSpread } from "./finance/bonds";
 import { explainValuation, formatValue } from "./valuation-explain";
+import { scenarioSetSchema } from "./valuation-scenario-schema";
 
 const rate = (d: string) => z.number().min(-1).max(5).describe(`${d} (decimal, 0.05 = 5%)`);
 const money = (d: string) => z.number().describe(d);
@@ -120,6 +121,7 @@ export const dcfSchema = z.object({
     .optional()
     .describe("linear_fade (default, legacy) = one fade growthStart→growthEnd; staged = 2–4 stages, horizon = Σ stage years (≤ 20)"),
   stages: z.array(dcfStageSchema).max(4).optional().describe("forecastMode staged: ordered stages, e.g. high growth / transition / mature"),
+  scenarioSet: scenarioSetSchema,
 });
 
 export const ddmSchema = z.object({
@@ -134,6 +136,7 @@ export const ddmSchema = z.object({
   highGrowthYears: z.number().int().min(1).max(30).default(5),
   terminalGrowth: rate("Long-run growth"),
   inputMeta: inputMetaSchema,
+  scenarioSet: scenarioSetSchema,
 });
 
 const rimScenarioSchema = z.object({
@@ -206,6 +209,7 @@ export const residualIncomeSchema = z.object({
     .optional()
     .describe("Set when this valuation is a saved h-year view of a longer forecast; such snapshots are listed but not counted as the latest valuation of the method"),
   inputMeta: inputMetaSchema,
+  scenarioSet: scenarioSetSchema,
 });
 
 export const multiplesSchema = z.object({
@@ -219,6 +223,8 @@ export const multiplesSchema = z.object({
   targetPBV: z.number().describe("Peer / historical P/BV"),
   targetEvEbitda: z.number().describe("Peer / historical EV/EBITDA"),
   earningsBasis: z.enum(["trailing", "forward"]).optional().describe("Whether EPS / EBITDA and the target multiples are trailing (default) or forward — both sides must use the same basis"),
+  inputMeta: inputMetaSchema,
+  scenarioSet: scenarioSetSchema,
 });
 
 export const bondSchema = z.object({
@@ -243,6 +249,7 @@ export const bondSchema = z.object({
   horizon: z.object({ date: z.string(), reinvestRate: z.number(), exitYield: z.number().optional() }).optional().describe("Realized return if sold on `date`"),
   issuer: z.string().optional(),
   rating: z.string().optional().describe("Credit rating with agency and date, e.g. 'AA- (TRIS, 2026-05)'"),
+  scenarioSet: scenarioSetSchema,
 });
 
 /** The stock models a SOTP segment can be valued with (the same engine as a standalone valuation). */
@@ -257,6 +264,7 @@ export const segmentModelInput = z.discriminatedUnion("method", [
 const lineItem = z.object({ name: z.string().min(1), value: z.number() });
 
 export const sotpSegmentSchema = z.object({
+  id: z.string().max(40).optional().describe("Stable segment id for scenario targeting (falls back to entity, then name)"),
   name: z.string().min(1).describe("Segment / company name"),
   entity: z.string().optional().describe("Ticker or company id — the same entity counted twice is an error"),
   role: z
@@ -316,6 +324,7 @@ export const sotpSchema = z.object({
   holdingDiscount: z.number().min(0).max(0.9).default(0).describe("Holding-company discount (decimal)"),
   holdingDiscountBase: z.enum(["all_segments", "investments_only"]).default("all_segments").describe("Apply the discount to all segments or only to subsidiaries / associates / investments"),
   inputMeta: inputMetaSchema,
+  scenarioSet: scenarioSetSchema,
 });
 
 export const valuationInput = z.discriminatedUnion("method", [
@@ -417,13 +426,28 @@ export function evaluate(input: ValuationInput): EvaluationSummary {
   return summary;
 }
 
-function evaluateCore(input: ValuationInput): EvaluationSummary {
+/**
+ * Headline value only (same model functions as `evaluate`, without the sensitivity grids, reverse DCF
+ * and calculation steps). Used by the scenario, sensitivity, reverse and Monte Carlo layers.
+ */
+export function evaluateLean(input: ValuationInput): EvaluationSummary {
+  return evaluateCore(input, true);
+}
+
+function evaluateCore(input: ValuationInput, lean = false): EvaluationSummary {
   switch (input.method) {
     case "dcf_fcff":
     case "dcf_fcfe": {
       const model = input.method === "dcf_fcff" ? "fcff" : "fcfe";
       const a = input.assumptions as DcfAssumptions;
       const r = dcf(a, model);
+      if (lean)
+        return {
+          value: r.valuePerShare,
+          price: a.currentPrice,
+          upside: r.upside,
+          details: { discountRate: r.discountRate, enterpriseValue: r.enterpriseValue, equityValue: r.equityValue, terminalShareOfValue: r.terminalShareOfValue, errors: r.errors, warnings: r.warnings },
+        };
       const s = dcfSensitivity(a, model);
       const reverse = impliedGrowthDetailed(a, model);
       const scen = a.scenarios?.length ? scenarioAnalysis(a, model, a.scenarios) : null;
@@ -482,6 +506,13 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
         const rows = riForecastRows(a);
         const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: rows, terminal: riTerminal(a) });
         const rimIn = { bookValuePerShare: a.bookValuePerShare, ke, price: a.currentPrice, payoutRatio: a.payoutRatio, forecast: rows, terminal: riTerminal(a) };
+        if (lean)
+          return {
+            value: m.value,
+            price: a.currentPrice,
+            upside: m.value != null ? upsideOf(m.value, a.currentPrice) : null,
+            details: { model: "multi_stage", costOfEquity: ke, errors: m.errors.map((message) => ({ code: "INVALID_INPUT", message })), warnings: m.warnings },
+          };
         const horizons = a.compareHorizons ?? [5, 10];
         return {
           value: m.value,
@@ -542,7 +573,7 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
     }
     case "sotp": {
       const a = input.assumptions;
-      const r = sotp(a.segments.map(measureSegment), a);
+      const r = sotp(a.segments.map((s) => measureSegment(s, lean)), a);
       return {
         value: r.valuePerShare,
         price: a.currentPrice,
@@ -599,7 +630,7 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
 type SotpSegment = z.infer<typeof sotpSegmentSchema>;
 
 /** Value one SOTP segment (100%, in its own currency) with the existing models. */
-export function measureSegment(s: SotpSegment): MeasuredSegment {
+export function measureSegment(s: SotpSegment, lean = false): MeasuredSegment {
   const base = { name: s.name, entity: s.entity, role: s.role, ownership: s.ownership, fx: s.fx, debtAt: s.debtAt, inParentNetDebt: s.inParentNetDebt };
   const src = s.source;
   const out = (m: Pick<MeasuredSegment, "method" | "basis" | "value" | "ownNetDebt"> & { errors?: string[]; warnings?: string[]; source?: string }): MeasuredSegment => ({
@@ -615,7 +646,7 @@ export function measureSegment(s: SotpSegment): MeasuredSegment {
     return out({ method: "multiple", basis: src.basis, value: src.metric * src.multiple, ownNetDebt: null, source: `${src.metricLabel} ${src.metric} × ${src.multiple}${src.source ? ` — ${src.source}` : ""}` });
 
   const v = src.valuation;
-  const r = evaluateCore(v);
+  const r = evaluateCore(v, lean);
   const d = r.details as { enterpriseValue?: number | null; equityValue?: number | null; errors?: { message: string }[]; warnings?: string[] };
   const errors = (d.errors ?? []).map((e) => e.message);
   const warnings = [...(d.warnings ?? [])];
