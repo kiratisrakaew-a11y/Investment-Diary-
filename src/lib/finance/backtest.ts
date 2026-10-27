@@ -175,6 +175,7 @@ export function backtest(x: BacktestInput): BacktestResult {
         noTradeBand: 0,
         allowSell: true,
         cov: null,
+        fractional: !x.useLots,
       });
       if (!r.ok) return fail(`${x.dates[t]}: ${r.violations.join(" · ")}`);
       for (const tr of r.trades) {

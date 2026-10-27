@@ -16,6 +16,7 @@
  */
 import { annualizeReturn, daysBetween, periodReturns, xirrDetailed, type CashFlow, type FlowTiming, type ValuePoint, type XirrResult } from "./returns";
 import { expectedShortfall, historicalVaR, maxDrawdown, MIN_VAR_OBS } from "./risk";
+import { backtestVaR, varTable, type VarBacktest, type VarRow } from "./var-backtesting";
 import { correlation, mean, stdev } from "./stats";
 
 /** Minimum periodic observations before ratios are reported. */
@@ -71,6 +72,10 @@ export interface PerformanceMetrics {
   var95: number | null;
   cvar95: number | null;
   varHorizonDays: number | null;
+  /** Historical VaR / ES at 95% and 99% with sample size, minimum-observation policy and reliability. */
+  varTable: VarRow[];
+  /** Rolling out-of-sample coverage backtests (Kupiec / Christoffersen); unavailable on short samples. */
+  varBacktest: (VarBacktest | { confidence: number; unavailable: string })[];
   riskFreeRate: number;
   /** Realized annualized mean excess return over Rf (arithmetic). */
   realizedExcessReturn: number | null;
@@ -255,6 +260,11 @@ export function computeMetrics(opts: {
     var95: historicalVaR(rs),
     cvar95: expectedShortfall(rs),
     varHorizonDays: N ? 365 / N : null,
+    varTable: varTable(rs),
+    varBacktest: [0.95, 0.99].map((c) => {
+      const b = backtestVaR(rs, c, 250, pr.map((p) => p.date));
+      return "unavailable" in b ? { confidence: c, unavailable: b.unavailable } : b;
+    }),
     riskFreeRate: rf,
     realizedExcessReturn: meanExAnnual,
     sharpe: enough && sdEx > 0 ? (mean(ex) / sdEx) * Math.sqrt(N!) : null,

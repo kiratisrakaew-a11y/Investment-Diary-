@@ -253,7 +253,7 @@ export function createMcpServer() {
     {
       title: "Performance metrics",
       description:
-        "Time-weighted and money-weighted (XIRR) returns, volatility, max drawdown, VaR, risk premium, Sharpe, " +
+        "Time-weighted and money-weighted (XIRR) returns, volatility, max drawdown, historical VaR/ES at 95% and 99% (varTable) with Kupiec/Christoffersen coverage backtests (varBacktest), risk premium, Sharpe, " +
         "Sortino, and vs. benchmark: beta, CAPM expected return, Jensen's alpha, Treynor, information ratio.",
       annotations: { readOnlyHint: true },
     },

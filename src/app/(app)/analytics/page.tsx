@@ -76,6 +76,32 @@ export default async function AnalyticsPage() {
                   formula={na(perf.var95, "ต้องมีอย่างน้อย 100 งวด") ?? "Historical — ควอนไทล์ 5% ของผลตอบแทนรายงวด"}
                 />
                 <Row label="Expected shortfall 95%" value={fmtPct(perf.cvar95)} formula={na(perf.cvar95, "ต้องมีอย่างน้อย 100 งวด") ?? "ค่าเฉลี่ยของ n·5% งวดที่แย่ที่สุด"} />
+                {perf.varTable
+                  .filter((v) => v.confidence === 0.99)
+                  .map((v) => (
+                    <Row
+                      key="v99"
+                      label="VaR / ES 99% (1 งวด)"
+                      value={v.var != null ? `${fmtPct(v.var)} / ${fmtPct(v.es)}` : "–"}
+                      formula={
+                        v.var == null
+                          ? `ต้องมีอย่างน้อย ${v.minRequired} งวด (มี ${v.observations})`
+                          : `Historical · ${v.observations} งวด ≈ ${v.tailObservations.toFixed(1)} จุดในหาง${v.reliable ? "" : " — น้อย ความน่าเชื่อถือต่ำ (ต้อง ≥ 500)"} · √10 ≈ ${fmtPct(v.horizon.tenPeriodScaled.var)} (ประมาณการ)`
+                      }
+                    />
+                  ))}
+                {perf.varBacktest.map((b) => (
+                  <Row
+                    key={`bt${b.confidence}`}
+                    label={`Backtest VaR ${(b.confidence * 100).toFixed(0)}% (rolling 250)`}
+                    value={"unavailable" in b ? "–" : `${b.exceptions} / คาด ${b.expected.toFixed(1)}`}
+                    formula={
+                      "unavailable" in b
+                        ? b.unavailable
+                        : `Kupiec p = ${b.kupiec.pValue.toFixed(3)}${b.kupiec.reject5pct ? " (ปฏิเสธที่ 5%)" : ""} · ${"unavailable" in b.christoffersen ? `Christoffersen: ${b.christoffersen.unavailable}` : `Christoffersen p = ${b.christoffersen.pValue.toFixed(3)}`} · ${b.evaluated} งวดทดสอบ`
+                    }
+                  />
+                ))}
               </tbody>
             </table>
           </div>

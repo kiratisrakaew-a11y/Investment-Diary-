@@ -75,7 +75,10 @@ describe("backtest — costs and turnover", () => {
   it("costs are deducted and attributed; turnover reported", () => {
     const costs = tradingCostsSchema.parse({ commissionPct: 0.2, vatPct: 7, slippageBps: 10, sellTaxPct: 0.1, lotSize: {} });
     const free = backtest(base());
+    const t0 = Date.now();
     const paid = backtest(base({ costs }));
+    // FIX-1 regression: fractional backtests with costs used to take ~5 s (lot = 1e-6 local search).
+    expect(Date.now() - t0).toBeLessThan(1_500);
     expect(paid.costs.total).toBeGreaterThan(0);
     expect(paid.costs.total).toBeCloseTo(paid.costs.commission + paid.costs.vat + paid.costs.slippage + paid.costs.tax, 6);
     expect(paid.trades.reduce((s, t) => s + t.cost, 0)).toBeCloseTo(paid.costs.total, 6);

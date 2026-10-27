@@ -75,6 +75,8 @@ export interface RebalanceInput {
   /** Max Σ|trade| as a share of the total (decimal); omit for none. */
   maxTurnover?: number;
   allowSell: boolean;
+  /** Fractional units (no lots): trade to the continuous target exactly, scaling buys so cash covers costs; no lot search. */
+  fractional?: boolean;
   /** Annualized covariance aligned with `assets` (null → weight-gap distance instead of tracking error). */
   cov: Matrix | null;
 }
@@ -209,7 +211,37 @@ export function rebalance(x: RebalanceInput): RebalanceResult {
   const ideal = x.assets.map((a, i) => (frozen[i] ? q0[i] : (tgt[i] * total) / (a.price as number)));
   const continuousIdeal = distance(ideal, startCash - ideal.reduce((s, qi, i) => s + (qi - q0[i]) * (x.assets[i].price ?? 0), 0));
   const order = x.assets.map((_, i) => i).filter((i) => !frozen[i]);
-  for (const i of order.filter((i) => ideal[i] < q0[i])) {
+  if (x.fractional) {
+    // Sells to the exact target, then one scale s ∈ [0, 1] on all buys: cash after trades and costs is
+    // decreasing in s, so bisection finds the largest affordable s. Exact, no lot-by-lot search.
+    for (const i of order.filter((i) => ideal[i] < q0[i])) {
+      q[i] = tgt[i] === 0 ? 0 : ideal[i];
+      if (!feasible(q, i)) q[i] = q0[i];
+    }
+    const buys = order.filter((i) => ideal[i] > q0[i]);
+    const setS = (sc: number) => buys.forEach((i) => (q[i] = q0[i] + sc * (ideal[i] - q0[i])));
+    const ok = () => cashFor(q) >= x.cashReserve - EPS && (x.maxTurnover == null || turnover(q) <= x.maxTurnover * total + EPS);
+    setS(1);
+    if (!ok()) {
+      let lo = 0;
+      let hi = 1;
+      for (let k = 0; k < 100; k++) {
+        const m = (lo + hi) / 2;
+        setS(m);
+        if (ok()) lo = m;
+        else hi = m;
+      }
+      setS(lo);
+    }
+    // Per-asset limits that a common scale cannot satisfy: minimum trade size and liquidity caps.
+    for (const i of buys) {
+      const a = x.assets[i];
+      const v = (q[i] - q0[i]) * (a.price ?? 0);
+      if (a.maxTradeValue != null && v > a.maxTradeValue) q[i] = q0[i] + a.maxTradeValue / (a.price as number);
+      if (v > EPS && v < c.minTradeValue - EPS) q[i] = q0[i];
+    }
+  }
+  for (const i of x.fractional ? [] : order.filter((i) => ideal[i] < q0[i])) {
     const lot = x.assets[i].lot;
     const lots = Math.floor((q0[i] - ideal[i]) / lot + 1e-9);
     q[i] = q0[i] - lots * lot;
@@ -217,7 +249,7 @@ export function rebalance(x: RebalanceInput): RebalanceResult {
     if (tgt[i] === 0) q[i] = 0;
     if (!feasible(q, i)) q[i] = q0[i];
   }
-  const buys = order.filter((i) => ideal[i] > q0[i]).sort((a, b) => (ideal[b] - q0[b]) * (x.assets[b].price ?? 0) - (ideal[a] - q0[a]) * (x.assets[a].price ?? 0));
+  const buys = (x.fractional ? [] : order.filter((i) => ideal[i] > q0[i])).sort((a, b) => (ideal[b] - q0[b]) * (x.assets[b].price ?? 0) - (ideal[a] - q0[a]) * (x.assets[a].price ?? 0));
   for (const i of buys) {
     const lot = x.assets[i].lot;
     let lots = Math.floor((ideal[i] - q0[i]) / lot + 1e-9);
@@ -231,7 +263,7 @@ export function rebalance(x: RebalanceInput): RebalanceResult {
 
   // 2) Local search: one lot at a time (or a jump to the minimum trade size), best improvement first.
   let best = score(q);
-  for (let iter = 0; iter < 5000; iter++) {
+  for (let iter = 0; iter < (x.fractional ? 0 : 5000); iter++) {
     let move: { i: number; qi: number; s: number } | null = null;
     for (const i of order) {
       const a = x.assets[i];
@@ -259,7 +291,7 @@ export function rebalance(x: RebalanceInput): RebalanceResult {
   }
 
   // Snap to the lot grid (repeated ± lot steps accumulate floating-point error).
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < (x.fractional ? 0 : n); i++) {
     const lot = x.assets[i].lot;
     if (Math.abs(q[i]) > 1e-9) q[i] = Number((q0[i] + Math.round((q[i] - q0[i]) / lot) * lot).toFixed(10));
     else q[i] = 0; // full exit, odd lot included

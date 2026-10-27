@@ -63,6 +63,8 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 | Beta / alpha | OLS of periodic excess returns, with standard errors and R². Jensen's alpha on annual rates is shown as an approximation. Beta is null when Var(benchmark) = 0 |
 | IR / tracking error | `mean(active)×N / (σ(active)×√N)` |
 | VaR / ES | Historical, ≥ 100 observations. ES averages the worst n(1 − c) observations, with a fractional boundary |
+| VaR / ES 99% (v3) | `varTable`: 95% (≥ 100 obs) and 99% (≥ 250 obs; `reliable` only with ≥ 500). Horizon is one observation period; the √10 figure is labelled an i.i.d. approximation. See `docs/roadmap-v3/04_VAR_AND_BACKTEST.md` |
+| VaR coverage backtest (v3) | `varBacktest` (`var-backtesting.ts`): rolling 250-period historical VaR, out of sample. Exceptions vs expected; Kupiec LR_uc ~ χ²₁; Christoffersen independence ~ χ²₁ only with ≥ 5 exceptions; conditional coverage ~ χ²₂. Needs ≥ 350 periods |
 
 ## 3. Equity valuation — `src/lib/finance/valuation.ts`
 

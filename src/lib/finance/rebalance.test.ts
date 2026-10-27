@@ -112,4 +112,22 @@ describe("rebalance", () => {
     expect(r.distance.measure).toBe("tracking_error");
     expect(r.distance.after).toBeLessThan(r.distance.before);
   });
+
+  it("fractional mode (FIX-1): exact continuous targets, buys scaled so cash covers costs, no lot search", () => {
+    const t0 = Date.now();
+    const r = rebalance(base({
+      fractional: true,
+      assets: [
+        { symbol: "A", price: 35, quantity: 3_000, lot: 1e-6, target: 0.5 },
+        { symbol: "B", price: 150, quantity: 0, lot: 1e-6, target: 0.5 },
+      ],
+    }));
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.cash.end).toBeGreaterThanOrEqual(-1e-6);
+    expect(r.cash.end).toBeLessThan(1); // fully invested apart from costs
+    // Sold A exactly to 50% of the starting total; B bought with what remains after costs.
+    const total = 3_000 * 35 + 50_000;
+    expect(r.trades[0].finalQuantity * 35).toBeCloseTo(0.5 * total, 6);
+    expect(r.trades[1].value + r.totals.cost).toBeCloseTo(50_000 + r.trades[0].value - 0, 4);
+  });
 });
