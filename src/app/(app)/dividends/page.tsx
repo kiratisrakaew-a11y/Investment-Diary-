@@ -17,7 +17,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 
 export default async function DividendsPage() {
   const [assets, events, income] = await Promise.all([listAssets(), listDividendEvents(), getDividendIncome()]);
-  const stocks = assets.filter((a) => ["thai_stock", "us_stock", "fund"].includes(a.assetClass)).map((a) => a.symbol);
+  const stocks = assets.filter((a) => !a.archivedAt && ["thai_stock", "us_stock", "fund"].includes(a.assetClass)).map((a) => a.symbol);
   const today = income.asOf;
   const sum = (status: string, past: boolean) =>
     income.rows.filter((r) => r.status === status && (past ? r.month <= today.slice(0, 7) : r.month >= today.slice(0, 7))).reduce((a, r) => a + (r.status === "received" ? (r.receivedThb ?? 0) : (r.netThb ?? 0)), 0) +

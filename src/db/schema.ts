@@ -65,8 +65,28 @@ export const assets = pgTable("assets", {
   credit: jsonb("credit"),
   /** Bond metadata (issuer type / country, coupon type, call features, identifiers, risk-free proxy flag) — bondTermsSchema. */
   bondTerms: jsonb("bond_terms"),
+  /** Presentation only: hidden from the holdings "other assets" chips (never from accounting). Null = visible. */
+  hiddenInHoldingsAt: timestamp("hidden_in_holdings_at"),
+  /** Reversible inactivity: excluded by default from new selections (optimizer universe, pickers); history kept. */
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/** Audit log of asset lifecycle changes; no FK so the record survives a permanent delete. */
+export const assetLifecycleEvents = pgTable(
+  "asset_lifecycle_events",
+  {
+    id: serial("id").primaryKey(),
+    assetId: integer("asset_id").notNull(),
+    symbol: text("symbol").notNull(),
+    action: text("action").notNull(),
+    result: text("result").notNull(),
+    source: text("source").notNull().default("web"),
+    detail: jsonb("detail"),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("asset_lifecycle_asset_idx").on(t.assetId)],
+);
 
 export const notes = pgTable(
   "notes",

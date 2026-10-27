@@ -51,10 +51,6 @@ export async function updateAssetProfile(input: z.input<typeof assetProfileInput
   return row;
 }
 
-export async function deleteAsset(id: number) {
-  await getDb().delete(schema.assets).where(eq(schema.assets.id, id));
-}
-
 /** Resolve symbols to ids, throwing a readable error for unknown symbols. */
 export async function resolveSymbols(symbols: string[]): Promise<number[]> {
   const ids: number[] = [];

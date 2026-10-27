@@ -114,6 +114,12 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
   const levelsById = new Map<number, [string, number][]>();
   const seriesWarnings: string[] = [];
   const usable = candidates.filter((a) => {
+    // Archived = not a new candidate by default (held assets cannot be archived, so holdings never vanish).
+    // Hidden-from-holdings is presentation only and does not affect eligibility.
+    if (a.archivedAt) {
+      skipped.push({ symbol: a.symbol, reason: "เก็บถาวร — ไม่ถูกเลือกโดยค่าเริ่มต้น (นำกลับมาใช้งานที่หน้าสินทรัพย์)" });
+      return false;
+    }
     const window = prices.get(a.id)?.filter(([d]) => d >= from) ?? [];
     if (frequency === "daily" ? window.length < MIN_OBS : window.length < 2) {
       skipped.push({ symbol: a.symbol, reason: `มีราคาเพียง ${window.length} วัน (ต้องการ ≥ ${frequency === "daily" ? MIN_OBS : 2})` });

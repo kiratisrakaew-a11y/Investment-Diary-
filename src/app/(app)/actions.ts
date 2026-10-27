@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import type { AssetClass } from "@/db/schema";
-import { createAsset, deleteAsset, getAsset, updateAsset, updateAssetProfile } from "@/server/services/assets";
+import { createAsset, getAsset, updateAsset, updateAssetProfile } from "@/server/services/assets";
+import { changeAssetLifecycle } from "@/server/services/asset-lifecycle";
+import type { LifecycleAction } from "@/lib/asset-lifecycle";
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
 import { createTransaction, deleteTransaction } from "@/server/services/transactions";
@@ -143,9 +145,11 @@ export async function updateBondTermsAction(id: number, _: ActionState, f: FormD
   }
 }
 
-export async function deleteAssetAction(id: number) {
-  await deleteAsset(id);
+/** Hide / archive / restore / guarded delete by asset id; returns the typed result for the UI. */
+export async function assetLifecycleAction(assetId: number, action: LifecycleAction, confirmSymbol?: string) {
+  const r = await changeAssetLifecycle({ assetId, action, confirmSymbol, source: "web" });
   revalidatePath("/", "layout");
+  return { status: r.status, message: r.message, unchanged: !!r.unchanged, dependencies: r.dependencies ?? null };
 }
 
 export async function addPriceAction(_: ActionState, f: FormData): Promise<ActionState> {

@@ -9,12 +9,13 @@ import { PriceChart } from "@/components/charts";
 import { NoteCard } from "@/components/NoteCard";
 import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
 import { ActionForm } from "@/components/ActionForm";
-import { ConfirmButton } from "@/components/ConfirmButton";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { AssetProfileForm } from "@/components/AssetProfileForm";
 import { today } from "@/lib/validation";
 import { readBondTerms, riskFreeEligibility } from "@/lib/finance/bond-meta";
-import { deleteAssetAction, updateBondTermsAction } from "../../actions";
+import { updateBondTermsAction } from "../../actions";
+import { AssetActionsMenu } from "@/components/AssetActionsMenu";
+import { assetDependencies } from "@/server/services/asset-lifecycle";
 import { ASSET_CLASS_LABEL, TX_TYPE_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
 export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -29,13 +30,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     listAssets(),
   ]);
   const pos = summary.positions.find((p) => p.assetId === id);
+  const deps = await assetDependencies(id);
   const terms = readBondTerms(asset.bondTerms);
   const eligibility = riskFreeEligibility(asset, terms);
 
   return (
     <>
       <PageHeader
-        title={`${asset.symbol} · ${asset.name}`}
+        title={`${asset.symbol} · ${asset.name}${asset.archivedAt ? " (เก็บถาวร)" : asset.hiddenInHoldingsAt ? " (ซ่อนอยู่)" : ""}`}
         subtitle={`${ASSET_CLASS_LABEL[asset.assetClass]} · ${asset.currency} · ราคา: ${asset.priceSource}${asset.providerSymbol ? ` (${asset.providerSymbol})` : ""}${asset.couponRate ? ` · คูปอง ${asset.couponRate}%` : ""}${asset.maturityDate ? ` · ครบกำหนด ${asset.maturityDate}` : ""}`}
         action={
           <div className="flex items-center gap-3">
@@ -43,7 +45,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               <Link href={`/valuation/new?symbol=${asset.symbol}`} className="btn-ghost">ประเมินมูลค่า</Link>
             )}
             {asset.assetClass === "bond" && <Link href="/bonds" className="btn-ghost">คำนวณ YTM</Link>}
-            <ConfirmButton onConfirm={deleteAssetAction.bind(null, id)} label="ลบสินทรัพย์" message="ลบสินทรัพย์นี้พร้อมรายการและราคาทั้งหมด?" />
+            <AssetActionsMenu
+              variant="page"
+              asset={{ id, symbol: asset.symbol }}
+              hidden={!!asset.hiddenInHoldingsAt}
+              archived={!!asset.archivedAt}
+              held={(pos?.quantity ?? 0) !== 0}
+              dependencyCount={deps ? Object.values(deps).reduce((a, b) => a + b, 0) : 0}
+            />
           </div>
         }
       />

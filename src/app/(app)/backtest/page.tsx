@@ -6,7 +6,7 @@ import { Empty, PageHeader } from "@/components/ui";
 export default async function BacktestPage() {
   const [assets, prices] = await Promise.all([listAssets(), loadPriceHistory()]);
   const usable = assets
-    .filter((a) => a.assetClass !== "cash" && (prices.get(a.id)?.length ?? 0) >= 2)
+    .filter((a) => !a.archivedAt && a.assetClass !== "cash" && (prices.get(a.id)?.length ?? 0) >= 2)
     .map((a) => {
       const p = prices.get(a.id)!;
       return { symbol: a.symbol, assetClass: a.assetClass, from: p[0][0], to: p[p.length - 1][0], count: p.length };

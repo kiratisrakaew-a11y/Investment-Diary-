@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-27 — PR9 + PR10: asset hide / archive / guarded delete
+- Assets gain `hidden_in_holdings_at` and `archived_at` and a new `asset_lifecycle_events` log. Migration 0014 is additive.
+- Typed results: `HIDDEN`, `ARCHIVED`, `RESTORED`, `DELETED`, `BLOCKED_HAS_DEPENDENCIES`, `FORBIDDEN`, `NOT_FOUND`. The server checks every rule again inside a transaction with a row lock, and the result is logged.
+- **Hide** affects only the "other assets" chips on `/holdings`. It never changes accounting, prices, valuations or optimizer eligibility.
+- **Archive** keeps all history. The asset is excluded from the optimizer universe (with a reason), the dividend universe, factor, backtest and transaction pickers, and the price form.
+- Hide and archive are refused for a position still held.
+- **Delete:**
+  - Allowed only with zero transactions, prices, valuations, statements, uploads, dividend events and notes, and only when the exact symbol is typed.
+  - It never cascades. The old one-click delete, which cascaded through transactions and prices, is removed.
+- UI: a compact ⋯ menu on each chip with keyboard support, "ซ่อนไว้" / "เก็บถาวร" groups, and a delete dialog that requires the symbol to be typed.
+- REST `GET/POST /api/v1/assets/{id}/lifecycle` returns 404 / 403 / 409 / 200. MCP adds `manage_asset_lifecycle`.
+- `createAsset` on an existing symbol returns it unchanged, so imports and `add_asset` never un-hide or un-archive an asset. Buying an archived asset again records the trade normally, and the archived flag stays until it is restored.
+- `npm run check:asset-lifecycle` is a self-cleaning database regression with 13 checks: accounting and TWR are unchanged after hide, deletes are blocked with prices present, concurrent deletes are handled, and archived bond history is kept.
+
 ## 2026-10-27 — Phase 4: valuation UI to the roadmap layout
 - **`/valuation` overview:** one glass surface with text metrics (valued, upside > 0, stale prices, values changed by the new formulas), search by stock or method, and sorting by upside / date / name.
   - Each row shows the last stored price date. A stale-price badge uses the Settings price threshold.

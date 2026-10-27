@@ -99,6 +99,13 @@
       "when": 1793097954740,
       "tag": "0013_asset_bond_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793107972490,
+      "tag": "0014_asset_lifecycle",
+      "breakpoints": true
     }
   ]
 }

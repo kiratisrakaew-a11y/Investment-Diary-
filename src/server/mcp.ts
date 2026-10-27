@@ -18,6 +18,7 @@ import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
 import { getRiskFree } from "./services/risk-free";
+import { changeAssetLifecycle } from "./services/asset-lifecycle";
 import { bondHoldings, bondLadderInput, planBondLadder } from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
@@ -188,6 +189,23 @@ export function createMcpServer() {
       inputSchema: importPricesInput.shape,
     },
     safe(async (x) => importPrices(x)),
+  );
+
+  server.registerTool(
+    "manage_asset_lifecycle",
+    {
+      title: "Hide / archive / restore / delete an asset (by id)",
+      description:
+        "hide/unhide: holdings 'other assets' chips only (never accounting, prices, valuations or optimizer eligibility; not for held positions). " +
+        "archive/unarchive: reversible; archived assets are excluded by default from the optimizer universe; history kept; not for held positions. " +
+        "delete: permanent, only when NO transactions, prices, valuations, statements, dividend events or notes reference the asset, and confirmSymbol must equal the symbol; otherwise BLOCKED_HAS_DEPENDENCIES with counts (never cascades). Use list_assets for ids.",
+      inputSchema: {
+        assetId: z.number().int().positive(),
+        action: z.enum(["hide", "unhide", "archive", "unarchive", "delete"]),
+        confirmSymbol: z.string().optional(),
+      },
+    },
+    safe(async ({ assetId, action, confirmSymbol }) => changeAssetLifecycle({ assetId, action, confirmSymbol, source: "mcp" })),
   );
 
   server.registerTool(

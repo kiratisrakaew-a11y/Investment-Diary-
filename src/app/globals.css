@@ -202,6 +202,9 @@ body {
 .table tbody tr:hover td {
   @apply bg-panel-2/60;
 }
+.menu-item {
+  @apply block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
 .num {
   @apply text-right tabular-nums;
 }

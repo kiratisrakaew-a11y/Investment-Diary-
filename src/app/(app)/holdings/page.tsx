@@ -12,6 +12,8 @@ import { DataQualityPanel } from "@/components/DataQuality";
 import type { Position } from "@/lib/finance/portfolio";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
+import { AssetActionsMenu } from "@/components/AssetActionsMenu";
+import { dependencyCounts } from "@/server/services/asset-lifecycle";
 
 function PriceBadges({ p }: { p: Position }) {
   const badges: string[] = [];
@@ -32,11 +34,53 @@ function PriceBadges({ p }: { p: Position }) {
   );
 }
 
+interface Chip {
+  id: number;
+  symbol: string;
+  extra: string;
+  hidden: boolean;
+  archived: boolean;
+  deps: number;
+}
+
+function ChipGroup({ title, items }: { title?: string; items: Chip[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2">
+      {title && <div className="mb-1 text-[11px] font-medium text-muted">{title}</div>}
+      <ul className="flex flex-wrap gap-1.5">
+        {items.map((a) => (
+          <li key={a.id} className="relative flex items-center gap-1 rounded-lg border border-border bg-panel-2/60 py-0.5 pr-0.5 pl-2 text-xs">
+            <Link href={`/holdings/${a.id}`} className="font-medium hover:text-accent">
+              {a.symbol}
+            </Link>
+            {a.extra && <span className="text-[11px] text-muted">{a.extra}</span>}
+            <AssetActionsMenu asset={{ id: a.id, symbol: a.symbol }} hidden={a.hidden} archived={a.archived} held={false} dependencyCount={a.deps} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default async function HoldingsPage() {
   const [summary, assets, vals] = await Promise.all([getPortfolioSummary(), listAssets(), latestValuationBySymbol()]);
   const open = summary.positions.filter((p) => p.quantity > 0);
   const closed = summary.positions.filter((p) => p.quantity === 0);
   const untouched = assets.filter((a) => !summary.positions.some((p) => p.assetId === a.id));
+  const byId = new Map(assets.map((a) => [a.id, a]));
+  const depCounts = await dependencyCounts([...closed.map((p) => p.assetId), ...untouched.map((a) => a.id)]);
+  const chip = (id: number, symbol: string, extra: string): Chip => ({
+    id,
+    symbol,
+    extra,
+    hidden: !!byId.get(id)?.hiddenInHoldingsAt,
+    archived: !!byId.get(id)?.archivedAt,
+    deps: depCounts.get(id) ?? 0,
+  });
+  const sold = closed.map((p) => chip(p.assetId, p.symbol, `รับรู้ ${fmtThb(p.realizedPnlThb + p.incomeThb)}`));
+  const never = untouched.map((a) => chip(a.id, a.symbol, ""));
+  const isVisible = (x: Chip) => !x.hidden && !x.archived;
 
   return (
     <>
@@ -122,14 +166,23 @@ export default async function HoldingsPage() {
       </Section>
 
       {(closed.length > 0 || untouched.length > 0) && (
-        <Section title="สินทรัพย์อื่น ๆ (ขายหมดแล้ว / ยังไม่ได้ซื้อ)">
-          <div className="flex flex-wrap gap-2 text-sm">
-            {[...closed.map((p) => ({ id: p.assetId, symbol: p.symbol, extra: `รับรู้ ${fmtThb(p.realizedPnlThb + p.incomeThb)}` })), ...untouched.map((a) => ({ id: a.id, symbol: a.symbol, extra: "" }))].map((a) => (
-              <Link key={a.id} href={`/holdings/${a.id}`} className="btn-ghost">
-                {a.symbol} {a.extra && <span className="text-xs text-muted">{a.extra}</span>}
-              </Link>
-            ))}
-          </div>
+        <Section title="สินทรัพย์อื่น ๆ (ไม่ได้ถืออยู่)">
+          {/* Presentation only: hidden / archived chips never change accounting, prices or valuations. */}
+          <ChipGroup title="ขายหมดแล้ว" items={sold.filter(isVisible)} />
+          <ChipGroup title="ยังไม่ได้ซื้อ / ติดตาม" items={never.filter(isVisible)} />
+          {[...sold, ...never].some((x) => x.hidden && !x.archived) && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-muted">ซ่อนไว้ ({[...sold, ...never].filter((x) => x.hidden && !x.archived).length})</summary>
+              <ChipGroup items={[...sold, ...never].filter((x) => x.hidden && !x.archived)} />
+            </details>
+          )}
+          {[...sold, ...never].some((x) => x.archived) && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-muted">เก็บถาวร ({[...sold, ...never].filter((x) => x.archived).length}) — ไม่ถูกเลือกในการจัดพอร์ตโดยค่าเริ่มต้น</summary>
+              <ChipGroup items={[...sold, ...never].filter((x) => x.archived)} />
+            </details>
+          )}
+          <p className="mt-3 text-[11px] text-muted">⋯ = ซ่อน / เก็บถาวร / ลบถาวร · การซ่อนมีผลแค่หน้านี้ ไม่กระทบผลตอบแทน ประวัติ valuation หรือการจัดพอร์ต · ลบถาวรได้เฉพาะสินทรัพย์ที่ไม่มีข้อมูลอ้างถึง</p>
         </Section>
       )}
 
@@ -138,7 +191,7 @@ export default async function HoldingsPage() {
           <AddAssetForm />
         </Section>
         <Section title="บันทึกราคาเอง (พันธบัตร / กองทุน / ราคาที่ดึงไม่ได้)">
-          {assets.length ? <AddPriceForm assets={assets} /> : <Empty>เพิ่มสินทรัพย์ก่อน</Empty>}
+          {assets.length ? <AddPriceForm assets={assets.filter((a) => !a.archivedAt)} /> : <Empty>เพิ่มสินทรัพย์ก่อน</Empty>}
         </Section>
       </div>
 

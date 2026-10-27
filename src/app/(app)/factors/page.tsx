@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui";
 
 export default async function FactorsPage() {
   const assets = await listAssets();
-  const symbols = assets.filter((a) => ["thai_stock", "us_stock", "fund"].includes(a.assetClass)).map((a) => a.symbol);
+  const symbols = assets.filter((a) => !a.archivedAt && ["thai_stock", "us_stock", "fund"].includes(a.assetClass)).map((a) => a.symbol);
   return (
     <>
       <PageHeader

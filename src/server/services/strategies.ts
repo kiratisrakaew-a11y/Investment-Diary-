@@ -160,10 +160,13 @@ export function candidatesAsOf(data: DividendData, symbols: string[], cutoff: st
 
 export function dividendUniverse(data: DividendData, symbols?: string[]) {
   const want = symbols?.map((s) => s.toUpperCase());
-  const pool = data.assets.filter((a) => ["thai_stock", "us_stock", "fund"].includes(a.assetClass) && (!want || want.includes(a.symbol.toUpperCase())));
+  // Archived assets are not new candidates (history elsewhere is unaffected); naming one explicitly is an error.
+  const pool = data.assets.filter((a) => !a.archivedAt && ["thai_stock", "us_stock", "fund"].includes(a.assetClass) && (!want || want.includes(a.symbol.toUpperCase())));
   if (want) {
     const missing = want.filter((s) => !data.assets.some((a) => a.symbol.toUpperCase() === s));
     if (missing.length) throw new Error(`ไม่พบ ${missing.join(", ")} ในรายการสินทรัพย์`);
+    const archived = data.assets.filter((a) => a.archivedAt && want.includes(a.symbol.toUpperCase())).map((a) => a.symbol);
+    if (archived.length) throw new Error(`${archived.join(", ")} ถูกเก็บถาวร — นำกลับมาใช้งานก่อนจึงเลือกได้`);
   }
   return pool.map((a) => a.symbol);
 }

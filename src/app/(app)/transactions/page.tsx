@@ -35,9 +35,13 @@ export default async function TransactionsPage() {
               <label className="label">สินทรัพย์ (เว้นว่างถ้าฝาก/ถอน)</label>
               <select name="symbol" className="input">
                 <option value="">—</option>
-                {assets.map((a) => (
-                  <option key={a.id} value={a.symbol}>{a.symbol} ({a.currency})</option>
-                ))}
+                {assets
+                  .filter((a) => !a.archivedAt)
+                  .map((a) => (
+                    <option key={a.id} value={a.symbol}>
+                      {a.symbol} ({a.currency})
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
