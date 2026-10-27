@@ -25,6 +25,12 @@ export const constraintsInput = z
     maxDuration: z.number().min(0).max(50).optional().describe("Max portfolio modified duration (years) of the risky sleeve"),
     maxDv01Thb: z.number().positive().optional().describe("Max portfolio DV01 in THB per 1bp"),
     durationOverride: z.record(z.string(), z.number().min(0).max(50)).optional().describe("Modified duration for non-bond holdings, e.g. bond funds"),
+    maxPerCurrency: z.record(z.string(), z.number().gt(0).max(1)).optional().describe("Cap by asset currency, e.g. { USD: 0.3 }"),
+    maturityBuckets: z
+      .array(z.object({ name: z.string().min(1), fromYears: z.number().min(0), toYears: z.number().positive(), min: z.number().min(0).max(1).optional(), max: z.number().min(0).max(1).optional() }))
+      .max(10)
+      .optional()
+      .describe("Bond maturity buckets [fromYears, toYears) with min/max combined weight; bonds without a maturity are reported unclassified"),
     maxExpectedShortfall: z.number().optional().describe("Not supported by the mean-variance QP — rejected with UNSUPPORTED_CONSTRAINT"),
     maxTurnover: z.number().optional().describe("Not supported by the mean-variance QP — rejected with UNSUPPORTED_CONSTRAINT"),
   })
@@ -38,6 +44,9 @@ export interface AssetRiskMeta {
   sector: string | null;
   rating: string | null;
   modifiedDuration: number | null;
+  currency?: string;
+  /** Years to maturity (bonds only). */
+  yearsToMaturity?: number | null;
 }
 
 export interface BuiltConstraints {
@@ -116,13 +125,39 @@ export function buildConstraints(meta: AssetRiskMeta[], base: { min: number; max
     if (!(sleeveValueThb > 0)) warnings.push("ไม่ทราบมูลค่าพอร์ต — ข้ามข้อจำกัด DV01");
     else linear.push({ name: "DV01 พอร์ต (บาท)", a: durations.map((d) => d * sleeveValueThb * 0.0001), hi: c.maxDv01Thb });
   }
+  currencyAndMaturityRows(meta, c, linear, warnings);
   if (unclassified.issuer.length) warnings.push(`ยังไม่ระบุผู้ออก (ไม่อยู่ใต้ cap ผู้ออก): ${unclassified.issuer.join(", ")}`);
   if (unclassified.sector.length) warnings.push(`ยังไม่ระบุหมวด (ไม่อยู่ใต้ cap หมวด): ${unclassified.sector.join(", ")}`);
   if (linear.length) bounds.linear = linear;
   return { bounds, unclassified, warnings, unsupported, durations };
 }
 
-/** Weight by issuer / sector / rating / asset class plus duration and DV01 for a weight vector. */
+/** Currency and maturity-bucket rows (PR4), appended to the same linear constraint list. */
+function currencyAndMaturityRows(meta: AssetRiskMeta[], c: ConstraintsInput, linear: LinearConstraint[], warnings: string[]) {
+  const row = (idx: number[]) => meta.map((_, i) => (idx.includes(i) ? 1 : 0));
+  if (c.maxPerCurrency) {
+    for (const [cur, max] of Object.entries(c.maxPerCurrency)) {
+      const idx = meta.map((m, i) => (m.currency?.toUpperCase() === cur.toUpperCase() ? i : -1)).filter((i) => i >= 0);
+      if (idx.length) linear.push({ name: `สกุล ${cur.toUpperCase()}`, a: row(idx), hi: max });
+      else warnings.push(`ไม่มีสินทรัพย์สกุล ${cur.toUpperCase()} — ข้อจำกัดนี้ไม่มีผล`);
+    }
+  }
+  if (c.maturityBuckets?.length) {
+    const noMat = meta.filter((m) => m.assetClass === "bond" && m.yearsToMaturity == null).map((m) => m.symbol);
+    if (noMat.length) warnings.push(`พันธบัตรไม่มีวันครบกำหนด ไม่ถูกจัดกลุ่มอายุ: ${noMat.join(", ")}`);
+    for (const b of c.maturityBuckets) {
+      if (!(b.toYears > b.fromYears)) {
+        warnings.push(`ช่วงอายุ ${b.name}: toYears ต้องมากกว่า fromYears`);
+        continue;
+      }
+      const idx = meta.map((m, i) => (m.assetClass === "bond" && m.yearsToMaturity != null && m.yearsToMaturity >= b.fromYears && m.yearsToMaturity < b.toYears ? i : -1)).filter((i) => i >= 0);
+      if (!idx.length && (b.min ?? 0) > 0) linear.push({ name: `อายุ ${b.name}`, a: row(idx), lo: b.min });
+      else if (idx.length) linear.push({ name: `อายุ ${b.name} (${b.fromYears}–${b.toYears} ปี)`, a: row(idx), lo: b.min, hi: b.max });
+    }
+  }
+}
+
+/** Weight by issuer / sector / rating / asset class / currency plus duration and DV01 for a weight vector. */
 export function exposureReport(meta: AssetRiskMeta[], w: number[], durations: number[], sleeveValueThb: number) {
   const agg = (key: (m: AssetRiskMeta) => string | null, fallback: string) => {
     const m = new Map<string, number>();
@@ -138,6 +173,7 @@ export function exposureReport(meta: AssetRiskMeta[], w: number[], durations: nu
     bySector: agg((m) => m.sector, "ไม่ระบุ"),
     byRating: agg((m) => (m.assetClass === "bond" ? (m.rating ?? "unrated") : null), "ไม่ใช่พันธบัตร"),
     byAssetClass: agg((m) => m.assetClass, "-"),
+    byCurrency: agg((m) => m.currency ?? null, "-"),
     duration,
     dv01Thb: sleeveValueThb > 0 ? duration * sleeveValueThb * 0.0001 : null,
   };

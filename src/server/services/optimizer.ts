@@ -14,9 +14,10 @@ import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import { loadAdjPriceHistory, loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import { bondExpectedReturn, type BondExpected } from "@/lib/finance/bond-expected";
 import { MIN_OBS_BY_FREQUENCY, bondReturnInputs, resampleLevels, type SampleFrequency } from "@/lib/finance/bond-returns";
 import { alignWithBenchmark, buildLevelSeries, commonDates, returnsOn, type ReturnBasis } from "@/lib/finance/return-series";
-import { getSettings } from "./settings";
+import { getSettings, getYieldCurve } from "./settings";
 import { getRiskFree } from "./risk-free";
 import type { ResolvedRiskFree, RiskFreeRequest } from "@/lib/finance/risk-free";
 import { allTransactions } from "./transactions";
@@ -38,6 +39,11 @@ export interface UniverseAsset {
   sector: string | null;
   rating: string | null;
   modifiedDuration: number | null;
+  currency: string;
+  /** Bonds: years to maturity from today. */
+  yearsToMaturity: number | null;
+  /** Bonds: forward horizon expected return (used when bondReturnMethod = yield_horizon). */
+  bondExpected: BondExpected | null;
 }
 
 export interface OptimizerUniverse {
@@ -75,17 +81,18 @@ export interface OptimizerUniverse {
  * and the covariance matrix. Default basis: price return (closes); total_return uses the
  * provider's adjusted closes and excludes assets without full coverage.
  */
-export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis; riskFree?: RiskFreeRequest; frequency?: SampleFrequency } = {}): Promise<OptimizerUniverse> {
+export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], opts: { withSeries?: boolean; returnBasis?: ReturnBasis; riskFree?: RiskFreeRequest; frequency?: SampleFrequency; bond?: { horizonYears?: number; rateShiftBp?: number } } = {}): Promise<OptimizerUniverse> {
   const basis = opts.returnBasis ?? "price_return";
   const frequency = opts.frequency ?? "daily";
   const minObs = MIN_OBS_BY_FREQUENCY[frequency];
-  const [assets, txRows, prices, fx, settings, adj] = await Promise.all([
+  const [assets, txRows, prices, fx, settings, adj, curve] = await Promise.all([
     listAssets(),
     allTransactions(),
     loadPriceHistory(),
     loadFxHistory(),
     getSettings(),
     basis === "total_return" ? loadAdjPriceHistory() : Promise.resolve(null),
+    getYieldCurve(),
   ]);
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   // Portfolio Rf from the resolver (curve → Settings fallback); without a curve this equals Settings as before.
@@ -218,9 +225,34 @@ export async function loadUniverse(lookbackDays = 365 * 3, symbols?: string[], o
         sector: a.sector ?? null,
         rating: a.assetClass === "bond" ? (ratingOf(a.credit) ?? "unrated") : null,
         modifiedDuration: a.assetClass === "bond" ? bondDuration(a, prices.get(a.id)) : null,
+        currency: a.currency,
+        yearsToMaturity: a.assetClass === "bond" && a.maturityDate ? Math.max(0, (Date.parse(a.maturityDate) - Date.parse(today())) / (365.25 * 86_400_000)) : null,
+        bondExpected: a.assetClass === "bond" ? bondForward(a, prices.get(a.id), curve, opts.bond) : null,
       };
     }),
   };
+}
+
+/** Forward bond expected return from the last stored price (curve only when its currency matches the bond). */
+function bondForward(
+  a: { couponRate: number | null; maturityDate: string | null; faceValue: number | null; couponFrequency: number | null; dayCount: string | null; currency: string; credit: unknown },
+  series: [string, number][] | undefined,
+  curve: Awaited<ReturnType<typeof getYieldCurve>>,
+  o: { horizonYears?: number; rateShiftBp?: number } = {},
+): BondExpected {
+  const last = series?.[series.length - 1];
+  if (!last) return { ok: false, reason: "ไม่มีราคา" };
+  const credit = creditProfileSchema.safeParse(a.credit ?? {});
+  const curveOk = curve && (curve.currency ? curve.currency === a.currency : a.currency === "THB");
+  return bondExpectedReturn({
+    ...a,
+    cleanPerUnit: last[1],
+    settlement: today(),
+    horizonYears: o.horizonYears,
+    rateShiftBp: o.rateShiftBp,
+    curve: curveOk ? curve.points : null,
+    credit: credit.success ? { pdAnnual: credit.data.pd?.annual ?? null, lgd: credit.data.lgd?.value ?? null } : null,
+  });
 }
 
 function ratingOf(credit: unknown): string | null {
@@ -242,10 +274,13 @@ function bondDuration(a: Parameters<typeof specFromBondAsset>[0] & { faceValue: 
 
 export type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
 
-export function expectedReturns(u: OptimizerUniverse, method: ReturnMethod, overrides: Record<string, number> = {}) {
+export type BondReturnMethod = "same_as_other" | "yield_horizon";
+
+export function expectedReturns(u: OptimizerUniverse, method: ReturnMethod, overrides: Record<string, number> = {}, bondMethod: BondReturnMethod = "same_as_other") {
   return u.assets.map((a) => {
     const o = overrides[a.symbol];
     if (o != null) return o;
+    if (bondMethod === "yield_horizon" && a.assetClass === "bond" && a.bondExpected?.ok) return a.bondExpected.expectedReturn;
     const capm = a.capmReturn ?? a.historicalReturn;
     if (method === "capm" || method === "black_litterman") return capm;
     if (method === "blend") return 0.5 * a.historicalReturn + 0.5 * capm;
@@ -281,18 +316,32 @@ export interface OptimizeParams {
   riskFree?: RiskFreeRequest;
   /** Common-calendar sampling (default daily). */
   frequency?: SampleFrequency;
+  /** Bond expected returns: same estimator as other assets (default) or forward yield / horizon return. */
+  bondReturnMethod?: BondReturnMethod;
+  bondHorizonYears?: number;
+  bondRateShiftBp?: number;
 }
 
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeParams) {
-  const u = await loadUniverse(p.lookbackDays, p.symbols, { withSeries: true, returnBasis: p.returnBasis, riskFree: p.riskFree, frequency: p.frequency });
+  const u = await loadUniverse(p.lookbackDays, p.symbols, {
+    withSeries: true,
+    returnBasis: p.returnBasis,
+    riskFree: p.riskFree,
+    frequency: p.frequency,
+    bond: { horizonYears: p.bondHorizonYears, rateShiftBp: p.bondRateShiftBp },
+  });
   if (!u.ok) return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
   const method = p.returnMethod ?? "blend";
-  let mu = expectedReturns(u, method, p.overrides);
+  const bondMethod = p.bondReturnMethod ?? "same_as_other";
+  let mu = expectedReturns(u, method, p.overrides, bondMethod);
   let cov = baseCov;
   const extraWarnings: string[] = [];
+  if (bondMethod === "yield_horizon")
+    for (const a of u.assets.filter((x) => x.assetClass === "bond" && !x.bondExpected?.ok && p.overrides?.[x.symbol] == null))
+      extraWarnings.push(`${a.symbol}: คำนวณผลตอบแทนคาดหวังจาก yield ไม่ได้ (${a.bondExpected && !a.bondExpected.ok ? a.bondExpected.reason : "ไม่ใช่พันธบัตร"}) — ใช้วิธี ${method} แทน`);
   let bl: ReturnType<typeof blackLittermanSummary> | null = null;
   if (method === "black_litterman") {
     if (!p.blackLitterman) throw new OptimizerError({ code: "INVALID_INPUT", message: "Black–Litterman ต้องระบุ marketWeights" });
@@ -428,6 +477,14 @@ export async function optimizePortfolio(p: OptimizeParams) {
       : {}),
     riskyShare: r.riskyShare,
     riskFreeShare: r.riskFreeShare,
+    riskFreeSleeve: {
+      share: r.riskFreeShare,
+      note: "สัดส่วนปลอดความเสี่ยงเป็นสถานะจำลองบนเส้น CAL (เงินฝาก/ตั๋วระยะสั้นที่อัตรา Rf) — ไม่ได้ผูกกับพันธบัตรที่ถือ และไม่ถูกนับซ้ำกับน้ำหนักพันธบัตรในพอร์ตเสี่ยง",
+    },
+    bondReturns: {
+      method: bondMethod,
+      assets: u.assets.filter((a) => a.assetClass === "bond").map((a) => ({ symbol: a.symbol, used: mu[u.assets.indexOf(a)], forward: a.bondExpected, yearsToMaturity: a.yearsToMaturity, modifiedDuration: a.modifiedDuration })),
+    },
     recommended: r.final,
     current: r.current && { expectedReturn: r.current.expectedReturn, volatility: r.current.volatility, sharpe: r.current.sharpe },
     minVariance: { expectedReturn: r.gmv.expectedReturn, volatility: r.gmv.volatility, sharpe: r.gmv.sharpe },

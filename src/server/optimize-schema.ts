@@ -69,6 +69,12 @@ export const optimizeInput = z
     .enum(["daily", "weekly", "monthly"])
     .optional()
     .describe("Return sampling on the common calendar: daily (default) or the last actual observation per week / month (no fill); annualization uses the observed periods per year"),
+  bondReturnMethod: z
+    .enum(["same_as_other", "yield_horizon"])
+    .optional()
+    .describe("Bonds: same estimator as other assets (default) or forward horizon return from YTM (carry + pull-to-par, rolldown on the curve, optional rate shift, minus PD×LGD when given)"),
+  bondHorizonYears: z.number().positive().max(30).optional().describe("Horizon for yield_horizon (default 1 year; capped at maturity)"),
+  bondRateShiftBp: z.number().min(-500).max(500).optional().describe("Parallel yield shift scenario in bp for yield_horizon (default 0)"),
   riskFree: z
     .object({
       source: z.enum(["auto", "curve", "settings", "manual"]).optional().describe("auto (default) = currency-matched sovereign zero curve at the horizon, else the Settings rate; never an owned bond's YTM"),
