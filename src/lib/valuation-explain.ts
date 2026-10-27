@@ -151,9 +151,19 @@ function explainDcf(a: DcfAssumptions, model: "fcff" | "fcfe"): Explanation {
     { group: "ราคา", label: "ราคาปัจจุบัน", value: a.currentPrice, unit: "perShare" },
     ...keAssumptions,
     { group: "ประมาณการ", label: "รายได้ปีล่าสุด", value: a.revenue0, unit: "money" },
-    { group: "ประมาณการ", label: "จำนวนปีประมาณการ", value: a.years, unit: "years" },
-    { group: "ประมาณการ", label: "Revenue growth ปีแรก → ปีสุดท้าย", value: `${fmtP(a.growthStart)} → ${fmtP(a.growthEnd)}`, unit: "text", note: "เปลี่ยนแบบเส้นตรง" },
-    { group: "ประมาณการ", label: "EBIT margin ปีแรก → ปีสุดท้าย", value: `${fmtP(a.ebitMarginStart)} → ${fmtP(a.ebitMarginEnd)}`, unit: "text" },
+    { group: "ประมาณการ", label: "จำนวนปีประมาณการ", value: r.years.length, unit: "years" },
+    ...(a.forecastMode === "staged" && a.stages?.length
+      ? a.stages.map((st, k) => ({
+          group: "ประมาณการ",
+          label: `${st.name || `ช่วงที่ ${k + 1}`} (${st.years} ปี)`,
+          value: `growth ${fmtP(st.revenueGrowthStart)} → ${fmtP(st.revenueGrowthEnd)} · EBIT ${fmtP(st.ebitMarginStart)} → ${fmtP(st.ebitMarginEnd)}${st.capexPct != null ? ` · capex ${fmtP(st.capexPct)}` : ""}${st.taxRate != null ? ` · ภาษี ${fmtP(st.taxRate)}` : ""}`,
+          unit: "text" as Unit,
+          note: "เส้นตรงภายในช่วง; ค่าที่ไม่ระบุใช้ค่าหลัก",
+        }))
+      : [
+          { group: "ประมาณการ", label: "Revenue growth ปีแรก → ปีสุดท้าย", value: `${fmtP(a.growthStart)} → ${fmtP(a.growthEnd)}`, unit: "text" as Unit, note: "เปลี่ยนแบบเส้นตรง" },
+          { group: "ประมาณการ", label: "EBIT margin ปีแรก → ปีสุดท้าย", value: `${fmtP(a.ebitMarginStart)} → ${fmtP(a.ebitMarginEnd)}`, unit: "text" as Unit },
+        ]),
     { group: "ประมาณการ", label: "อัตราภาษี", value: a.taxRate, unit: "%" },
     { group: "ประมาณการ", label: "D&A / รายได้", value: a.daPct, unit: "%" },
     { group: "ประมาณการ", label: "Capex / รายได้", value: a.capexPct, unit: "%" },

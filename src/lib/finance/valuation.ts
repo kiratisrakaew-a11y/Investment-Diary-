@@ -52,6 +52,39 @@ export interface InputMeta {
   betaSource?: string;
 }
 
+/**
+ * One stage of a staged DCF forecast. Growth and EBIT margin move linearly from start to end
+ * within the stage; reinvestment, tax and FCFE δ default to the base assumptions when omitted.
+ */
+export interface DcfStage {
+  id?: string;
+  name?: string;
+  years: number;
+  revenueGrowthStart: number;
+  revenueGrowthEnd: number;
+  ebitMarginStart: number;
+  ebitMarginEnd: number;
+  daPct?: number;
+  capexPct?: number;
+  nwcPct?: number;
+  taxRate?: number;
+  debtFinancingRatio?: number;
+}
+
+export type ForecastMode = "linear_fade" | "staged";
+
+/** Drivers for one explicit forecast year (the single annual table both modes produce). */
+export interface YearDriver {
+  stage: number | null;
+  growth: number;
+  ebitMargin: number;
+  daPct: number;
+  capexPct: number;
+  nwcPct: number;
+  taxRate: number;
+  debtFinancingRatio: number;
+}
+
 export interface DcfAssumptions {
   /** Last fiscal year revenue (in currency units, e.g. THB millions). */
   revenue0: number;
@@ -107,10 +140,16 @@ export interface DcfAssumptions {
 
   scenarios?: DcfScenario[];
   inputMeta?: InputMeta;
+  /** Absent or "linear_fade" = legacy single fade (growthStart → growthEnd). */
+  forecastMode?: ForecastMode;
+  /** forecastMode "staged": 2–4 ordered stages; the horizon is Σ stage years (1–20). */
+  stages?: DcfStage[];
 }
 
 export interface DcfYear {
   year: number;
+  /** Stage index (0-based) in staged mode; null in linear-fade mode. */
+  stage?: number | null;
   revenue: number;
   growth: number;
   ebit: number;
@@ -138,6 +177,7 @@ export type DcfIssueCode =
   | "INVALID_YEARS"
   | "INVALID_TERMINAL_RETURN"
   | "INVALID_RATE"
+  | "INVALID_STAGES"
   | "INVALID_INPUT";
 
 export interface DcfIssue {
@@ -184,6 +224,86 @@ export interface DcfResult {
 }
 
 const lerp = (a: number, b: number, i: number, n: number) => (n <= 1 ? b : a + ((b - a) * i) / (n - 1));
+
+const isStaged = (a: DcfAssumptions) => a.forecastMode === "staged";
+
+/** Explicit horizon: Σ stage years in staged mode, else `years`. */
+export function forecastYears(a: DcfAssumptions): number {
+  return isStaged(a) ? (a.stages ?? []).reduce((s, st) => s + st.years, 0) : a.years;
+}
+
+/**
+ * Per-year drivers. Linear fade: one global line from start to end (legacy, unchanged). Staged: the
+ * same linear rule applied inside each stage, stage-level reinvestment / tax / δ overriding the base.
+ */
+export function yearDrivers(a: DcfAssumptions): YearDriver[] {
+  const base = { daPct: a.daPct, capexPct: a.capexPct, nwcPct: a.nwcPct, taxRate: a.taxRate, debtFinancingRatio: a.debtFinancingRatio };
+  if (!isStaged(a)) {
+    return Array.from({ length: a.years }, (_, i) => ({ stage: null, growth: lerp(a.growthStart, a.growthEnd, i, a.years), ebitMargin: lerp(a.ebitMarginStart, a.ebitMarginEnd, i, a.years), ...base }));
+  }
+  const out: YearDriver[] = [];
+  (a.stages ?? []).forEach((st, k) => {
+    for (let j = 0; j < st.years; j++) {
+      out.push({
+        stage: k,
+        growth: lerp(st.revenueGrowthStart, st.revenueGrowthEnd, j, st.years),
+        ebitMargin: lerp(st.ebitMarginStart, st.ebitMarginEnd, j, st.years),
+        daPct: st.daPct ?? base.daPct,
+        capexPct: st.capexPct ?? base.capexPct,
+        nwcPct: st.nwcPct ?? base.nwcPct,
+        taxRate: st.taxRate ?? base.taxRate,
+        debtFinancingRatio: st.debtFinancingRatio ?? base.debtFinancingRatio,
+      });
+    }
+  });
+  return out;
+}
+
+/** Same assumptions with `years` = the stage total, so downstream code sees one horizon. */
+function effective(a: DcfAssumptions): DcfAssumptions {
+  return isStaged(a) ? { ...a, years: forecastYears(a) } : a;
+}
+
+/** Structural checks for staged mode (never clamped). */
+function validateStages(a: DcfAssumptions): DcfIssue[] {
+  if (!isStaged(a)) return [];
+  const st = a.stages ?? [];
+  const out: DcfIssue[] = [];
+  if (st.length < 2 || st.length > 4) out.push({ code: "INVALID_STAGES", message: `โหมดหลายช่วงต้องมี 2–4 ช่วง (มี ${st.length})` });
+  st.forEach((s, k) => {
+    const label = s.name || `ช่วงที่ ${k + 1}`;
+    if (!(Number.isInteger(s.years) && s.years >= 1)) out.push({ code: "INVALID_STAGES", message: `${label}: จำนวนปีต้องเป็นจำนวนเต็ม ≥ 1` });
+    const nums = [s.revenueGrowthStart, s.revenueGrowthEnd, s.ebitMarginStart, s.ebitMarginEnd, s.daPct, s.capexPct, s.nwcPct, s.taxRate, s.debtFinancingRatio].filter((v) => v !== undefined);
+    if (!nums.every((v) => Number.isFinite(v))) out.push({ code: "INVALID_STAGES", message: `${label}: มีค่าที่ไม่ใช่ตัวเลข` });
+    if (s.taxRate != null && !(s.taxRate >= 0 && s.taxRate <= 1)) out.push({ code: "INVALID_TAX", message: `${label}: อัตราภาษีต้องอยู่ระหว่าง 0% ถึง 100%` });
+    if ([s.revenueGrowthStart, s.revenueGrowthEnd].some((g) => !(g > -1))) out.push({ code: "INVALID_STAGES", message: `${label}: การเติบโตต้องมากกว่า −100%` });
+  });
+  const total = forecastYears(a);
+  if (st.length && !(total >= 1 && total <= 20)) out.push({ code: "INVALID_STAGES", message: `รวมปีทุกช่วง ${total} ปี — ต้องอยู่ระหว่าง 1–20 ปี` });
+  return out;
+}
+
+/** Plausibility warnings for staged inputs (shown, not enforced). */
+function stageWarnings(a: DcfAssumptions): string[] {
+  if (!isStaged(a)) return [];
+  const st = a.stages ?? [];
+  const out: string[] = [];
+  const total = forecastYears(a);
+  if (a.years !== total) out.push(`โหมดหลายช่วง: ใช้จำนวนปีรวมของทุกช่วง (${total} ปี) แทนค่า years = ${a.years}`);
+  st.forEach((s, k) => {
+    const label = s.name || `ช่วงที่ ${k + 1}`;
+    if (Math.max(s.ebitMarginStart, s.ebitMarginEnd) > 0.6) out.push(`${label}: EBIT margin เกิน 60% — ตรวจสอบความสมเหตุสมผล`);
+    if (Math.min(s.ebitMarginStart, s.ebitMarginEnd) < -0.5) out.push(`${label}: EBIT margin ติดลบมาก`);
+    const next = st[k + 1];
+    if (next) {
+      if (Math.abs(next.revenueGrowthStart - s.revenueGrowthEnd) > 0.05) out.push(`รอยต่อ ${label} → ${next.name || `ช่วงที่ ${k + 2}`}: growth กระโดด ${((next.revenueGrowthStart - s.revenueGrowthEnd) * 100).toFixed(1)} จุด`);
+      if (Math.abs(next.ebitMarginStart - s.ebitMarginEnd) > 0.05) out.push(`รอยต่อ ${label} → ${next.name || `ช่วงที่ ${k + 2}`}: EBIT margin กระโดด ${((next.ebitMarginStart - s.ebitMarginEnd) * 100).toFixed(1)} จุด`);
+    }
+  });
+  const last = st[st.length - 1];
+  if (last && Math.abs(last.revenueGrowthEnd - a.terminalGrowth) > 0.03) out.push(`ช่วงสุดท้ายจบที่ growth ${(last.revenueGrowthEnd * 100).toFixed(1)}% ห่างจาก terminal growth ${(a.terminalGrowth * 100).toFixed(1)}% — ช่วงสุดท้ายควรเข้าใกล้ steady state`);
+  return out;
+}
 const finiteOrNull = (v: number) => (Number.isFinite(v) ? v : null);
 
 function discountRates(a: DcfAssumptions) {
@@ -199,8 +319,9 @@ function discountRates(a: DcfAssumptions) {
 }
 
 /** Structural input checks; any issue makes the fair value unavailable. */
-export function validateDcf(a: DcfAssumptions, model: "fcff" | "fcfe", rate = model === "fcff" ? discountRates(a).wacc : discountRates(a).ke): DcfIssue[] {
-  const out: DcfIssue[] = [];
+export function validateDcf(a0: DcfAssumptions, model: "fcff" | "fcfe", rate = model === "fcff" ? discountRates(a0).wacc : discountRates(a0).ke): DcfIssue[] {
+  const a = effective(a0);
+  const out: DcfIssue[] = [...validateStages(a0)];
   const nums = [a.revenue0, a.years, a.growthStart, a.growthEnd, a.terminalGrowth, a.ebitMarginStart, a.ebitMarginEnd, a.taxRate, a.daPct, a.capexPct, a.nwcPct, a.debt, a.cash, a.otherClaims, a.sharesOutstanding];
   if (!nums.every(Number.isFinite)) out.push({ code: "INVALID_INPUT", message: "มีสมมติฐานที่ไม่ใช่ตัวเลข" });
   if (!(a.sharesOutstanding > 0)) out.push({ code: "INVALID_SHARES", message: "จำนวนหุ้นต้องมากกว่า 0" });
@@ -224,27 +345,30 @@ function forecast(a: DcfAssumptions, model: "fcff" | "fcfe", rate: number): DcfY
   let prevRevenue = a.revenue0;
   let debt = a.debt;
   const explicit = a.debtPolicy === "explicit_schedule";
-  for (let i = 0; i < a.years; i++) {
-    const growth = lerp(a.growthStart, a.growthEnd, i, a.years);
+  const drivers = yearDrivers(a);
+  for (let i = 0; i < drivers.length; i++) {
+    const d = drivers[i];
+    const growth = d.growth;
     const revenue = prevRevenue * (1 + growth);
-    const ebitMargin = lerp(a.ebitMarginStart, a.ebitMarginEnd, i, a.years);
+    const ebitMargin = d.ebitMargin;
     const ebit = revenue * ebitMargin;
-    const nopat = ebit * (1 - a.taxRate);
-    const da = revenue * a.daPct;
-    const capex = revenue * a.capexPct;
-    const deltaNwc = (revenue - prevRevenue) * a.nwcPct;
+    const nopat = ebit * (1 - d.taxRate);
+    const da = revenue * d.daPct;
+    const capex = revenue * d.capexPct;
+    const deltaNwc = (revenue - prevRevenue) * d.nwcPct;
     const fcff = nopat + da - capex - deltaNwc;
     const openingDebt = debt;
     // Interest accrues on the debt outstanding at the start of the year.
     const interest = openingDebt * a.costOfDebt;
-    const netIncome = (ebit - interest) * (1 - a.taxRate);
-    const netBorrowing = explicit ? (a.netBorrowingSchedule?.[i] ?? 0) : a.debtFinancingRatio * (capex - da + deltaNwc);
+    const netIncome = (ebit - interest) * (1 - d.taxRate);
+    const netBorrowing = explicit ? (a.netBorrowingSchedule?.[i] ?? 0) : d.debtFinancingRatio * (capex - da + deltaNwc);
     const fcfe = netIncome - (capex - da) - deltaNwc + netBorrowing;
     debt = openingDebt + netBorrowing;
     const t = a.midYear ? i + 0.5 : i + 1;
     const discountFactor = 1 / (1 + rate) ** t;
     out.push({
       year: i + 1,
+      stage: d.stage,
       revenue,
       growth,
       ebit,
@@ -317,8 +441,9 @@ function bridge(a: DcfAssumptions, model: "fcff" | "fcfe", pvTotal: number) {
   return model === "fcff" ? pvTotal - a.debt + a.cash - a.otherClaims : pvTotal + a.cash;
 }
 
-function compute(a: DcfAssumptions, model: "fcff" | "fcfe", rate: number) {
-  const errors = validateDcf(a, model, rate);
+function compute(a0: DcfAssumptions, model: "fcff" | "fcfe", rate: number) {
+  const errors = validateDcf(a0, model, rate);
+  const a = effective(a0);
   const years = forecast(a, model, rate);
   const last = years[years.length - 1];
   const t = last ? terminal(a, model, rate, last) : null;
@@ -339,11 +464,12 @@ function compute(a: DcfAssumptions, model: "fcff" | "fcfe", rate: number) {
   };
 }
 
-export function dcf(a: DcfAssumptions, model: "fcff" | "fcfe"): DcfResult {
-  const warnings: string[] = [];
+export function dcf(a0: DcfAssumptions, model: "fcff" | "fcfe"): DcfResult {
+  const a = effective(a0);
+  const warnings: string[] = [...stageWarnings(a0)];
   const { ke, wacc: w } = discountRates(a);
   const rate = model === "fcff" ? w : ke;
-  const c = compute(a, model, rate);
+  const c = compute(a0, model, rate);
   const g = a.terminalGrowth;
   const last = c.last;
   const detail: TerminalDetail = c.terminal?.detail ?? {
@@ -435,12 +561,20 @@ function shifted(a: DcfAssumptions, model: "fcff" | "fcfe", axis: SensitivityAxi
       const v = (a[key] ?? 0) + s;
       return { a: { ...a, terminalMethod: "stable_roic", [key]: v }, x: v };
     }
-    case "ebitMargin":
-      return { a: { ...a, ebitMarginStart: a.ebitMarginStart + s, ebitMarginEnd: a.ebitMarginEnd + s }, x: a.ebitMarginEnd + s };
-    case "capexPct":
-      return { a: { ...a, capexPct: a.capexPct + s }, x: a.capexPct + s };
-    case "debtFinancingRatio":
-      return { a: { ...a, debtFinancingRatio: a.debtFinancingRatio + s }, x: a.debtFinancingRatio + s };
+    case "ebitMargin": {
+      // Staged: shift every stage's margins too (the axis label shows the final-year margin).
+      const stages = isStaged(a) ? a.stages?.map((st) => ({ ...st, ebitMarginStart: st.ebitMarginStart + s, ebitMarginEnd: st.ebitMarginEnd + s })) : a.stages;
+      const lastEnd = isStaged(a) && stages?.length ? stages[stages.length - 1].ebitMarginEnd : a.ebitMarginEnd + s;
+      return { a: { ...a, stages, ebitMarginStart: a.ebitMarginStart + s, ebitMarginEnd: a.ebitMarginEnd + s }, x: lastEnd };
+    }
+    case "capexPct": {
+      const stages = isStaged(a) ? a.stages?.map((st) => (st.capexPct != null ? { ...st, capexPct: st.capexPct + s } : st)) : a.stages;
+      return { a: { ...a, stages, capexPct: a.capexPct + s }, x: a.capexPct + s };
+    }
+    case "debtFinancingRatio": {
+      const stages = isStaged(a) ? a.stages?.map((st) => (st.debtFinancingRatio != null ? { ...st, debtFinancingRatio: st.debtFinancingRatio + s } : st)) : a.stages;
+      return { a: { ...a, stages, debtFinancingRatio: a.debtFinancingRatio + s }, x: a.debtFinancingRatio + s };
+    }
   }
 }
 
@@ -458,7 +592,9 @@ export function dcfSensitivity(a: DcfAssumptions, model: "fcff" | "fcfe", axis: 
 }
 
 export interface ImpliedGrowthResult {
+  /** Constant growth (linear fade) or the uniform shift added to every stage's growth (staged). */
   rate: number | null;
+  basis?: "constant_growth" | "stage_shift";
   status: "ok" | "no_root" | "multiple_roots" | "unavailable";
   candidates: number[];
 }
@@ -471,8 +607,11 @@ export function impliedGrowthDetailed(a: DcfAssumptions, model: "fcff" | "fcfe")
   if (!(a.currentPrice > 0)) return { rate: null, status: "unavailable", candidates: [] };
   const { ke, wacc: w } = discountRates(a);
   const rate = model === "fcff" ? w : ke;
+  // Linear fade: constant growth g. Staged: a uniform shift g added to every stage's growth path.
+  const staged = isStaged(a);
   const f = (g: number) => {
-    const v = dcfAtRate({ ...a, growthStart: g, growthEnd: g }, model, rate);
+    const shiftedA = staged ? { ...a, stages: a.stages?.map((st) => ({ ...st, revenueGrowthStart: st.revenueGrowthStart + g, revenueGrowthEnd: st.revenueGrowthEnd + g })) } : { ...a, growthStart: g, growthEnd: g };
+    const v = dcfAtRate(shiftedA, model, rate);
     return v == null ? NaN : v - a.currentPrice;
   };
   const candidates: number[] = [];
@@ -501,9 +640,10 @@ export function impliedGrowthDetailed(a: DcfAssumptions, model: "fcff" | "fcfe")
     x0 = x1;
     f0 = f1;
   }
-  if (!candidates.length) return { rate: null, status: "no_root", candidates };
-  if (candidates.length > 1) return { rate: null, status: "multiple_roots", candidates };
-  return { rate: candidates[0], status: "ok", candidates };
+  const basis = staged ? ("stage_shift" as const) : ("constant_growth" as const);
+  if (!candidates.length) return { rate: null, status: "no_root", candidates, basis };
+  if (candidates.length > 1) return { rate: null, status: "multiple_roots", candidates, basis };
+  return { rate: candidates[0], status: "ok", candidates, basis };
 }
 
 /** Reverse DCF growth, or null when it is not uniquely defined. */
@@ -518,13 +658,32 @@ export interface DcfScenario {
   name: string;
   probability: number;
   overrides: Partial<Record<ScenarioField, number>>;
+  /** Staged mode: per-stage absolute overrides by stage index (fields left out keep the base stage). */
+  stageOverrides?: (Partial<Omit<DcfStage, "id" | "name" | "years">> | null)[];
+}
+
+const FADE_FIELDS: ScenarioField[] = ["growthStart", "growthEnd", "ebitMarginStart", "ebitMarginEnd"];
+
+/** Scenario assumptions; in staged mode the fade fields are refused (they would be silently ignored). */
+export function applyScenario(a: DcfAssumptions, s: DcfScenario): { a: DcfAssumptions; error?: string } {
+  if (isStaged(a)) {
+    const fade = FADE_FIELDS.filter((f) => s.overrides[f] != null);
+    if (fade.length) return { a, error: `โหมดหลายช่วงใช้ stageOverrides แทน ${fade.join(", ")}` };
+    if ((s.stageOverrides?.length ?? 0) > (a.stages?.length ?? 0)) return { a, error: "stageOverrides มีมากกว่าจำนวนช่วง" };
+    const stages = a.stages?.map((st, k) => ({ ...st, ...(s.stageOverrides?.[k] ?? {}) }));
+    return { a: { ...a, ...s.overrides, stages } };
+  }
+  if (s.stageOverrides?.some((o) => o)) return { a, error: "stageOverrides ใช้ได้เฉพาะโหมดหลายช่วง" };
+  return { a: { ...a, ...s.overrides } };
 }
 
 /** Bear / base / bull style scenarios: value per scenario and the probability-weighted fair value. */
 export function scenarioAnalysis(a: DcfAssumptions, model: "fcff" | "fcfe", scenarios: DcfScenario[]) {
   const errors: string[] = [];
   const rows = scenarios.map((s) => {
-    const r = dcf({ ...a, ...s.overrides }, model);
+    const applied = applyScenario(a, s);
+    if (applied.error) return { name: s.name, probability: s.probability, value: null, upside: null, errors: [applied.error] };
+    const r = dcf(applied.a, model);
     return { name: s.name, probability: s.probability, value: r.valuePerShare, upside: r.upside, errors: r.errors.map((e) => e.message) };
   });
   const total = scenarios.reduce((t, s) => t + s.probability, 0);
@@ -551,6 +710,15 @@ export function scenarioAnalysis(a: DcfAssumptions, model: "fcff" | "fcfe", scen
 
 /** Starting bear / base / bull set around the current assumptions (illustrative; edit before relying on it). */
 export function defaultScenarios(a: DcfAssumptions): DcfScenario[] {
+  if (isStaged(a) && a.stages?.length) {
+    // Same illustrative rule applied per stage: growth ±2 points, margins ±15% of their level.
+    const shiftStages = (dg: number, m: number) => a.stages!.map((st) => ({ revenueGrowthStart: st.revenueGrowthStart + dg, revenueGrowthEnd: st.revenueGrowthEnd + dg, ebitMarginStart: st.ebitMarginStart * m, ebitMarginEnd: st.ebitMarginEnd * m }));
+    return [
+      { name: "Bear", probability: 0.25, overrides: {}, stageOverrides: shiftStages(-0.02, 0.85) },
+      { name: "Base", probability: 0.5, overrides: {} },
+      { name: "Bull", probability: 0.25, overrides: {}, stageOverrides: shiftStages(0.02, 1.15) },
+    ];
+  }
   // Growth ±2 percentage points; margins ±15% of their level (so thin-margin businesses are not swung to zero).
   const shift = (dg: number, m: number) => ({
     growthStart: a.growthStart + dg,

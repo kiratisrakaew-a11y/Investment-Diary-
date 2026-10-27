@@ -95,7 +95,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
               href={l.href}
               className={clsx(
                 "flex items-center gap-3 rounded-lg px-3 py-2 transition-colors",
-                isActive(l.href) ? "bg-linear-to-r from-accent to-accent-2 font-medium text-accent-ink shadow-[0_4px_14px_rgb(255_120_60/0.35)]" : "text-muted hover:bg-panel-2 hover:text-text",
+                isActive(l.href) ? "bg-linear-to-r from-accent to-accent-2 font-medium text-accent-ink shadow-[0_4px_16px_var(--accent-glow)]" : "text-muted hover:bg-panel-2 hover:text-text",
               )}
             >
               <Icon name={l.icon} />

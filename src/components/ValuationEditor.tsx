@@ -9,6 +9,7 @@ import {
   dcf,
   dcfSensitivity,
   defaultScenarios,
+  forecastYears,
   scenarioAnalysis,
   type DcfAssumptions,
   type DcfScenario,
@@ -19,6 +20,7 @@ import {
 import { evaluate, riForecastRows, type ValuationInput } from "@/lib/valuation-schemas";
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
+import { DcfStageEditor } from "./DcfStageEditor";
 import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
 import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
@@ -161,6 +163,11 @@ export function ValuationEditor({
   );
 
   const [drawer, setDrawer] = useState<Explanation | null>(null);
+  const isDcfMethod = method === "dcf_fcff" || method === "dcf_fcfe";
+  const stageErrors = useMemo(
+    () => (dcfA.forecastMode === "staged" ? dcf(dcfA, method === "dcf_fcfe" ? "fcfe" : "fcff").errors.filter((e) => e.code === "INVALID_STAGES" || e.code === "INVALID_TAX").map((e) => e.message) : []),
+    [dcfA, method],
+  );
   const activeExplanation = allResults.find((r) => r.method === method)?.explanation ?? null;
 
   const setD = (k: keyof DcfAssumptions) => (v: number | null) => setDcfA((a) => ({ ...a, [k]: v ?? 0 }));
@@ -237,7 +244,8 @@ export function ValuationEditor({
     const v = r.valuation;
     if (v.method === "bond") return setMsg({ ok: false, text: "ไฟล์นี้เป็นพันธบัตร — นำเข้าในหน้าพันธบัตรไม่ได้ในตอนนี้" });
     if (v.method === "sotp") return setMsg({ ok: false, text: "ไฟล์นี้เป็น SOTP — เปิดหน้า SOTP (วิธีประเมิน: Sum of the parts) แล้วนำเข้าที่นั่น" });
-    if (v.method === "dcf_fcff" || v.method === "dcf_fcfe") setDcfA((a) => ({ ...a, ...(v.assumptions as Partial<DcfAssumptions>) }));
+    // A legacy file must not inherit staged mode from the current editor state.
+    if (v.method === "dcf_fcff" || v.method === "dcf_fcfe") setDcfA((a) => ({ ...a, forecastMode: undefined, stages: undefined, scenarios: undefined, ...(v.assumptions as Partial<DcfAssumptions>) }));
     else if (v.method === "ddm") setDdm((a) => ({ ...a, ...v.assumptions }));
     else if (v.method === "residual_income") setRi((a) => ({ ...a, ...v.assumptions }));
     else setMult((a) => ({ ...a, ...v.assumptions }));
@@ -302,8 +310,20 @@ export function ValuationEditor({
 
       <FinancialStatementsPanel symbol={symbol} initial={statements} terminalGrowth={dcfA.terminalGrowth} onApply={applyHistory} />
 
+      <nav aria-label="ขั้นตอนในหน้านี้" className="glass sticky top-2 z-20 flex gap-1 overflow-x-auto rounded-2xl border border-border p-1 text-xs">
+        {[
+          ["#val-inputs", "1 · สมมติฐาน"],
+          ...(isDcfMethod ? [["#val-forecast", "2 · ประมาณการ"], ["#val-terminal", "3 · Terminal"], ["#val-tables", "4 · ตาราง & sensitivity"], ["#val-scenarios", "5 · Scenarios"]] : []),
+          ["#val-result", isDcfMethod ? "6 · ผลลัพธ์" : "2 · ผลลัพธ์"],
+        ].map(([href, label]) => (
+          <a key={href} href={href} className="rounded-xl px-3 py-1.5 whitespace-nowrap text-muted hover:bg-panel-2 hover:text-text">
+            {label}
+          </a>
+        ))}
+      </nav>
+
       <div className="grid gap-6 lg:grid-cols-5">
-        <section className="card space-y-4 lg:col-span-3">
+        <section id="val-inputs" className="card scroll-mt-16 space-y-4 lg:col-span-3">
           <h2 className="font-semibold">สมมติฐาน</h2>
           <Group title="ราคาและอัตราคิดลด (CAPM)">
             <NumField label="ราคาปัจจุบัน" value={dcfA.currentPrice} onChange={(v) => setShared("currentPrice", v ?? 0)} />
@@ -322,16 +342,24 @@ export function ValuationEditor({
 
           {(method === "dcf_fcff" || method === "dcf_fcfe") && (
             <>
+              <div id="val-forecast" className="scroll-mt-16 space-y-2">
+                <h3 className="text-sm font-medium text-muted">รูปแบบประมาณการ</h3>
+                <DcfStageEditor a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} setA={setDcfA} errors={stageErrors} />
+              </div>
               <Group title="ประมาณการรายได้และกำไร (หน่วยเดียวกันทั้งหมด เช่น ล้านบาท)">
                 <NumField label="รายได้ปีล่าสุด" value={dcfA.revenue0} onChange={setD("revenue0")} />
-                <NumField label="จำนวนปีประมาณการ" value={dcfA.years} onChange={(v) => setDcfA((a) => ({ ...a, years: Math.max(1, Math.min(20, Math.round(v ?? 5))) }))} />
-                <NumField label="Growth ปีแรก" pct value={dcfA.growthStart} onChange={setD("growthStart")} />
-                <NumField label="Growth ปีสุดท้าย" pct value={dcfA.growthEnd} onChange={setD("growthEnd")} />
-                <NumField label="EBIT margin ปีแรก" pct value={dcfA.ebitMarginStart} onChange={setD("ebitMarginStart")} />
-                <NumField label="EBIT margin ปีสุดท้าย" pct value={dcfA.ebitMarginEnd} onChange={setD("ebitMarginEnd")} />
-                <NumField label="ภาษี" pct value={dcfA.taxRate} onChange={setD("taxRate")} />
+                {dcfA.forecastMode !== "staged" && (
+                  <>
+                    <NumField label="จำนวนปีประมาณการ" value={dcfA.years} onChange={(v) => setDcfA((a) => ({ ...a, years: Math.max(1, Math.min(20, Math.round(v ?? 5))) }))} />
+                    <NumField label="Growth ปีแรก" pct value={dcfA.growthStart} onChange={setD("growthStart")} />
+                    <NumField label="Growth ปีสุดท้าย" pct value={dcfA.growthEnd} onChange={setD("growthEnd")} />
+                    <NumField label="EBIT margin ปีแรก" pct value={dcfA.ebitMarginStart} onChange={setD("ebitMarginStart")} />
+                    <NumField label="EBIT margin ปีสุดท้าย" pct value={dcfA.ebitMarginEnd} onChange={setD("ebitMarginEnd")} />
+                  </>
+                )}
+                <NumField label={dcfA.forecastMode === "staged" ? "ภาษี (ค่าหลัก)" : "ภาษี"} pct value={dcfA.taxRate} onChange={setD("taxRate")} />
               </Group>
-              <Group title="การลงทุน (% ของรายได้)">
+              <Group title={dcfA.forecastMode === "staged" ? "การลงทุน (% ของรายได้) — ค่าหลักของช่วงที่ไม่ได้ระบุ" : "การลงทุน (% ของรายได้)"}>
                 <NumField label="ค่าเสื่อม D&A" pct value={dcfA.daPct} onChange={setD("daPct")} />
                 <NumField label="Capex" pct value={dcfA.capexPct} onChange={setD("capexPct")} />
                 <NumField label="Net working capital" pct value={dcfA.nwcPct} onChange={setD("nwcPct")} hint="ΔNWC = %NWC × รายได้ที่เพิ่มขึ้น" />
@@ -358,7 +386,7 @@ export function ValuationEditor({
                       { value: "fixed_borrowing_ratio", label: "สัดส่วนคงที่ของการลงทุนสุทธิ (δ)" },
                       { value: "explicit_schedule", label: "ระบุกู้สุทธิรายปี" },
                     ]}
-                    onChange={(v) => setDcfA((a) => ({ ...a, debtPolicy: v, netBorrowingSchedule: a.netBorrowingSchedule ?? Array(a.years).fill(0) }))}
+                    onChange={(v) => setDcfA((a) => ({ ...a, debtPolicy: v, netBorrowingSchedule: a.netBorrowingSchedule ?? Array(forecastYears(a)).fill(0) }))}
                   />
                 )}
                 {method === "dcf_fcfe" && dcfA.debtPolicy !== "explicit_schedule" && (
@@ -367,14 +395,14 @@ export function ValuationEditor({
               </Group>
               {method === "dcf_fcfe" && dcfA.debtPolicy === "explicit_schedule" && (
                 <Group title="กู้สุทธิรายปี (กู้ใหม่ − ชำระคืน)">
-                  {Array.from({ length: dcfA.years }, (_, i) => (
+                  {Array.from({ length: forecastYears(dcfA) }, (_, i) => (
                     <NumField
                       key={i}
                       label={`ปี ${i + 1}`}
                       value={dcfA.netBorrowingSchedule?.[i] ?? 0}
                       onChange={(v) =>
                         setDcfA((a) => {
-                          const sched = Array.from({ length: a.years }, (_, j) => a.netBorrowingSchedule?.[j] ?? 0);
+                          const sched = Array.from({ length: forecastYears(a) }, (_, j) => a.netBorrowingSchedule?.[j] ?? 0);
                           sched[i] = v ?? 0;
                           return { ...a, netBorrowingSchedule: sched };
                         })
@@ -383,6 +411,7 @@ export function ValuationEditor({
                   ))}
                 </Group>
               )}
+              <div id="val-terminal" className="scroll-mt-16" />
               <Group title="Terminal value">
                 <SelectField
                   label="วิธี"
@@ -477,7 +506,7 @@ export function ValuationEditor({
         </section>
 
         <div className="space-y-6 lg:col-span-2">
-          <section className="card">
+          <section id="val-result" aria-live="polite" className="card scroll-mt-16 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
             <CardTitle
               title="ผลลัพธ์"
               explain={result?.value != null ? { data: compact({ วิธี: method, มูลค่าต่อหุ้น: result.value, upside: result.upside, สมมติฐาน: input(method) }), hint: "มูลค่าที่เหมาะสมต่อหุ้นจากสมมติฐานที่ใส่; upside = มูลค่า/ราคาปัจจุบัน − 1; เปลี่ยนสมมติฐานเล็กน้อยผลเปลี่ยนได้มาก" } : null}
@@ -530,7 +559,9 @@ export function ValuationEditor({
 
       {(method === "dcf_fcff" || method === "dcf_fcfe") && (
         <>
-          <DcfTables a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} />
+          <div id="val-tables" className="scroll-mt-16">
+            <DcfTables a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} />
+          </div>
           <ScenarioPanel a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} onChange={(scenarios) => setDcfA((a) => ({ ...a, scenarios }))} />
         </>
       )}
@@ -596,7 +627,7 @@ function Details({ method, details }: { method: Method; details: Record<string, 
           <KV k="Equity value" v={fmtNum(n("equityValue"), 0)} />
           <KV k="Terminal value / มูลค่ารวม" v={fmtPct(n("terminalShareOfValue"), 1)} />
           <KV k="Implied terminal multiple" v={`${fmtNum((details.terminal as { impliedMultiple: number | null }).impliedMultiple, 1)}x ${(details.terminal as { multipleLabel: string }).multipleLabel}`} />
-          <ReverseDcf r={details.reverseDcf as { rate: number | null; status: string; candidates: number[] } | undefined} />
+          <ReverseDcf r={details.reverseDcf as { rate: number | null; status: string; candidates: number[]; basis?: string } | undefined} />
           {(details.scenarios as { expectedValue: number | null; expectedUpside: number | null } | null) && (
             <KV
               k="มูลค่าคาดหวังจาก scenario"
@@ -817,7 +848,7 @@ function TextField({ label, value, onChange, placeholder, type = "text" }: { lab
   );
 }
 
-function ReverseDcf({ r }: { r?: { rate: number | null; status: string; candidates: number[] } }) {
+function ReverseDcf({ r }: { r?: { rate: number | null; status: string; candidates: number[]; basis?: string } }) {
   if (!r) return null;
   const v =
     r.status === "ok"
@@ -827,7 +858,8 @@ function ReverseDcf({ r }: { r?: { rate: number | null; status: string; candidat
         : r.status === "no_root"
           ? "ไม่มี growth ในช่วง −50%…100% ที่ให้ราคานี้"
           : "–";
-  return <KV k="Growth ที่ราคาตลาดสะท้อน (reverse DCF)" v={v} />;
+  const shift = r.basis === "stage_shift";
+  return <KV k={shift ? "Growth ที่ต้องบวก/ลบทุกช่วงให้ได้ราคาตลาด (reverse DCF)" : "Growth ที่ราคาตลาดสะท้อน (reverse DCF)"} v={shift && r.status === "ok" && r.rate != null ? `${r.rate >= 0 ? "+" : "−"}${fmtPct(Math.abs(r.rate), 1)} จุด` : v} />;
 }
 
 function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) {
@@ -836,7 +868,9 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
   const s = useMemo(() => dcfSensitivity(a, model, axis), [a, model, axis]);
   const fmt = (v: number | null) => fmtNum(v, 0);
   type Y = (typeof r.years)[number];
+  const stageName = (k: number | null | undefined) => (k == null ? "" : a.stages?.[k]?.name || `ช่วง ${k + 1}`);
   const rows: [string, (y: Y) => string][] = [
+    ...(a.forecastMode === "staged" ? ([["ช่วง", (y) => stageName(y.stage)]] as [string, (y: Y) => string][]) : []),
     ["Growth", (y) => fmtPct(y.growth, 1)],
     ["รายได้", (y) => fmt(y.revenue)],
     ["EBIT", (y) => fmt(y.ebit)],
@@ -866,7 +900,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
     <div className="grid gap-6 lg:grid-cols-5">
       <section className="card overflow-x-auto lg:col-span-3">
         <h2 className="mb-3 font-semibold">ประมาณการกระแสเงินสด ({model.toUpperCase()})</h2>
-        <table className="table">
+        <table className="data-grid table">
           <thead>
             <tr>
               <th />
@@ -889,7 +923,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
         <p className="mt-2 text-xs text-muted">
           PV รวม {fmt(r.sumPvCashFlows)} + PV terminal {fmt(r.pvTerminalValue)} (TV {fmt(r.terminalValue)} คิดลด {t.discountYears} ปี) · TV คิดเป็น {fmtPct(r.terminalShareOfValue, 1)} ของมูลค่า
         </p>
-        <h3 className="mt-4 mb-1 text-sm font-semibold">Terminal ปีที่ {a.years + 1} (steady state)</h3>
+        <h3 className="mt-4 mb-1 text-sm font-semibold">Terminal ปีที่ {r.years.length + 1} (steady state)</h3>
         <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-3">
           {t.method !== "exit_multiple" && (
             <>
@@ -960,15 +994,31 @@ const SCEN_COLS: { key: ScenarioField; label: string }[] = [
   { key: "terminalGrowth", label: "Terminal g" },
 ];
 
+const STAGE_SCEN_COLS = [
+  { key: "revenueGrowthStart", label: "g เริ่ม" },
+  { key: "revenueGrowthEnd", label: "g จบ" },
+  { key: "ebitMarginStart", label: "M เริ่ม" },
+  { key: "ebitMarginEnd", label: "M จบ" },
+] as const;
+
 function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff" | "fcfe"; onChange: (s: DcfScenario[] | undefined) => void }) {
   const sc = a.scenarios;
+  const staged = a.forecastMode === "staged" && !!a.stages?.length;
+  const cols = staged ? SCEN_COLS.filter((c) => c.key === "terminalGrowth") : SCEN_COLS;
   const res = useMemo(() => (sc?.length ? scenarioAnalysis(a, model, sc) : null), [a, model, sc]);
   const update = (i: number, patch: Partial<DcfScenario>) => onChange(sc!.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   return (
-    <section className="card overflow-x-auto">
+    <section id="val-scenarios" className="card scroll-mt-16 overflow-x-auto">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">Scenarios (Bear / Base / Bull)</h2>
-        <Toggle label="ใช้ scenarios" checked={!!sc?.length} onChange={(on) => onChange(on ? defaultScenarios(a) : undefined)} />
+        <div className="flex items-center gap-3">
+          {!!sc?.length && (
+            <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onChange(defaultScenarios(a))} title="ตั้งค่าใหม่ตามรูปแบบประมาณการปัจจุบัน">
+              รีเซ็ตเป็นตัวอย่าง
+            </button>
+          )}
+          <Toggle label="ใช้ scenarios" checked={!!sc?.length} onChange={(on) => onChange(on ? defaultScenarios(a) : undefined)} />
+        </div>
       </div>
       {!sc?.length ? (
         <p className="text-xs text-muted">เปิดเพื่อกำหนดสมมติฐานแต่ละกรณีพร้อมความน่าจะเป็น แล้วดูมูลค่าคาดหวังและช่วงมูลค่า — ค่าเริ่มต้นเป็นตัวอย่าง (growth ±2 จุด, margin ±15% จาก base)</p>
@@ -979,9 +1029,15 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
               <tr>
                 <th>กรณี</th>
                 <th className="num">โอกาส (%)</th>
-                {SCEN_COLS.map((c) => (
+                {cols.map((c) => (
                   <th key={c.key} className="num">{c.label} (%)</th>
                 ))}
+                {staged &&
+                  a.stages!.map((st, k) => (
+                    <th key={k} className="num" colSpan={4}>
+                      {st.name || `ช่วง ${k + 1}`} (%)
+                    </th>
+                  ))}
                 <th className="num">มูลค่า/หุ้น</th>
                 <th className="num">Upside</th>
               </tr>
@@ -995,7 +1051,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
                   <td className="num">
                     <PctCell value={x.probability} onChange={(v) => update(i, { probability: v ?? 0 })} />
                   </td>
-                  {SCEN_COLS.map((c) => (
+                  {cols.map((c) => (
                     <td key={c.key} className="num">
                       <PctCell
                         value={x.overrides[c.key]}
@@ -1009,7 +1065,26 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
                       />
                     </td>
                   ))}
-                  <td className="num font-medium">{fmtNum(res?.rows[i]?.value)}</td>
+                  {staged &&
+                    a.stages!.flatMap((st, k) =>
+                      STAGE_SCEN_COLS.map((c) => (
+                        <td key={`${k}.${c.key}`} className="num" title={c.label}>
+                          <PctCell
+                            value={x.stageOverrides?.[k]?.[c.key]}
+                            placeholder={fmtPct(st[c.key], 1)}
+                            onChange={(v) => {
+                              const so = Array.from({ length: a.stages!.length }, (_, j) => ({ ...(x.stageOverrides?.[j] ?? {}) }));
+                              if (v == null) delete so[k][c.key];
+                              else so[k][c.key] = v;
+                              update(i, { stageOverrides: so.map((o) => (Object.keys(o).length ? o : null)) });
+                            }}
+                          />
+                        </td>
+                      )),
+                    )}
+                  <td className="num font-medium" title={res?.rows[i]?.errors.join(" · ") || undefined}>
+                    {res?.rows[i]?.value == null && res?.rows[i]?.errors.length ? <span className="text-neg">⚠️</span> : fmtNum(res?.rows[i]?.value)}
+                  </td>
                   <td className={clsx("num", signClass(res?.rows[i]?.upside))}>{fmtPct(res?.rows[i]?.upside, 1)}</td>
                 </tr>
               ))}
@@ -1028,7 +1103,9 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
               ))}
             </div>
           )}
-          <p className="mt-2 text-xs text-muted">ช่องว่าง = ใช้ค่าเดียวกับ base · บันทึก valuation เพื่อเก็บ scenarios ไว้กับสมมติฐาน</p>
+          <p className="mt-2 text-xs text-muted">
+            ช่องว่าง = ใช้ค่าเดียวกับ base{staged ? " · โหมดหลายช่วง: กำหนด growth (g) / EBIT margin (M) รายช่วง" : ""} · บันทึก valuation เพื่อเก็บ scenarios ไว้กับสมมติฐาน
+          </p>
         </>
       )}
     </section>

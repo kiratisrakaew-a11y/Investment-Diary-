@@ -42,6 +42,40 @@ const scenarioSchema = z.object({
   name: z.string().min(1),
   probability: z.number().min(0).max(1).describe("Probability (decimal); all scenarios must sum to 1"),
   overrides: z.object(Object.fromEntries(SCENARIO_FIELDS.map((f) => [f, z.number().optional()])) as Record<(typeof SCENARIO_FIELDS)[number], z.ZodOptional<z.ZodNumber>>).default({}),
+  stageOverrides: z
+    .array(
+      z
+        .object({
+          revenueGrowthStart: z.number().optional(),
+          revenueGrowthEnd: z.number().optional(),
+          ebitMarginStart: z.number().optional(),
+          ebitMarginEnd: z.number().optional(),
+          daPct: z.number().optional(),
+          capexPct: z.number().optional(),
+          nwcPct: z.number().optional(),
+          taxRate: z.number().optional(),
+          debtFinancingRatio: z.number().optional(),
+        })
+        .nullable(),
+    )
+    .max(4)
+    .optional()
+    .describe("Staged mode: absolute per-stage overrides by stage index (null = keep the base stage)"),
+});
+
+export const dcfStageSchema = z.object({
+  id: z.string().max(40).optional(),
+  name: z.string().max(60).optional(),
+  years: z.number().int().min(1).max(20).describe("Years in this stage"),
+  revenueGrowthStart: rate("Revenue growth in the first year of this stage"),
+  revenueGrowthEnd: rate("Revenue growth in the last year of this stage (linear within the stage)"),
+  ebitMarginStart: rate("EBIT margin in the first year of this stage"),
+  ebitMarginEnd: rate("EBIT margin in the last year of this stage"),
+  daPct: rate("D&A / revenue for this stage (default: base daPct)").optional(),
+  capexPct: rate("Capex / revenue for this stage (default: base capexPct)").optional(),
+  nwcPct: rate("NWC / revenue for this stage (default: base nwcPct)").optional(),
+  taxRate: rate("Tax rate for this stage (default: base taxRate)").optional(),
+  debtFinancingRatio: rate("FCFE δ for this stage (default: base debtFinancingRatio)").optional(),
 });
 
 export const dcfSchema = z.object({
@@ -80,6 +114,11 @@ export const dcfSchema = z.object({
   midYear: z.boolean().default(false),
   scenarios: z.array(scenarioSchema).max(5).optional().describe("Bear/base/bull overrides with probabilities summing to 1"),
   inputMeta: inputMetaSchema,
+  forecastMode: z
+    .enum(["linear_fade", "staged"])
+    .optional()
+    .describe("linear_fade (default, legacy) = one fade growthStart→growthEnd; staged = 2–4 stages, horizon = Σ stage years (≤ 20)"),
+  stages: z.array(dcfStageSchema).max(4).optional().describe("forecastMode staged: ordered stages, e.g. high growth / transition / mature"),
 });
 
 export const ddmSchema = z.object({
