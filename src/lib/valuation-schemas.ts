@@ -3,6 +3,7 @@
  * point. Used by the valuation editor (save), the AI advisor tools, MCP and REST.
  * All rates are decimals (0.08 = 8%).
  */
+import { rimHorizonComparison, rimPersistenceSensitivity, rimSensitivity } from "./finance/rim-horizon";
 import { z } from "zod";
 import {
   costOfEquity,
@@ -171,6 +172,11 @@ export const residualIncomeSchema = z.object({
     .describe("Default perpetuity. Continuing value after the forecast (multi-stage): perpetuity RI(n+1)/(Ke−g), persistence RI(n+1)/(1+Ke−ω), or none (RI = 0)"),
   terminalRoe: rate("ROE after the forecast (defaults to the last forecast year)").optional(),
   persistence: z.number().min(0).max(1).optional().describe("ω for the persistence continuing value, default 0.6 (0 = RI disappears, 1 = no fade)"),
+  compareHorizons: z
+    .array(z.number().int().min(1).max(30))
+    .max(4)
+    .optional()
+    .describe("Multi-stage: explicit horizons to compare on the same yearly data (default [5, 10]); years not entered are never filled in"),
   inputMeta: inputMetaSchema,
 });
 
@@ -409,7 +415,10 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
       const a = input.assumptions;
       const ke = costOfEquity(a.riskFree, a.beta, a.equityRiskPremium, a.extraPremium);
       if (riModel(a) === "multi_stage") {
-        const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: riForecastRows(a), terminal: riTerminal(a) });
+        const rows = riForecastRows(a);
+        const m = multiStageResidualIncome({ bookValuePerShare: a.bookValuePerShare, ke, payoutRatio: a.payoutRatio, forecast: rows, terminal: riTerminal(a) });
+        const rimIn = { bookValuePerShare: a.bookValuePerShare, ke, price: a.currentPrice, payoutRatio: a.payoutRatio, forecast: rows, terminal: riTerminal(a) };
+        const horizons = a.compareHorizons ?? [5, 10];
         return {
           value: m.value,
           price: a.currentPrice,
@@ -424,6 +433,10 @@ function evaluateCore(input: ValuationInput): EvaluationSummary {
             pvTerminalValue: m.pvTerminalValue,
             impliedPBV: m.value != null ? m.value / a.bookValuePerShare : null,
             marketPBV: a.currentPrice / a.bookValuePerShare,
+            terminalShareOfValue: m.value ? (m.pvTerminalValue ?? 0) / m.value : null,
+            horizonComparison: rows.length ? rimHorizonComparison(rimIn, horizons) : null,
+            persistenceSensitivity: rows.length ? rimPersistenceSensitivity(rimIn, horizons.filter((h) => h <= rows.length).length ? horizons.filter((h) => h <= rows.length) : [rows.length]) : null,
+            sensitivity: rows.length && m.value != null ? rimSensitivity(rimIn, rows.length) : null,
             errors: m.errors.map((message) => ({ code: "INVALID_INPUT", message })),
             warnings: m.warnings,
           },
@@ -591,6 +604,7 @@ export const multiStageRiToolInput = z.object({
   terminalGrowth: rate("Long-run growth for the perpetuity continuing value").default(0),
   terminalRoe: rate("ROE after the forecast (defaults to the last year)").optional(),
   persistence: z.number().min(0).max(1).optional().describe("ω for the persistence continuing value (default 0.6)"),
+  compareHorizons: z.array(z.number().int().min(1).max(30)).max(4).optional().describe("Horizons to compare on the same data (default [5, 10]); missing years are never filled"),
   inputMeta: inputMetaSchema,
 });
 export type MultiStageRiToolInput = z.infer<typeof multiStageRiToolInput>;
@@ -606,7 +620,7 @@ export function toRiValuation(x: MultiStageRiToolInput): ValuationInput {
 export function evaluateMultiStageRi(x: MultiStageRiToolInput) {
   const valuation = toRiValuation(x);
   const r = evaluate(valuation);
-  const d = r.details as { years?: unknown; costOfEquity?: number; pvResidualIncome?: number; terminalValue?: number | null; pvTerminalValue?: number | null; errors?: unknown; warnings?: string[] };
+  const d = r.details as { years?: unknown; costOfEquity?: number; pvResidualIncome?: number; terminalValue?: number | null; pvTerminalValue?: number | null; errors?: unknown; warnings?: string[]; horizonComparison?: unknown; persistenceSensitivity?: unknown; sensitivity?: unknown };
   return {
     valuation,
     result: {
@@ -619,6 +633,9 @@ export function evaluateMultiStageRi(x: MultiStageRiToolInput) {
       continuingValue: d.terminalValue,
       pvContinuingValue: d.pvTerminalValue,
       years: d.years,
+      horizonComparison: d.horizonComparison,
+      persistenceSensitivity: d.persistenceSensitivity,
+      sensitivity: d.sensitivity,
       errors: d.errors,
       warnings: [...((r.details.sanityWarnings as string[] | undefined) ?? [])],
     },

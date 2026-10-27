@@ -120,8 +120,12 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
   );
 }
 
-export function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-[11px] text-muted", className)}>{children}</span>;
+export function Badge({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+  return (
+    <span title={title} className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-[11px] text-muted", className)}>
+      {children}
+    </span>
+  );
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {

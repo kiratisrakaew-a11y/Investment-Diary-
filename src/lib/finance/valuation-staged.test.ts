@@ -176,3 +176,19 @@ describe("staged DCF — schema / evaluate round-trip", () => {
     expect(evaluate({ method: "dcf_fcff", assumptions: legacy }).value).toBeCloseTo(27.527143235286506, 10);
   });
 });
+
+describe("staged DCF — JSON export / import", () => {
+  it("round-trips stages, stage overrides and the mode through the valuation file", async () => {
+    const { exportValuationFile, parseValuationImport } = await import("../governance");
+    const withSc = { ...staged, scenarios: defaultScenarios(staged) };
+    const file = exportValuationFile({ symbol: "TEST", valuation: { method: "dcf_fcfe", assumptions: withSc } });
+    const back = parseValuationImport(JSON.stringify(file));
+    expect(back.ok).toBe(true);
+    if (!back.ok || back.valuation.method !== "dcf_fcfe") throw new Error("import failed");
+    const a = back.valuation.assumptions as DcfAssumptions;
+    expect(a.forecastMode).toBe("staged");
+    expect(a.stages).toEqual(staged.stages);
+    expect(a.scenarios?.[0].stageOverrides).toHaveLength(3);
+    expect(dcf(a, "fcfe").valuePerShare).toBeCloseTo(dcf(staged, "fcfe").valuePerShare!, 12);
+  });
+});

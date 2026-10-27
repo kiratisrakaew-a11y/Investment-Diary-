@@ -368,3 +368,52 @@ export function LadderCashflowChart({ data }: { data: { year: string; coupon: nu
     </ResponsiveContainer>
   );
 }
+
+/** Residual-income waterfall: B₀, each year's PV(RI), PV(continuing value), stacked on an invisible base. */
+export function RiWaterfallChart({ steps }: { steps: { label: string; delta: number; kind: "book" | "ri" | "cv" | "total" }[] }) {
+  let run = 0;
+  const data = steps.map((s) => {
+    const start = s.kind === "total" || s.kind === "book" ? 0 : run;
+    const end = s.kind === "total" ? s.delta : start + s.delta;
+    if (s.kind !== "total") run = end;
+    return { label: s.label, base: Math.min(start, end), size: Math.abs(end - start), delta: s.delta, kind: s.kind };
+  });
+  const color = (k: string, d: number) => (k === "book" ? "var(--series-1)" : k === "cv" ? "var(--series-5)" : k === "total" ? "var(--series-6)" : d >= 0 ? "var(--series-3)" : "var(--series-2)");
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="label" {...axis} interval={0} fontSize={10} />
+        <YAxis {...axis} width={44} tickFormatter={(v) => Number(v).toFixed(0)} />
+        <Tooltip {...tooltipStyle} cursor={{ fill: "var(--panel-2)" }} formatter={(_v, _n, p) => [Number((p.payload as { delta: number }).delta).toFixed(2), "ต่อหุ้น"]} />
+        <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+        <Bar dataKey="size" stackId="w" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={color(d.kind, d.delta)} fillOpacity={0.85} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** ROE by forecast year against the cost of equity: the gap is what creates residual income. */
+export function RoeKeChart({ data, ke }: { data: { year: string; roe: number }[]; ke: number }) {
+  const id = useId();
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data.map((d) => ({ ...d, ke }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <AreaGradient id={gid(id, "roe")} color="var(--series-3)" />
+        </defs>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="year" {...axis} />
+        <YAxis {...axis} width={44} tickFormatter={pct} domain={[0, "auto"]} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Area type="monotone" dataKey="roe" name="ROE" stroke="var(--series-3)" strokeWidth={2} fill={`url(#${gid(id, "roe")})`} isAnimationActive={false} />
+        <Line type="stepAfter" dataKey="ke" name="Ke" stroke="var(--series-2)" strokeDasharray="5 4" dot={false} strokeWidth={2} isAnimationActive={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}

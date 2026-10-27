@@ -3,7 +3,7 @@
 /*
  * Airy glass fintech palette.
  * dim (default): deep navy #07111F → #101B31 with cool accents — cyan #42D9FF, ice #76A9FF,
- * lilac #A58CFF, mint #49E1B5, coral #FF788A. light: #F3F8FF with darkened accents for AA text.
+ * lilac #A58CFF, mint #49E1B5, coral #FF788A. light: #F3F8FF with darkened accents (≥ 4.5:1 on the page and on glass).
  * Glass panels sit at 40–60% alpha with 16–22px blur; inputs and data grids stay 85–96% opaque.
  */
 :root,
@@ -57,18 +57,18 @@
   --muted: #4f6079;
   --border: rgb(60 100 170 / 0.16);
   --border-strong: rgb(60 100 170 / 0.32);
-  --accent: #0a7fae;
+  --accent: #086f99;
   --accent-2: #3d6fd6;
   --accent-ink: #ffffff;
-  --accent-glow: rgb(10 127 174 / 0.22);
-  --focus: #0a7fae;
-  --pos: #11845f;
+  --accent-glow: rgb(8 111 153 / 0.22);
+  --focus: #086f99;
+  --pos: #0e7553;
   --neg: #c73a52;
   --warn: #946200;
   --info: #3d6fd6;
   --series-1: #3d6fd6;
   --series-2: #d9485f;
-  --series-3: #14946b;
+  --series-3: #0f8a62;
   --series-4: #a97a05;
   --series-5: #7b5ce0;
   --series-6: #0a8db8;

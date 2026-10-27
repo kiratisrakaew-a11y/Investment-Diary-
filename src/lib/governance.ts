@@ -13,8 +13,38 @@ export { rateScaleWarnings } from "./rate-scale";
  * stored value computed under older formulas can be recognised.
  * 2026.10-pr5: ledger & performance (PR 1), DCF terminal/mid-year (PR 2),
  * exact optimizer (PR 3), bond conventions (PR 4), provenance (PR 5).
+ * 2026.10-val6: optional staged DCF, RIM horizon comparison / sensitivities. Legacy DCF and
+ * RIM values are unchanged (golden tests), so older saves differ only in version label.
  */
-export const MODEL_VERSION = "2026.10-pr5";
+export const MODEL_VERSION = "2026.10-val6";
+
+const DAY = 86_400_000;
+const days = (a: string, b: string) => Math.round((Date.parse(a) - Date.parse(b)) / DAY);
+
+/**
+ * Timestamp consistency of one valuation: market inputs (Rf / ERP / beta), the price and the latest
+ * statements should describe roughly the same moment as the valuation date. Flags only — nothing is changed.
+ */
+export function timestampFlags(x: { valuationDate: string; inputsAsOf?: string | null; priceDate?: string | null; statementsAsOf?: string | null }): string[] {
+  const out: string[] = [];
+  const ok = (d?: string | null): d is string => !!d && !Number.isNaN(Date.parse(d));
+  if (!ok(x.valuationDate)) return out;
+  if (ok(x.inputsAsOf)) {
+    const d = days(x.valuationDate, x.inputsAsOf);
+    if (d < 0) out.push(`ข้อมูลตลาด (Rf/ERP/Beta) ลงวันที่ ${x.inputsAsOf} หลังวันประเมิน ${x.valuationDate}`);
+    else if (d > 180) out.push(`ข้อมูลตลาด (Rf/ERP/Beta) ณ ${x.inputsAsOf} เก่ากว่าวันประเมิน ${d} วัน`);
+  }
+  if (ok(x.priceDate)) {
+    const d = Math.abs(days(x.valuationDate, x.priceDate));
+    if (d > 7) out.push(`ราคาที่ใช้ ณ ${x.priceDate} ห่างจากวันประเมิน ${d} วัน`);
+  }
+  if (ok(x.statementsAsOf)) {
+    const d = days(x.valuationDate, x.statementsAsOf);
+    if (d > 548) out.push(`งบการเงินล่าสุด ณ ${x.statementsAsOf} เก่ากว่า 18 เดือน ณ วันประเมิน`);
+    else if (d < 0) out.push(`งบการเงิน ณ ${x.statementsAsOf} อยู่หลังวันประเมิน — ระวัง look-ahead`);
+  }
+  return out;
+}
 
 export interface ProvenanceSettings {
   riskFreeRate: number;
@@ -140,7 +170,8 @@ export interface DataQualityInput {
   ledgerIssues: { code: string; severity: string; message: string }[];
   benchmark: { symbol: string; lastDate: string | null; kind: "price_index" | "total_return" };
   today: string;
-  valuations: { id: number; symbol: string; modelVersion?: string }[];
+  /** valueChanged: today's formula gives a different value (null/absent = could not recompute). */
+  valuations: { id: number; symbol: string; modelVersion?: string; valueChanged?: boolean | null }[];
   bonds: { symbol: string; conventionsSet: boolean }[];
   /** Prices stored in the last `lookbackDays` per held asset (optimizer needs ≥ HISTORY_MIN_OBS). */
   history?: { symbol: string; observations: number; lookbackDays: number }[];
@@ -197,7 +228,16 @@ export function assessDataQuality(d: DataQualityInput) {
     "/settings",
   );
   const old = d.valuations.filter((v) => v.modelVersion !== MODEL_VERSION);
-  add("Valuation", old.length > 0, "warn", `${old.length} รายการบันทึกด้วยสูตรเวอร์ชันก่อน (${[...new Set(old.map((v) => v.symbol))].join(", ")}) — เปิดแล้วบันทึกใหม่เพื่ออัปเดต`, "ทุก valuation ใช้สูตรเวอร์ชันปัจจุบัน", "/valuation");
+  // Only a stored value that today's formula would change (or cannot recompute) needs attention.
+  const changedVals = old.filter((v) => v.valueChanged !== false);
+  add(
+    "Valuation",
+    changedVals.length > 0,
+    "warn",
+    `${changedVals.length} รายการบันทึกด้วยสูตรเวอร์ชันก่อนและค่าเปลี่ยนเมื่อคำนวณใหม่ (${[...new Set(changedVals.map((v) => v.symbol))].join(", ")}) — เปิดแล้วบันทึกใหม่เพื่ออัปเดต`,
+    old.length ? `ทุก valuation ให้ค่าเท่ากับสูตรปัจจุบัน (${old.length} รายการบันทึกด้วยเวอร์ชันก่อน)` : "ทุก valuation ใช้สูตรเวอร์ชันปัจจุบัน",
+    "/valuation",
+  );
   const bondsMissing = d.bonds.filter((b) => !b.conventionsSet);
   add("พันธบัตร", bondsMissing.length > 0, "warn", `ยังไม่ระบุความถี่คูปอง/day count: ${bondsMissing.map((b) => b.symbol).join(", ")} — ใช้ค่าสมมติ ทุก 6 เดือน ACT/ACT`, "พันธบัตรทุกตัวระบุเงื่อนไขแล้ว", "/holdings");
 

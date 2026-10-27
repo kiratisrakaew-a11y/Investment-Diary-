@@ -800,6 +800,12 @@ export interface RiYear {
   residualIncome: number;
   discountFactor: number;
   pv: number;
+  /** Where earnings came from: an EPS override or ROE × opening book value. */
+  earningsSource?: "eps" | "roe";
+  /** Year-end book value: stated (override) or clean surplus B + E − D. */
+  bookValueSource?: "stated" | "clean_surplus";
+  /** Stated minus clean-surplus book value (0 when clean surplus). */
+  cleanSurplusGap?: number;
 }
 
 /**
@@ -831,7 +837,21 @@ export function multiStageResidualIncome(i: { bookValuePerShare: number; ke: num
     const equityCharge = ke * b;
     const ri = earnings - equityCharge;
     const df = 1 / (1 + ke) ** (k + 1);
-    years.push({ year: k + 1, bookValueStart: b, roe: b !== 0 ? earnings / b : NaN, earnings, dividends, bookValueEnd: end, equityCharge, residualIncome: ri, discountFactor: df, pv: ri * df });
+    years.push({
+      year: k + 1,
+      bookValueStart: b,
+      roe: b !== 0 ? earnings / b : NaN,
+      earnings,
+      dividends,
+      bookValueEnd: end,
+      equityCharge,
+      residualIncome: ri,
+      discountFactor: df,
+      pv: ri * df,
+      earningsSource: f.eps != null ? "eps" : "roe",
+      bookValueSource: f.bookValueEnd != null ? "stated" : "clean_surplus",
+      cleanSurplusGap: end - clean,
+    });
     b = end;
   });
   const n = years.length;

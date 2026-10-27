@@ -1,4 +1,5 @@
 import { assessDataQuality, marketInputProvenance } from "@/lib/governance";
+import { evaluate, valuationInput } from "@/lib/valuation-schemas";
 import { today } from "@/lib/validation";
 import { detectUnrecordedSplits } from "@/lib/finance/price-coverage";
 import { listAssets } from "./assets";
@@ -30,7 +31,7 @@ export async function dataQualityReport() {
     ledgerIssues: summary.issues,
     benchmark: { symbol: settings.benchmarkSymbol, lastDate: bench[bench.length - 1]?.[0] ?? null, kind: settings.benchmarkKind },
     today: today(),
-    valuations: valuations.map((v) => ({ id: v.id, symbol: v.symbol, modelVersion: (v.result as { modelVersion?: string } | null)?.modelVersion })),
+    valuations: valuations.map((v) => ({ id: v.id, symbol: v.symbol, modelVersion: (v.result as { modelVersion?: string } | null)?.modelVersion, valueChanged: recomputeChanged(v) })),
     bonds: assets.filter((a) => a.assetClass === "bond" && held.has(a.id)).map((a) => ({ symbol: a.symbol, conventionsSet: a.couponFrequency != null && a.dayCount != null })),
     splits: assets
       .filter((a) => held.has(a.id) && a.assetClass !== "cash")
@@ -44,4 +45,17 @@ export async function dataQualityReport() {
       .filter((a) => held.has(a.id) && a.assetClass !== "cash")
       .map((a) => ({ symbol: a.symbol, observations: (prices.get(a.id) ?? []).filter(([d]) => d >= since).length, lookbackDays: 365 })),
   });
+}
+
+/** Does today's formula give a different value from the stored one? null when it cannot be recomputed. */
+function recomputeChanged(v: { method: string; assumptions: unknown; intrinsicValue: number | null }): boolean | null {
+  const parsed = valuationInput.safeParse({ method: v.method, assumptions: v.assumptions });
+  if (!parsed.success) return null;
+  try {
+    const now = evaluate(parsed.data).value;
+    if (v.intrinsicValue == null || now == null) return now !== v.intrinsicValue;
+    return Math.abs(now - v.intrinsicValue) > 1e-6 * Math.max(1, Math.abs(v.intrinsicValue));
+  } catch {
+    return null;
+  }
 }

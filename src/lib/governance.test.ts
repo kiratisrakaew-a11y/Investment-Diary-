@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   MODEL_VERSION,
   assessDataQuality,
+  timestampFlags,
   defaultInputMeta,
   exportValuationFile,
   marketInputProvenance,
@@ -144,5 +145,34 @@ describe("Roadmap phase 1: price-history check", () => {
     expect(h.status).toBe("warn");
     expect(h.message).toContain("KBANK (12)");
     expect(h.message).not.toContain("PTT");
+  });
+});
+
+describe("val6: version labels and timestamp flags", () => {
+  const clean = {
+    provenance: marketInputProvenance({ ...settings, rfSource: "ThaiBMA", rfAsOf: "2026-10-24", erpSource: "Damodaran", erpAsOf: "2026-01-05" }),
+    positions: [],
+    reconciliation: { navMatches: true, inferredContributionsThb: 0 },
+    ledgerIssues: [],
+    benchmark: { symbol: "^SET.BK", lastDate: "2026-10-24", kind: "total_return" as const },
+    today: "2026-10-26",
+    bonds: [],
+  };
+  it("an older version whose value recomputes identically is ok; a changed or unknown one warns", () => {
+    const same = assessDataQuality({ ...clean, valuations: [{ id: 1, symbol: "PTT", modelVersion: "2026.10-pr5", valueChanged: false }] });
+    expect(same.checks.find((c) => c.area === "Valuation")!.status).toBe("ok");
+    const changed = assessDataQuality({ ...clean, valuations: [{ id: 1, symbol: "PTT", modelVersion: "2026.10-pr5", valueChanged: true }] });
+    expect(changed.checks.find((c) => c.area === "Valuation")!.status).toBe("warn");
+    const unknown = assessDataQuality({ ...clean, valuations: [{ id: 1, symbol: "PTT", modelVersion: undefined }] });
+    expect(unknown.checks.find((c) => c.area === "Valuation")!.status).toBe("warn");
+  });
+  it("flags stale, future-dated or mismatched timestamps and nothing when consistent", () => {
+    expect(timestampFlags({ valuationDate: "2026-10-27", inputsAsOf: "2026-10-01", priceDate: "2026-10-25", statementsAsOf: "2025-12-31" })).toEqual([]);
+    expect(timestampFlags({ valuationDate: "2026-10-27", inputsAsOf: "2026-01-05" })[0]).toMatch(/เก่ากว่าวันประเมิน 295 วัน/);
+    expect(timestampFlags({ valuationDate: "2026-10-27", inputsAsOf: "2026-11-01" })[0]).toMatch(/หลังวันประเมิน/);
+    expect(timestampFlags({ valuationDate: "2026-10-27", priceDate: "2026-10-01" })[0]).toMatch(/26 วัน/);
+    expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: "2024-12-31" })[0]).toMatch(/18 เดือน/);
+    expect(timestampFlags({ valuationDate: "2026-10-27", statementsAsOf: "2026-12-31" })[0]).toMatch(/look-ahead/);
+    expect(timestampFlags({ valuationDate: "bad", inputsAsOf: "2020-01-01" })).toEqual([]);
   });
 });

@@ -14,9 +14,10 @@
   - **Modern Portfolio Theory**: covariance/correlation, efficient frontier (long-only), min-variance, max-Sharpe (tangency), Capital Market Line
 - **ประเมินมูลค่าหุ้น (แก้สมมติฐานได้ทุกตัว)**
   - DCF แบบ **FCFF** (คิดลดด้วย WACC) และ **FCFE** (คิดลดด้วย Ke) จากประมาณการรายได้ margin capex D&A NWC
+  - **DCF หลายช่วง (2–4 ช่วง เช่น high growth / transition / mature)** หรือ fade เส้นเดียวแบบเดิม — ดู [คู่มือ](docs/roadmap/MULTISTAGE_RIM_GUIDE.md)
   - Ke จาก CAPM (Rf + β·ERP + premium), WACC แบบ market value หรือโครงสร้างทุนเป้าหมาย, terminal แบบ Gordon หรือ exit multiple, mid-year convention
   - ตารางกระแสเงินสด, sensitivity (WACC × g), reverse DCF (growth ที่ราคาตลาดสะท้อน), implied exit multiple, คำเตือนเมื่อ TV สูงหรือ r ≤ g
-  - **DDM** (Gordon / two-stage / H-model), **Residual income** + justified P/BV, P/E, **Relative multiples** (P/E, P/BV, EV/EBITDA)
+  - **DDM** (Gordon / two-stage / H-model), **Residual income** + justified P/BV, P/E (หลายปี: เทียบ 5 ปี vs 10 ปีบนข้อมูลชุดเดียว, waterfall, ROE vs Ke, sensitivity ω / Ke × ROE / Ke × g), **Relative multiples** (P/E, P/BV, EV/EBITDA)
   - เทียบผลทุกวิธีแบบ football field, บันทึกหลาย scenario, ดึงข้อมูลพื้นฐานจาก Yahoo ได้
   - **อัปโหลดงบการเงิน (PDF / Excel .xlsx / CSV)** แยกไฟล์ได้หลายไฟล์ — AI (Claude) อ่านและกรอกงบย้อนหลัง 5 ปีให้
     (รายได้, EBIT, ค่าเสื่อม, capex, หนี้, เงินสด, จำนวนหุ้น, EPS, DPS ฯลฯ แปลงเป็นหน่วยล้าน), ตารางแก้ไขได้, อัตราส่วนย้อนหลัง,

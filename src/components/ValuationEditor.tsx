@@ -21,12 +21,13 @@ import { evaluate, riForecastRows, type ValuationInput } from "@/lib/valuation-s
 import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
 import { NumField, SelectField, Toggle } from "./fields";
 import { DcfStageEditor } from "./DcfStageEditor";
+import { RimHorizonPanel } from "./RimHorizonPanel";
 import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatementsPanel";
 import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
 import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
-import { exportValuationFile, parseValuationImport, type InputProvenance } from "@/lib/governance";
+import { exportValuationFile, parseValuationImport, timestampFlags, type InputProvenance } from "@/lib/governance";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
@@ -315,6 +316,7 @@ export function ValuationEditor({
           ["#val-inputs", "1 · สมมติฐาน"],
           ...(isDcfMethod ? [["#val-forecast", "2 · ประมาณการ"], ["#val-terminal", "3 · Terminal"], ["#val-tables", "4 · ตาราง & sensitivity"], ["#val-scenarios", "5 · Scenarios"]] : []),
           ["#val-result", isDcfMethod ? "6 · ผลลัพธ์" : "2 · ผลลัพธ์"],
+          ...(method === "residual_income" && result?.details.horizonComparison != null ? [["#val-rim", "3 · 5Y vs 10Y & sensitivity"]] : []),
         ].map(([href, label]) => (
           <a key={href} href={href} className="rounded-xl px-3 py-1.5 whitespace-nowrap text-muted hover:bg-panel-2 hover:text-text">
             {label}
@@ -323,7 +325,7 @@ export function ValuationEditor({
       </nav>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <section id="val-inputs" className="card scroll-mt-16 space-y-4 lg:col-span-3">
+        <section id="val-inputs" className="card min-w-0 scroll-mt-16 space-y-4 lg:col-span-3">
           <h2 className="font-semibold">สมมติฐาน</h2>
           <Group title="ราคาและอัตราคิดลด (CAPM)">
             <NumField label="ราคาปัจจุบัน" value={dcfA.currentPrice} onChange={(v) => setShared("currentPrice", v ?? 0)} />
@@ -505,7 +507,7 @@ export function ValuationEditor({
           </label>
         </section>
 
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <section id="val-result" aria-live="polite" className="card scroll-mt-16 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
             <CardTitle
               title="ผลลัพธ์"
@@ -522,6 +524,10 @@ export function ValuationEditor({
                   <div className="text-xs text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
                 )}
                 <KeyDrivers a={method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA} show={method !== "multiples"} />
+                {method !== "multiples" &&
+                  timestampFlags({ valuationDate: new Date().toISOString().slice(0, 10), inputsAsOf: (method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA).inputMeta?.asOf }).map((f) => (
+                    <p key={f} className="mt-1 text-xs text-warn">⚠️ {f}</p>
+                  ))}
                 {activeExplanation && activeExplanation.warnings.length > 0 && method !== "dcf_fcff" && method !== "dcf_fcfe" && (
                   <div className="mt-3 space-y-1">
                     {activeExplanation.warnings.slice(0, 4).map((w) => (
@@ -565,6 +571,7 @@ export function ValuationEditor({
           <ScenarioPanel a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} onChange={(scenarios) => setDcfA((a) => ({ ...a, scenarios }))} />
         </>
       )}
+      {method === "residual_income" && result?.details.horizonComparison != null && <RimHorizonPanel details={result.details} bookValue={ri.bookValuePerShare} />}
       <CalculationDrawer e={drawer} onClose={() => setDrawer(null)} />
     </div>
   );
@@ -598,7 +605,7 @@ function KeyDrivers({ a, show }: { a: { riskFree: number; equityRiskPremium: num
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset>
+    <fieldset className="min-w-0">
       <legend className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">{title}</legend>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</div>
     </fieldset>
@@ -735,7 +742,7 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
   // Starting set: ROE fades linearly from the current ROE to Ke-ish long-run level over 5 years.
   const seed = (): RiRow[] => Array.from({ length: 5 }, (_, i) => ({ roe: ri.roe + ((0.1 - ri.roe) * i) / 5, payoutRatio: ri.payoutRatio }));
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Residual income หลายช่วง (ประมาณการรายปี)</legend>
         <Toggle
@@ -898,7 +905,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
   const ret = model === "fcff" ? "ROIC" : "ROE";
   return (
     <div className="grid gap-6 lg:grid-cols-5">
-      <section className="card overflow-x-auto lg:col-span-3">
+      <section className="card min-w-0 overflow-x-auto lg:col-span-3">
         <h2 className="mb-3 font-semibold">ประมาณการกระแสเงินสด ({model.toUpperCase()})</h2>
         <table className="data-grid table">
           <thead>
@@ -937,7 +944,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
           {r.impliedPerpetualGrowth != null && <KV k="g ที่แฝงใน exit multiple" v={fmtPct(r.impliedPerpetualGrowth, 2)} />}
         </div>
       </section>
-      <section className="card overflow-x-auto lg:col-span-2">
+      <section className="card min-w-0 overflow-x-auto lg:col-span-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Sensitivity: มูลค่าต่อหุ้น</h2>
           <select className="input w-auto py-1 text-xs" value={axis} onChange={(e) => setAxis(e.target.value as SensitivityAxis)}>

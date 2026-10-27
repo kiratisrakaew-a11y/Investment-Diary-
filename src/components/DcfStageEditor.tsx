@@ -18,7 +18,8 @@ export const STAGE_PRESETS: { key: string; label: string; years: number[] }[] = 
 
 export function stagesFromFade(a: DcfAssumptions, years: number[]): DcfStage[] {
   const n = years.reduce((s, y) => s + y, 0);
-  const at = (from: number, to: number, i: number) => (n <= 1 ? to : from + ((to - from) * i) / (n - 1));
+  // Rounded to 0.01% so the example layout reads cleanly; it is a starting point the user edits.
+  const at = (from: number, to: number, i: number) => Math.round((n <= 1 ? to : from + ((to - from) * i) / (n - 1)) * 1e4) / 1e4;
   let start = 0;
   return years.map((y, k) => {
     const s0 = start;
@@ -199,11 +200,12 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
   const W = 600;
   const H = 96;
   const pad = 14;
+  const top = 24;
   const vals = d.flatMap((x) => [x.growth, x.ebitMargin]);
   const lo = Math.min(0, ...vals);
   const hi = Math.max(...vals, 0.01);
   const x = (i: number) => ((i + 0.5) / d.length) * W;
-  const y = (v: number) => H - pad - ((v - lo) / (hi - lo || 1)) * (H - 2 * pad);
+  const y = (v: number) => H - pad - ((v - lo) / (hi - lo || 1)) * (H - pad - top);
   const path = (f: (k: (typeof d)[number]) => number) => d.map((k, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(f(k)).toFixed(1)}`).join(" ");
   let acc = 0;
   return (
@@ -245,16 +247,18 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
 }
 
 function Pct({ value, onChange, placeholder, label }: { value: number | undefined; onChange: (v: number | null) => void; placeholder?: string; label: string }) {
+  const shown = value == null ? "" : String(Number((value * 100).toFixed(2)));
   return (
     <input
       key={value == null ? "empty" : String(value)}
       aria-label={label}
       className="input w-14 py-1 text-right text-xs tabular-nums"
       inputMode="decimal"
-      defaultValue={value == null ? "" : String(Number((value * 100).toFixed(4)))}
+      defaultValue={shown}
       placeholder={placeholder?.replace("%", "")}
       onBlur={(e) => {
         const t = e.target.value.trim();
+        if (t === shown) return; // unchanged: keep the full-precision value
         if (t === "") return onChange(null);
         const n = Number(t);
         if (Number.isFinite(n)) onChange(n / 100);
