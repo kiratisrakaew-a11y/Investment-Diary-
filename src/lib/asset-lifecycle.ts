@@ -21,6 +21,8 @@ export interface AssetDependencies {
   statementUploads: number;
   dividendEvents: number;
   notes: number;
+  /** User-defined custom metric definitions (their observations and thresholds go with them). */
+  customMetrics: number;
 }
 
 export interface LifecycleState {
@@ -51,6 +53,7 @@ const DEP_LABEL: Record<keyof AssetDependencies, string> = {
   statementUploads: "ไฟล์งบที่อัปโหลด",
   dividendEvents: "เหตุการณ์ปันผล",
   notes: "บันทึก",
+  customMetrics: "ตัวชี้วัดที่ติดตาม",
 };
 
 export function dependencySummary(d: AssetDependencies): { total: number; nonZero: Partial<AssetDependencies>; text: string } {

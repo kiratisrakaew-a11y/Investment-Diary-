@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-28 — Asset custom metrics with traffic-light thresholds
+- New section on each asset page: user-defined metrics (e.g. NPL ratio), dated observations, latest summary with pp / unit / % change and freshness, history table, and a chart with Actual / Indexed 100 / % Change (no interpolation; small multiples for 3+ scales).
+- Green / yellow / red thresholds (lower-is-better, higher-is-better, target range) with effective-dated versions; past observations keep the rule of their own date; impact preview before saving.
+- Migration 0016 (four new tables), REST under `/api/v1/assets/:id/metrics…`, audit trail, and asset delete blocked while metrics exist. See `docs/ASSET_CUSTOM_METRICS.md`.
+
 ## 2026-10-27 — Financial model audit and hardening
 - Audit published in `docs/FINANCIAL_MODEL_AUDIT.md`; fixes and evidence in `docs/FINANCIAL_MODEL_IMPLEMENTATION_REPORT.md`.
 - Stress test: a long position's loss is floored at −100%. The linear figure and a warning are shown alongside, and factor lines are scaled to the floored total.

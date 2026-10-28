@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decideLifecycle, dependencySummary, type LifecycleState } from "./asset-lifecycle";
 
-const none = { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0 };
+const none = { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0 };
 const base: LifecycleState = { exists: true, symbol: "AP", hiddenAt: null, archivedAt: null, heldQuantity: 0, dependencies: none };
 const now = new Date("2026-10-27T00:00:00Z");
 
@@ -38,6 +38,12 @@ describe("PR9 asset lifecycle decisions", () => {
     expect(d.dependencies).toEqual({ valuations: 3, transactions: 2 });
     expect(d.message).toMatch(/ซ่อน.*เก็บถาวร/);
     expect(dependencySummary({ ...none, prices: 520 }).text).toBe("ราคาย้อนหลัง 520");
+  });
+  it("custom metrics alone block a permanent delete (spec test 11)", () => {
+    const d = decideLifecycle("delete", { ...base, dependencies: { ...none, customMetrics: 2 } }, { confirmSymbol: "AP" });
+    expect(d.status).toBe("BLOCKED_HAS_DEPENDENCIES");
+    expect(d.message).toMatch(/ตัวชี้วัดที่ติดตาม 2/);
+    expect(decideLifecycle("hide", { ...base, dependencies: { ...none, customMetrics: 2 } }, { now }).status).toBe("HIDDEN");
   });
   it("unknown id → NOT_FOUND", () => {
     expect(decideLifecycle("hide", { ...base, exists: false }).status).toBe("NOT_FOUND");

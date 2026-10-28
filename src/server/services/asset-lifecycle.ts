@@ -1,6 +1,7 @@
 import { and, eq, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { decideLifecycle, type AssetDependencies, type LifecycleAction, type LifecycleDecision } from "@/lib/asset-lifecycle";
+import { metricDefinitionCount } from "./asset-metrics";
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 const n = (r: { c: number }[]) => Number(r[0]?.c ?? 0);
@@ -9,7 +10,7 @@ const n = (r: { c: number }[]) => Number(r[0]?.c ?? 0);
 async function countDependencies(db: Tx | ReturnType<typeof getDb>, id: number, symbol: string): Promise<AssetDependencies> {
   const S = symbol.toUpperCase();
   const c = sql<number>`count(*)::int`;
-  const [transactions, prices, valuations, financialStatements, statementUploads, dividendEvents, notes] = await Promise.all([
+  const [transactions, prices, valuations, financialStatements, statementUploads, dividendEvents, notes, customMetrics] = await Promise.all([
     db.select({ c }).from(schema.transactions).where(eq(schema.transactions.assetId, id)),
     db.select({ c }).from(schema.prices).where(eq(schema.prices.assetId, id)),
     db.select({ c }).from(schema.valuations).where(or(eq(schema.valuations.assetId, id), sql`upper(${schema.valuations.symbol}) = ${S}`)),
@@ -17,8 +18,9 @@ async function countDependencies(db: Tx | ReturnType<typeof getDb>, id: number, 
     db.select({ c }).from(schema.statementUploads).where(sql`upper(${schema.statementUploads.symbol}) = ${S}`),
     db.select({ c }).from(schema.dividendEvents).where(or(eq(schema.dividendEvents.assetId, id), sql`upper(${schema.dividendEvents.symbol}) = ${S}`)),
     db.select({ c }).from(schema.notes).where(sql`${id} = any(${schema.notes.assetIds})`),
+    metricDefinitionCount(db, id),
   ]);
-  return { transactions: n(transactions), prices: n(prices), valuations: n(valuations), financialStatements: n(financialStatements), statementUploads: n(statementUploads), dividendEvents: n(dividendEvents), notes: n(notes) };
+  return { transactions: n(transactions), prices: n(prices), valuations: n(valuations), financialStatements: n(financialStatements), statementUploads: n(statementUploads), dividendEvents: n(dividendEvents), notes: n(notes), customMetrics };
 }
 
 /** Units held from the ledger (signed sum of buy/sell/split effects is in the portfolio service; here: quantity from transactions). */
@@ -60,7 +62,7 @@ export async function changeAssetLifecycle(input: { assetId: number; action: Lif
 }
 
 function emptyDeps(): AssetDependencies {
-  return { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0 };
+  return { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0 };
 }
 
 /** Dependency counts for many assets at once (holdings chips: show why delete is unavailable). */

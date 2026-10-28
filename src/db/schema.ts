@@ -1,5 +1,9 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
+  boolean,
+  numeric,
+  check,
   serial,
   text,
   integer,
@@ -86,6 +90,112 @@ export const assetLifecycleEvents = pgTable(
     at: timestamp("at").defaultNow().notNull(),
   },
   (t) => [index("asset_lifecycle_asset_idx").on(t.assetId)],
+);
+
+// ------------------------------------------------------------------ asset custom metrics
+
+/**
+ * User-defined numeric metrics per asset (e.g. NPL ratio for a bank). Values and thresholds are
+ * `numeric` so entered precision is kept exactly; they never feed P&L, prices or valuations.
+ */
+export const assetMetricDefinitions = pgTable(
+  "asset_metric_definitions",
+  {
+    id: serial("id").primaryKey(),
+    assetId: integer("asset_id")
+      .references(() => assets.id, { onDelete: "restrict" })
+      .notNull(),
+    /** Normalised from the name at creation; unique within the asset; never changes on rename. */
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    unit: text("unit").notNull(),
+    description: text("description"),
+    frequency: text("frequency").$type<"daily" | "monthly" | "quarterly" | "annual" | "irregular">().notNull().default("irregular"),
+    decimals: integer("decimals").notNull().default(2),
+    /** One of the theme series tokens (series-1 … series-6), never free CSS. */
+    chartColor: text("chart_color"),
+    displayOrder: integer("display_order").notNull().default(0),
+    sourceDefault: text("source_default"),
+    /** Shown in the chart by default (a view preference, not a data change). */
+    showInChart: boolean("show_in_chart").notNull().default(true),
+    /** Soft archive: observations and thresholds are kept. */
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("asset_metric_def_asset_key_uq").on(t.assetId, t.key),
+    index("asset_metric_def_asset_active_idx").on(t.assetId, t.isActive, t.displayOrder),
+    check("asset_metric_def_frequency_ck", sql`${t.frequency} in ('daily','monthly','quarterly','annual','irregular')`),
+    check("asset_metric_def_decimals_ck", sql`${t.decimals} between 0 and 8`),
+  ],
+);
+
+export const assetMetricObservations = pgTable(
+  "asset_metric_observations",
+  {
+    id: serial("id").primaryKey(),
+    metricId: integer("metric_id")
+      .references(() => assetMetricDefinitions.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Period-end / economically relevant date (not the entry time). */
+    observedOn: date("observed_on").notNull(),
+    value: numeric("value").notNull(),
+    source: text("source"),
+    note: text("note"),
+    /** First public date when known; never inferred from observedOn. */
+    publishedOn: date("published_on"),
+    sourceKind: text("source_kind").notNull().default("manual"),
+    recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("asset_metric_obs_metric_date_uq").on(t.metricId, t.observedOn), index("asset_metric_obs_metric_date_idx").on(t.metricId, t.observedOn.desc())],
+);
+
+export const assetMetricThresholdVersions = pgTable(
+  "asset_metric_threshold_versions",
+  {
+    id: serial("id").primaryKey(),
+    metricId: integer("metric_id")
+      .references(() => assetMetricDefinitions.id, { onDelete: "cascade" })
+      .notNull(),
+    ruleType: text("rule_type").$type<"lower_is_better" | "higher_is_better" | "target_range">().notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    /** Exclusive; null = open-ended. */
+    effectiveTo: date("effective_to"),
+    greenBound: numeric("green_bound"),
+    yellowBound: numeric("yellow_bound"),
+    greenMin: numeric("green_min"),
+    greenMax: numeric("green_max"),
+    yellowMin: numeric("yellow_min"),
+    yellowMax: numeric("yellow_max"),
+    reason: text("reason"),
+    source: text("source"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("asset_metric_thr_metric_from_uq").on(t.metricId, t.effectiveFrom),
+    check("asset_metric_thr_rule_ck", sql`${t.ruleType} in ('lower_is_better','higher_is_better','target_range')`),
+    check("asset_metric_thr_range_ck", sql`${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`),
+  ],
+);
+
+/** Audit trail for metric definitions, observations and threshold versions (before / after JSON). */
+export const assetMetricEvents = pgTable(
+  "asset_metric_events",
+  {
+    id: serial("id").primaryKey(),
+    assetId: integer("asset_id").notNull(),
+    objectType: text("object_type").notNull(),
+    objectId: integer("object_id").notNull(),
+    action: text("action").notNull(),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    source: text("source").notNull().default("web"),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("asset_metric_events_asset_idx").on(t.assetId)],
 );
 
 export const notes = pgTable(

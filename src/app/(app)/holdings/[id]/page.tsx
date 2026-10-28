@@ -16,18 +16,21 @@ import { readBondTerms, riskFreeEligibility } from "@/lib/finance/bond-meta";
 import { updateBondTermsAction } from "../../actions";
 import { AssetActionsMenu } from "@/components/AssetActionsMenu";
 import { assetDependencies } from "@/server/services/asset-lifecycle";
+import { metricsOverview } from "@/server/services/asset-metrics";
+import { AssetMetricsPanel } from "@/components/AssetMetricsPanel";
 import { ASSET_CLASS_LABEL, TX_TYPE_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
 
 export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   const asset = await getAsset(id);
   if (!asset) notFound();
-  const [prices, txs, notes, summary, assets] = await Promise.all([
+  const [prices, txs, notes, summary, assets, metricRows] = await Promise.all([
     priceHistoryFor(id),
     listTransactions({ assetId: id }),
     listNotes({ assetId: id }),
     getPortfolioSummary(),
     listAssets(),
+    metricsOverview(id, { includeInactive: true }),
   ]);
   const pos = summary.positions.find((p) => p.assetId === id);
   const deps = await assetDependencies(id);
@@ -152,6 +155,9 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         <div className="mt-4">
           <AddPriceForm assets={assets} symbol={asset.symbol} />
         </div>
+      </Section>
+      <Section title="Custom Metrics / ตัวชี้วัดที่ติดตาม" className="min-w-0">
+        <AssetMetricsPanel assetId={id} metrics={metricRows.filter((m) => m.isActive)} archived={metricRows.filter((m) => !m.isActive)} today={today()} />
       </Section>
       <div className="grid gap-6 lg:grid-cols-2">
         <Section title="รายการซื้อขาย">

@@ -113,6 +113,13 @@
       "when": 1793143298963,
       "tag": "0015_sortino_mar",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793159031637,
+      "tag": "0016_asset_custom_metrics",
+      "breakpoints": true
     }
   ]
 }

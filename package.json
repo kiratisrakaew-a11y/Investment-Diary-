@@ -17,7 +17,8 @@
     "prices:update": "tsx src/scripts/update-prices.ts",
     "check:valuation-roundtrip": "tsx src/scripts/valuation-roundtrip.ts",
     "check:asset-lifecycle": "tsx src/scripts/asset-lifecycle-check.ts",
-    "check:scenario-parity": "tsx src/scripts/scenario-parity-check.ts"
+    "check:scenario-parity": "tsx src/scripts/scenario-parity-check.ts",
+    "check:asset-metrics": "tsx src/scripts/asset-metrics-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

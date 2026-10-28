@@ -6,6 +6,7 @@ import { LedgerError } from "@/lib/finance/portfolio";
 import { OptimizerError } from "@/lib/finance/optimizer";
 import { BondError } from "@/lib/finance/bonds";
 import { PriceSyncError } from "@/lib/finance/price-coverage";
+import { MetricError } from "@/server/services/asset-metrics";
 
 async function authorized(req: Request) {
   if (checkApiKey(req)) return true;
@@ -19,6 +20,9 @@ export function errorResponse(e: unknown) {
   }
   if (e instanceof LedgerError) {
     return NextResponse.json({ error: e.message, code: e.issue.code, issue: e.issue }, { status: 400 });
+  }
+  if (e instanceof MetricError) {
+    return NextResponse.json({ error: e.message, code: e.code, ...(e.detail ? { detail: e.detail } : {}) }, { status: e.status });
   }
   if (e instanceof PriceSyncError) {
     return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });
@@ -48,7 +52,16 @@ export function api<C = unknown>(handler: (req: Request, ctx: C) => Promise<unkn
   };
 }
 
-export async function jsonBody(req: Request) {
+export async function jsonBody(req: Request, maxBytes?: number) {
+  if (maxBytes != null) {
+    const text = await req.text();
+    if (text.length > maxBytes) throw new Error(`Request body too large (max ${maxBytes} bytes)`);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("Request body must be JSON");
+    }
+  }
   try {
     return await req.json();
   } catch {
