@@ -21,6 +21,26 @@ describe("MCP build info", () => {
     expect(names).toContain("list_dividend_events");
     expect(names).toContain("screen_factor_stocks");
     expect(names).toContain("plan_bond_ladder");
+    for (const n of ["get_performance_metrics", "analyze_valuation", "manage_asset_lifecycle", "get_risk_free_rate", "value_security", "add_asset", "list_assets"]) expect(names).toContain(n);
+  });
+  it("registers the 12 asset custom-metric tools", () => {
+    const names = mcpToolNames();
+    for (const n of [
+      "list_asset_metrics",
+      "create_asset_metric",
+      "update_asset_metric",
+      "delete_asset_metric",
+      "record_metric_observation",
+      "update_metric_observation",
+      "delete_metric_observation",
+      "get_metric_history",
+      "list_metric_thresholds",
+      "preview_metric_threshold",
+      "set_metric_threshold",
+      "get_metric_series",
+    ])
+      expect(names).toContain(n);
+    expect(new Set(names).size).toBe(names.length);
   });
   it("version carries the formula version and commit", () => {
     expect(serverVersion().startsWith(MODEL_VERSION)).toBe(true);

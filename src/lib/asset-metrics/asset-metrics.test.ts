@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateThreshold, freshness, ruleForDate, statusOn, validateRule, versionConflicts, type ThresholdVersion } from "./thresholds";
 import { actualLayout, baseDateWarning, clean, indexSeries, latestChange, pctChangeSeries, thresholdSegments, unionRows, windowStart } from "./series";
-import { decimal, metricKey, thresholdInput } from "./schemas";
+import { decimal, metricDefinitionPatch, metricKey, thresholdInput } from "./schemas";
 
 const lower = { ruleType: "lower_is_better" as const, greenBound: "2.5", yellowBound: "3.5" };
 const higher = { ruleType: "higher_is_better" as const, yellowBound: 150, greenBound: 180 };
@@ -132,5 +132,12 @@ describe("input validation", () => {
     expect(() => decimal.parse("NaN")).toThrow();
     expect(() => decimal.parse("1e400")).toThrow();
     expect(() => decimal.parse("<script>")).toThrow();
+  });
+});
+
+describe("metric definition patch", () => {
+  it("a partial update leaves omitted defaulted fields untouched (no frequency / decimals reset)", () => {
+    expect(metricDefinitionPatch.parse({ name: "NPL" })).toEqual({ name: "NPL" });
+    expect(metricDefinitionPatch.parse({ decimals: 4 })).toEqual({ decimals: 4 });
   });
 });

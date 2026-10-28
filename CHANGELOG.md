@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-28 — Custom Metrics via MCP
+- 12 MCP tools for asset custom metrics (`list_asset_metrics`, `create_asset_metric`, `update_asset_metric`, `delete_asset_metric`, `record_metric_observation`, `update_metric_observation`, `delete_metric_observation`, `get_metric_history`, `list_metric_thresholds`, `preview_metric_threshold`, `set_metric_threshold`, `get_metric_series`). The asset is resolved by symbol and never auto-created. Every tool is a thin adapter over the existing service with source `mcp`, and read tools are marked read-only.
+- MCP errors from metric tools now carry a machine-readable code (`Error: … [CODE]` plus a `{code, detail}` block). A zod validation error thrown inside any tool is now summarised as `path: message … [VALIDATION_ERROR]` instead of raw JSON. All other errors keep their existing text.
+- Fix: a partial metric update (REST / UI / MCP) no longer resets `frequency` and `decimals` to their defaults. This was caused by zod v4 `.partial()` keeping `.default()`.
+- `npm run check:mcp-asset-metrics`: end-to-end check through the real MCP server on disposable TEST-LOCAL assets.
+
 ## 2026-10-28 — Asset custom metrics with traffic-light thresholds
 - New section on each asset page: user-defined metrics (e.g. NPL ratio), dated observations, latest summary with pp / unit / % change and freshness, history table, and a chart with Actual / Indexed 100 / % Change (no interpolation; small multiples for 3+ scales).
 - Green / yellow / red thresholds (lower-is-better, higher-is-better, target range) with effective-dated versions; past observations keep the rule of their own date; impact preview before saving.

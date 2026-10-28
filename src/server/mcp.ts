@@ -32,14 +32,22 @@ import { summarizeBacktest } from "./services/backtest-summary";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
+import { ZodError } from "zod";
+import { MetricError } from "./services/asset-metrics";
+import { registerAssetMetricTools } from "./mcp-asset-metrics";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
-function safe<A>(fn: (args: A) => Promise<unknown>) {
+export function safe<A>(fn: (args: A) => Promise<unknown>) {
   return async (args: A) => {
     try {
       return json(await fn(args));
     } catch (e) {
+      // Typed errors keep the existing "Error: … [CODE]" text and add a machine-readable code / detail.
+      if (e instanceof MetricError)
+        return { content: [{ type: "text" as const, text: `Error: ${e.message} [${e.code}]` }, { type: "text" as const, text: JSON.stringify({ code: e.code, ...(e.detail ? { detail: e.detail } : {}) }) }], isError: true };
+      if (e instanceof ZodError)
+        return { content: [{ type: "text" as const, text: `Error: ${e.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")} [VALIDATION_ERROR]` }, { type: "text" as const, text: JSON.stringify({ code: "VALIDATION_ERROR" }) }], isError: true };
       const suggestion = (e as { issue?: { code?: string; suggestion?: string } }).issue;
       const extra = suggestion?.code ? ` [${suggestion.code}]${suggestion.suggestion ? ` — ${suggestion.suggestion}` : ""}` : "";
       return { content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}${extra}` }], isError: true };
@@ -528,6 +536,9 @@ export function createMcpServer() {
       ),
     ),
   );
+
+  // User-defined per-asset metrics (12 tools) — same services as the asset page and REST.
+  registerAssetMetricTools(server, safe);
 
   server.registerTool(
     "get_server_info",

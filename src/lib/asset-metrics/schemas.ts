@@ -50,7 +50,10 @@ export const metricDefinitionInput = z.object({
 });
 export type MetricDefinitionInput = z.input<typeof metricDefinitionInput>;
 
+// zod v4 .partial() still applies .default(): re-declare defaulted fields so an omitted field is left unchanged.
 export const metricDefinitionPatch = metricDefinitionInput.partial().extend({
+  frequency: z.enum(FREQUENCIES).optional(),
+  decimals: z.number().int().min(0).max(8).optional(),
   isActive: z.boolean().optional(),
   showInChart: z.boolean().optional(),
   displayOrder: z.number().int().min(0).max(10_000).optional(),

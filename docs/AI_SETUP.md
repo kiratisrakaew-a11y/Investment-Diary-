@@ -50,6 +50,39 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 
 บันทึกที่มาจาก Claude จะติดป้าย **via Claude** ใน timeline
 
+### Custom Metrics ผ่าน MCP
+ใช้ติดตามตัวชี้วัดของสินทรัพย์รายตัวที่คุณกำหนดเอง เช่น NPL Ratio ของ BBL พร้อมไฟเขียว/เหลือง/แดง ใช้ service, กฎ และ audit ชุดเดียวกับหน้าสินทรัพย์และ REST (รายละเอียด: [ASSET_CUSTOM_METRICS.md](ASSET_CUSTOM_METRICS.md))
+
+| Tool | หน้าที่ | อ่านอย่างเดียว |
+|---|---|---|
+| `list_asset_metrics` | รายการตัวชี้วัด ค่าล่าสุด สถานะ ความสดของข้อมูล และเวอร์ชันเกณฑ์ (ค่าเริ่มต้นไม่รวมประวัติ) | ✓ |
+| `create_asset_metric` | สร้างตัวชี้วัด (ชื่อ หน่วย ความถี่ …) ได้ `metricId` กลับมา | |
+| `update_asset_metric` | แก้ข้อมูล / `isActive:false` เก็บถาวร / `true` คืนค่า · เปลี่ยนหน่วยเมื่อมีค่าแล้วต้อง `confirmUnitChange:true` (ไม่แปลงค่าเดิม) | |
+| `delete_asset_metric` | ลบถาวรพร้อมค่าและเกณฑ์ ต้องส่ง `confirmName` = ชื่อตรงทุกตัว | |
+| `record_metric_observation` | บันทึกค่า 1 วันที่ (`observedOn`, `value`, `source`, `publishedOn`) · วันที่ซ้ำ → `DUPLICATE_OBSERVATION` (ไม่เขียนทับ) | |
+| `update_metric_observation` | แก้ค่าเดิม (id เดิม) | |
+| `delete_metric_observation` | ลบค่า 1 รายการ ต้องส่ง `confirmDelete:true` | |
+| `get_metric_history` | ประวัติแบ่งหน้า (`limit` ≤ 1000, `offset`, `from`/`to`) พร้อมสถานะตามเกณฑ์ของวันนั้น | ✓ |
+| `list_metric_thresholds` | เวอร์ชันเกณฑ์ทั้งหมด | ✓ |
+| `preview_metric_threshold` | ดูผลของเกณฑ์ใหม่ก่อนบันทึก — **ไม่เขียนอะไร** | ✓ |
+| `set_metric_threshold` | บันทึกเกณฑ์เวอร์ชันใหม่ (ต้องเริ่มหลังเวอร์ชันล่าสุด ไม่ย้อนแก้อดีต) | |
+| `get_metric_series` | ข้อมูลกราฟ `actual` / `indexed` / `change` (ไม่เติมช่องว่าง) | |
+
+- **ต่างจาก `get_performance_metrics`**: ตัวนั้นคือผลตอบแทน/ความเสี่ยงของพอร์ต (TWR, Sharpe …) ส่วน `list_asset_metrics` คือตัวชี้วัดของหลักทรัพย์รายตัวที่ผู้ใช้กำหนดเอง
+- ระบุสินทรัพย์ด้วย `symbol` (ไม่สนตัวพิมพ์เล็ก/ใหญ่) ต้องมีสินทรัพย์อยู่แล้ว — ไม่พบ → `ASSET_NOT_FOUND` ระบบไม่สร้างสินทรัพย์ให้เอง · ระบุตัวชี้วัดด้วย `metricId` เสมอ (ไม่เดาจากชื่อ)
+- เกณฑ์ใช้หน่วยดิบของตัวชี้วัด: lower-is-better → green ≤ `greenBound` < yellow ≤ `yellowBound` < red · higher-is-better → red < `yellowBound` ≤ yellow < `greenBound` ≤ green · target range → `yellowMin` < `greenMin` ≤ green ≤ `greenMax` < `yellowMax` (นอกช่วงเหลือง = แดง) · เวอร์ชันมีผลช่วง `effectiveFrom ≤ วันที่ < effectiveTo`
+- **เกณฑ์เป็นของผู้ใช้เอง** ไม่ใช่เกณฑ์ตลาดหลักทรัพย์ มาตรฐานอุตสาหกรรม หรือเกณฑ์ ธปท. เว้นแต่ระบุแหล่งที่ตรวจสอบได้
+- **AI ห้ามแต่งค่าหรือเกณฑ์ขึ้นเอง** — บันทึกเฉพาะค่าที่ผู้ใช้ให้มา หรือจากรายงานที่อ้างอิงได้ พร้อมใส่ `source` และ `publishedOn` เมื่อทราบ
+- ข้อผิดพลาดมีรหัสในวงเล็บ เช่น `Error: … [DUPLICATE_OBSERVATION]` และส่ง `{ "code": … }` แยกอีกบรรทัด: `ASSET_NOT_FOUND`, `METRIC_NOT_FOUND`, `OBSERVATION_NOT_FOUND`, `DUPLICATE_METRIC`, `DUPLICATE_OBSERVATION`, `THRESHOLD_OVERLAP`, `THRESHOLD_IN_EFFECT`, `UNIT_CHANGE_NEEDS_CONFIRMATION`, `CONFIRMATION_REQUIRED`, `VALIDATION_ERROR`
+- ทุกการเขียนผ่าน MCP บันทึก `sourceKind = "mcp"` ในค่า และ `source = "mcp"` ใน audit
+
+**ตรวจว่า deploy แล้วจริง:** การมีโค้ดใน repo ยังไม่ได้แปลว่า connector ที่ใช้อยู่เห็น tools ใหม่ — หลัง deploy ให้สั่ง AI เรียก `get_server_info` แล้วดูว่า `version` ตรงกับ commit ล่าสุดและ `tools` มีทั้ง 12 ชื่อข้างบน (ถ้าไม่มี ให้ refresh / เชื่อม connector ใหม่) เชื่อมต่อด้วย endpoint และ API key เดิม — อย่าแปะ key ในแชตหรือภาพหน้าจอ
+
+ตัวอย่างคำสั่ง (หลัง deploy แล้ว):
+> เพิ่ม Metric `NPL Ratio` ให้หุ้น `BBL` หน่วย `%` รายไตรมาส ถ้ายังไม่มีให้สร้างก่อน แล้วตั้ง Lower-is-better ให้ Green ≤ 2.5%, Yellow > 2.5% ถึง 3.5%, Red > 3.5% เริ่มใช้ตามวันที่ที่ฉันกำหนด โดยแสดง Preview ก่อนบันทึก เมื่อฉันให้ค่า NPL พร้อมวันที่และแหล่งอ้างอิง ให้บันทึกลง Metric นี้ แล้วอ่านสถานะที่ระบบประเมินกลับมา
+
+ลำดับที่ AI ควรทำ: `list_asset_metrics` (ดูว่ามีแล้วหรือยัง) → `create_asset_metric` ถ้ายังไม่มี → `preview_metric_threshold` แสดงผลให้ยืนยัน → `set_metric_threshold` → `record_metric_observation` ด้วยค่าที่คุณให้ → `get_metric_history` / `list_asset_metrics` อ่านสถานะ
+
 ## 2. ChatGPT (Custom GPT)
 ต้องใช้บัญชี ChatGPT ที่สร้าง GPT ได้ (Plus / Team / Enterprise)
 

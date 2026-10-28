@@ -32,6 +32,7 @@
 - **ราคาอัตโนมัติ (ฟรี)** — Yahoo Finance: หุ้นไทย (`PTT.BK`), SET (`^SET.BK`), หุ้น US, ทองคำ (`GC=F` → ทองแท่งไทย 96.5% `GOLD_TH`), USD/THB;
   NAV กองทุนไทยจาก SEC Open API (ถ้ามีคีย์); พันธบัตร/อื่น ๆ กรอกเองหรือให้ AI อัปเดต · Vercel Cron ดึงราคาทุกวันทำการ 18:30 น.
 - **AI integration** — MCP server สำหรับ Claude และ OpenAPI สำหรับ ChatGPT Custom GPT → ดู [docs/AI_SETUP.md](docs/AI_SETUP.md)
+- **Custom Metrics via MCP** — 12 tools (`list_asset_metrics`, `create_asset_metric`, `record_metric_observation`, `preview_metric_threshold`, `set_metric_threshold`, `get_metric_series` …) ให้ AI สร้างตัวชี้วัดของหลักทรัพย์รายตัว (เช่น NPL Ratio ของ BBL) บันทึกค่า ตั้งเกณฑ์เขียว/เหลือง/แดงแบบมีวันเริ่มใช้ และอ่านสถานะ ผ่าน service เดียวกับหน้าเว็บ · ต่างจาก `get_performance_metrics` ซึ่งเป็นผลตอบแทน/ความเสี่ยงของพอร์ต · เกณฑ์เป็นของผู้ใช้เอง และ AI ต้องไม่แต่งค่าขึ้นเอง · หลัง deploy ตรวจด้วย `get_server_info` → ดู [docs/AI_SETUP.md](docs/AI_SETUP.md#custom-metrics-ผ่าน-mcp)
 
 ## Tech stack
 Next.js 15 (App Router) · TypeScript · Tailwind CSS 4 · Recharts · Postgres + Drizzle ORM · zod · MCP TypeScript SDK · Vitest

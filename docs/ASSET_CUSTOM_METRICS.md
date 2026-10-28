@@ -31,8 +31,11 @@ Values never feed P&L, prices, risk-free rates, statements, performance or valua
 `GET/POST …/:metricId/thresholds` (`?preview=1`) · `GET /api/v1/assets/:id/metric-series?metricIds=&from=&to=&mode=`.
 Every metric / observation is checked to belong to the asset in the path (404 otherwise); 409 for duplicate keys, duplicate dates, overlapping or back-dated thresholds and unconfirmed unit changes.
 
+## MCP (`src/server/mcp-asset-metrics.ts`)
+There are 12 tools over the same service, with source `mcp`. The asset is resolved by `symbol` and never auto-created; metrics and observations are targeted by id. Errors are coded as `[CODE]`. Setup and usage are in [AI_SETUP.md](AI_SETUP.md#custom-metrics-ผ่าน-mcp), and the end-to-end check is `npm run check:mcp-asset-metrics`.
+
 ## Lifecycle
 Custom metrics count as dependencies: permanent asset delete is blocked while any exist (hide / archive keep everything). A metric can be soft-archived and restored; hard delete needs the exact metric name and is audited.
 
 ## Not included (follow-up)
-CSV import, scheduled refresh, MCP / AI-advisor tools, OpenAPI entries for the new routes.
+CSV import, scheduled refresh, AI-advisor (in-app) tools, OpenAPI entries for the metric routes (ChatGPT Custom GPT Actions).
