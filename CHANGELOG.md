@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-28 — Custom metric charts: one chart per metric
+- Every metric now has its own chart card in Actual, Indexed 100 and % Change, with its own y-axis, threshold bands (Actual only), tooltip and empty state. Metrics are no longer merged by unit or scale, and there are no dual axes. `actualLayout`, `unionRows` and `baseDateWarning` have been removed, replaced by `singleMetricChart` / `metricCharts`.
+- The "connect missing dates" setting is honoured in every mode. Previously it was forced on for single-metric and small-multiple charts. Gaps longer than the metric's frequency allows stay visible when it is off.
+- There are no schema, service, REST or MCP changes.
+
 ## 2026-10-28 — Custom Metrics via MCP
 - 12 MCP tools for asset custom metrics (`list_asset_metrics`, `create_asset_metric`, `update_asset_metric`, `delete_asset_metric`, `record_metric_observation`, `update_metric_observation`, `delete_metric_observation`, `get_metric_history`, `list_metric_thresholds`, `preview_metric_threshold`, `set_metric_threshold`, `get_metric_series`). The asset is resolved by symbol and never auto-created. Every tool is a thin adapter over the existing service with source `mcp`, and read tools are marked read-only.
 - MCP errors from metric tools now carry a machine-readable code (`Error: … [CODE]` plus a `{code, detail}` block). A zod validation error thrown inside any tool is now summarised as `path: message … [VALIDATION_ERROR]` instead of raw JSON. All other errors keep their existing text.

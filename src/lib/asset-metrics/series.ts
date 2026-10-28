@@ -2,6 +2,8 @@
  * Scale-safe transforms for custom-metric charts (pure). Observations are never interpolated,
  * forward-filled or zero-filled: dates without a reading stay null.
  */
+import { STALE_AFTER_DAYS } from "./thresholds";
+
 export interface Obs {
   date: string; // YYYY-MM-DD (observedOn)
   value: number;
@@ -24,7 +26,7 @@ export const MODE_LABEL: Record<ChartMode, string> = {
 
 export const MODE_HELP: Record<ChartMode, string> = {
   actual: "ค่าที่บันทึกจริงในหน่วยของตัวชี้วัด",
-  indexed: "100 × ค่า ÷ ค่าแรกในช่วงที่แสดง (เฉพาะเมื่อค่าแรก > 0) — เทียบทิศทางระหว่างตัวชี้วัดต่างหน่วย",
+  indexed: "100 × ค่า ÷ ค่าแรกในช่วงที่แสดง (เฉพาะเมื่อค่าแรก > 0) — คำนวณแยกทีละตัวชี้วัด",
   change: "(ค่า − ค่าก่อนหน้าที่บันทึกจริง) ÷ |ค่าก่อนหน้า| × 100 — ไม่คำนวณเมื่อค่าก่อนหน้าเป็น 0 หรือเปลี่ยนเครื่องหมาย",
 };
 
@@ -98,44 +100,109 @@ export function latestChange(points: Obs[], unit: string): { latest: Obs | null;
   return { latest, previous, delta, deltaLabel: pct ? "pp" : "unit", relative };
 }
 
-/** Rows on the sorted union of observed dates; a series without a reading on a date is null (no fill). */
-export function unionRows(series: { key: string; points: { date: string; value: number | null }[] }[]): Record<string, string | number | null>[] {
-  const dates = [...new Set(series.flatMap((s) => s.points.map((p) => p.date)))].sort();
-  const maps = series.map((s) => new Map(s.points.map((p) => [p.date, p.value])));
-  return dates.map((date) => {
-    const row: Record<string, string | number | null> = { date, t: Date.parse(`${date}T00:00:00Z`) };
-    series.forEach((s, i) => (row[s.key] = maps[i].has(date) ? (maps[i].get(date) ?? null) : null));
-    return row;
-  });
+const DAY_MS = 86_400_000;
+const ts = (d: string) => Date.parse(`${d}T00:00:00Z`);
+
+export interface ChartRow {
+  date: string;
+  t: number;
+  /** Plotted value in the chart's mode (null = not computable, or a gap marker). */
+  value: number | null;
+  /** Raw observed value on this date (null on a gap marker). */
+  raw: number | null;
+  /** Why `value` is null for a real observation (change mode). */
+  reason?: string | null;
+  /** Not an observation: a null row between two readings further apart than the metric's frequency. */
+  gap?: true;
 }
 
-export type ActualLayout = { kind: "single" } | { kind: "dual"; left: number[]; right: number[] } | { kind: "small_multiples"; reason: string } | { kind: "empty" };
+export interface SingleMetricChart {
+  id: number;
+  mode: ChartMode;
+  /** This metric's own observations only (plus null gap markers); never another metric's. */
+  rows: ChartRow[];
+  /** Shown instead of a chart when nothing can be plotted. */
+  empty: string | null;
+  notes: string[];
+  /** Y domain from this metric only (and, in actual mode, its own threshold bounds). */
+  domain: [number, number] | null;
+  /** Raw threshold bands are drawn only on the raw (actual) axis. */
+  bands: boolean;
+  baseDate: string | null;
+  baseValue: number | null;
+  /** Reference line: 100 for indexed, 0 for % change. */
+  reference: number | null;
+}
+
+export interface SingleMetricInput {
+  id: number;
+  /** Observations already limited to the selected window. */
+  points: Obs[];
+  /** All observations of the metric (to tell "none yet" from "none in this window"). */
+  observationCount: number;
+  frequency?: string;
+  thresholdBounds?: number[];
+}
+
+/** [min, max] with padding over finite values; null when there is nothing to scale. */
+export function chartDomain(values: number[], extra: number[] = []): [number, number] | null {
+  const all = [...values, ...extra].filter(Number.isFinite);
+  if (!all.length) return null;
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
+  return [lo - pad, hi + pad];
+}
+
+/** Null markers between readings further apart than the frequency allows (no values are invented). */
+function withGaps(rows: ChartRow[], frequency?: string): ChartRow[] {
+  // Same per-frequency limits as freshness: a longer gap breaks the line unless "connect" is on.
+  const limit = frequency ? STALE_AFTER_DAYS[frequency] : null;
+  if (!limit) return rows;
+  const out: ChartRow[] = [];
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    if (prev && (r.t - prev.t) / DAY_MS > limit) {
+      const t = Math.round((prev.t + r.t) / 2 / DAY_MS) * DAY_MS;
+      out.push({ date: new Date(t).toISOString().slice(0, 10), t, value: null, raw: null, gap: true });
+    }
+    out.push(r);
+  });
+  return out;
+}
 
 /**
- * Actual-mode layout without misleading shared axes: one axis when every series has the same unit
- * and a comparable magnitude (≤ 10×), two axes for two scale groups, otherwise one mini-chart per metric.
+ * Chart model for ONE metric in one mode. Every metric gets its own chart: nothing here combines
+ * metrics, shares a scale or a second axis, or fills missing dates.
  */
-export function actualLayout(series: MetricSeries[]): ActualLayout {
-  const s = series.filter((x) => x.points.length);
-  if (!s.length) return { kind: "empty" };
-  if (s.length === 1) return { kind: "single" };
-  const mag = (x: MetricSeries) => Math.max(...x.points.map((p) => Math.abs(p.value)), 1e-12);
-  const sameScale = (a: MetricSeries, b: MetricSeries) => a.unit.trim() === b.unit.trim() && Math.max(mag(a), mag(b)) / Math.min(mag(a), mag(b)) <= 10;
-  const groups: MetricSeries[][] = [];
-  for (const x of s) {
-    const g = groups.find((gr) => gr.every((y) => sameScale(x, y)));
-    if (g) g.push(x);
-    else groups.push([x]);
+export function singleMetricChart(m: SingleMetricInput, mode: ChartMode): SingleMetricChart {
+  const pts = clean(m.points);
+  const base = { id: m.id, mode, notes: [] as string[], bands: false, baseDate: null as string | null, baseValue: null as number | null, reference: mode === "indexed" ? 100 : mode === "change" ? 0 : null };
+  const none = (empty: string, extra: Partial<SingleMetricChart> = {}): SingleMetricChart => ({ ...base, rows: [], domain: null, empty, ...extra });
+  if (!m.observationCount) return none("ยังไม่มีค่าที่บันทึก");
+  if (!pts.length) return none("ไม่มีค่าที่บันทึกในช่วงเวลาที่เลือก — ไม่มีการสร้างข้อมูลแทน");
+
+  if (mode === "actual") {
+    const rows = withGaps(pts.map((p) => ({ date: p.date, t: ts(p.date), value: p.value, raw: p.value })), m.frequency);
+    return { ...base, rows, empty: null, bands: true, domain: chartDomain(pts.map((p) => p.value), m.thresholdBounds ?? []) };
   }
-  if (groups.length === 1) return { kind: "single" };
-  if (groups.length === 2) return { kind: "dual", left: groups[0].map((x) => x.id), right: groups[1].map((x) => x.id) };
-  return { kind: "small_multiples", reason: `ตัวชี้วัดที่เลือกมี ${groups.length} หน่วย/สเกลต่างกัน — แสดงแยกทีละกราฟเพื่อไม่ให้แกนหลายแกนซ้อนกัน` };
+  if (mode === "indexed") {
+    const r = indexSeries(pts);
+    if (!r.ok) return none(r.reason, { baseDate: r.baseDate });
+    const rows = withGaps(r.points.map((p) => ({ date: p.date, t: ts(p.date), value: p.value, raw: p.raw })), m.frequency);
+    return { ...base, rows, empty: null, baseDate: r.baseDate, baseValue: r.baseValue, domain: chartDomain(r.points.map((p) => p.value), [100]) };
+  }
+  const c = pctChangeSeries(pts);
+  const ok = c.filter((p) => p.value != null).map((p) => p.value as number);
+  if (!ok.length) return none(pts.length === 1 ? "มีค่าเดียว — ต้องมีอย่างน้อย 2 ค่าจึงคำนวณ % เปลี่ยนแปลงได้" : (c.find((p, i) => i > 0 && p.reason)?.reason ?? "คำนวณ % เปลี่ยนแปลงไม่ได้"));
+  const skipped = c.filter((p, i) => i > 0 && p.value == null);
+  const rows = withGaps(c.map((p) => ({ date: p.date, t: ts(p.date), value: p.value, raw: p.raw, reason: p.reason })), m.frequency);
+  return { ...base, rows, empty: null, notes: skipped.length ? [`${skipped.length} จุดคำนวณ % ไม่ได้ (${skipped[0].reason})`] : [], domain: chartDomain(ok, [0]) };
 }
 
-/** Starting-date mismatch warning for indexed comparisons. */
-export function baseDateWarning(bases: { name: string; baseDate: string | null }[]): string | null {
-  const d = [...new Set(bases.map((b) => b.baseDate).filter(Boolean))];
-  return d.length > 1 ? `ฐาน 100 เริ่มคนละวัน: ${bases.map((b) => `${b.name} ${b.baseDate ?? "–"}`).join(" · ")}` : null;
+/** One chart model per metric, in the given order — the number of charts always equals the number of metrics. */
+export function metricCharts(metrics: SingleMetricInput[], mode: ChartMode): SingleMetricChart[] {
+  return metrics.map((m) => singleMetricChart(m, mode));
 }
 
 /** Threshold segments clipped to the chart's date span (for drawing step bands on the raw chart). */

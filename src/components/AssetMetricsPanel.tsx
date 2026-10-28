@@ -5,28 +5,13 @@ import { useMemo, useState, useTransition } from "react";
 import clsx from "clsx";
 import type { MetricOverview } from "@/server/services/asset-metrics";
 import { MODE_HELP, MODE_LABEL, inWindow, windowStart, type ChartMode } from "@/lib/asset-metrics/series";
-import { RULE_LABEL, STATUS_LABEL, type MetricStatus } from "@/lib/asset-metrics/thresholds";
+import { RULE_LABEL } from "@/lib/asset-metrics/thresholds";
 import { deleteObservationAction, updateMetricAction } from "@/app/(app)/holdings/metric-actions";
 import { AssetMetricChart, type ChartMetric } from "./AssetMetricChart";
+import { StatusBadge } from "./AssetMetricStatus";
+
+export { StatusBadge };
 import { DeleteMetricForm, FREQ_LABEL, MetricForm, Modal, ObservationForm, ThresholdForm, describeRule, type ThresholdLite } from "./AssetMetricForm";
-
-const STATUS_STYLE: Record<MetricStatus, { dot: string; text: string; icon: string }> = {
-  GREEN: { dot: "bg-pos", text: "text-pos", icon: "●" },
-  YELLOW: { dot: "bg-warn", text: "text-warn", icon: "▲" },
-  RED: { dot: "bg-neg", text: "text-neg", icon: "■" },
-  NO_THRESHOLD: { dot: "bg-muted/40", text: "text-muted", icon: "○" },
-  NO_DATA: { dot: "bg-muted/40", text: "text-muted", icon: "–" },
-};
-
-export function StatusBadge({ status, title }: { status: MetricStatus; title?: string }) {
-  const s = STATUS_STYLE[status];
-  return (
-    <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-[11px]", s.text)} title={title}>
-      <span aria-hidden>{s.icon}</span>
-      {STATUS_LABEL[status]}
-    </span>
-  );
-}
 
 const fmt = (v: number | null | undefined, d: number) => (v == null || !Number.isFinite(v) ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: Math.min(d, 2), maximumFractionDigits: d }));
 const colorOf = (m: { chartColor: string | null }, i: number) => `var(--${m.chartColor ?? `series-${(i % 6) + 1}`})`;
@@ -62,6 +47,11 @@ export function AssetMetricsPanel({ assetId, metrics, archived, today }: { asset
           unit: m.unit,
           color,
           decimals: m.decimals,
+          frequency: m.frequency,
+          observationCount: m.observationCount,
+          latest: m.latest ? { date: m.latest.observedOn, value: m.latest.value } : null,
+          status: m.status,
+          statusExplanation: m.statusExplanation,
           thresholds: m.thresholds,
           statusByDate: Object.fromEntries(m.observations.map((o) => [o.observedOn, o.status])),
           points: inWindow(m.observations.map((o) => ({ date: o.observedOn, value: o.value })), from),

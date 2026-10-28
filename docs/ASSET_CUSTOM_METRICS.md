@@ -19,11 +19,13 @@ Values never feed P&L, prices, risk-free rates, statements, performance or valua
 - No rule on that date → `NO_THRESHOLD`; no value → `NO_DATA` (never green). Staleness (≈1.5 reporting periods; irregular never) is a separate marker.
 - Each observation is evaluated with the version in effect on **its own date**. A new version must start after the latest one (the open one is closed at that date); a version already in effect is never rewritten; a future version can be replaced. The metric row is locked during the write, so concurrent writes serialise. Preview shows status changes before saving.
 
-## Charts (`src/lib/asset-metrics/series.ts`)
-- **Actual**: same unit and ≤ 10× magnitude → one axis; two scale groups → two axes (warned); 3+ → small multiples. Single-metric charts show green/yellow/red bands per threshold version over the dates it applied.
-- **Indexed 100**: base = first observation in the window, only if > 0; different base dates are warned; tooltip shows raw values.
-- **% Change**: vs the previous *actual* observation; null with a reason when the previous value is 0, negative or the sign changes. Summary uses **pp** for % units.
-- Union of observed dates; gaps stay null (optional, labelled line-joining only draws between real points).
+## Charts (`src/lib/asset-metrics/series.ts` → `singleMetricChart`, `src/components/AssetMetricChart.tsx`)
+- **One metric = one chart card, in every mode.** Metrics are never combined, whether they share a unit or a scale; there are no dual axes. Each card shows the name, unit, latest raw value, its date and status, its own y-axis scaled from that metric only, and a tooltip for that metric only. The number of cards equals the number of active metrics ticked "กราฟ". A metric with no data, or none in the selected range, still gets a card with an empty state.
+- **Actual**: raw values with the metric's own green/yellow/red bands per threshold version, over the dates each version applied. The y-axis also covers the metric's own bounds.
+- **Indexed 100**: base = this metric's first observation in the window, only if > 0. Otherwise that card alone shows the reason. The tooltip shows raw values, and raw threshold bands are not drawn.
+- **% Change**: vs the previous *actual* observation; null with a reason when the previous value is 0, negative or the sign changes. When nothing is computable, the card shows the reason. Raw bands are not drawn. The summary uses **pp** for % units.
+- Status rings on points are always evaluated on the raw value under the version in force on that date.
+- Range (1Y/3Y/5Y/All), mode and "connect missing dates" apply to every card. A gap longer than the metric's frequency allows (the same limits as freshness) breaks the line, unless "connect" is on. Connecting only draws a line between real readings and never adds values.
 
 ## REST (API key or session; JSON bodies ≤ 16 KB)
 `GET/POST /api/v1/assets/:id/metrics` · `PATCH/DELETE /api/v1/assets/:id/metrics/:metricId` (DELETE needs `?confirmName=`) ·
