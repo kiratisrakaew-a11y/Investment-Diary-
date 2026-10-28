@@ -48,4 +48,17 @@ describe("PR9 asset lifecycle decisions", () => {
   it("unknown id → NOT_FOUND", () => {
     expect(decideLifecycle("hide", { ...base, exists: false }).status).toBe("NOT_FOUND");
   });
+  it("web delete with cascade: held or referenced assets are deleted once the symbol is typed", () => {
+    const busy = { ...base, heldQuantity: 100, dependencies: { ...none, transactions: 12, prices: 800, notes: 2, customMetrics: 1 } };
+    const d = decideLifecycle("delete", busy, { confirmSymbol: "ap", cascade: true });
+    expect(d).toMatchObject({ status: "DELETED", change: { delete: true }, dependencies: { transactions: 12, prices: 800, notes: 2, customMetrics: 1 } });
+    expect(d.message).toMatch(/รายการซื้อขาย 12/);
+    expect(d.message).toMatch(/บันทึก 2 รายการถูกตัดการผูก/);
+    expect(d.message).not.toMatch(/พร้อม.*บันทึก 2 ·/);
+    // The typed symbol is still required.
+    expect(decideLifecycle("delete", busy, { confirmSymbol: "AQ", cascade: true }).status).toBe("FORBIDDEN");
+    expect(decideLifecycle("delete", busy, { cascade: true }).status).toBe("FORBIDDEN");
+    // Without cascade (REST / MCP) the old guard is unchanged.
+    expect(decideLifecycle("delete", busy, { confirmSymbol: "AP" }).status).toBe("BLOCKED_HAS_DEPENDENCIES");
+  });
 });

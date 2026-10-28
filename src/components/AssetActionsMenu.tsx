@@ -4,15 +4,15 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { assetLifecycleAction } from "@/app/(app)/actions";
-import type { LifecycleAction } from "@/lib/asset-lifecycle";
+import { assetDependenciesAction, assetLifecycleAction } from "@/app/(app)/actions";
+import { dependencySummary, type AssetDependencies, type LifecycleAction } from "@/lib/asset-lifecycle";
 
 interface Props {
   asset: { id: number; symbol: string };
   hidden: boolean;
   archived: boolean;
   held: boolean;
-  /** Records referencing the asset (transactions, prices, valuations, …); delete only when 0. */
+  /** Records referencing the asset (transactions, prices, valuations, …); all deleted with it. */
   dependencyCount: number;
   /** chip = compact ⋯ menu; page = inline buttons on the asset page. */
   variant?: "chip" | "page";
@@ -27,22 +27,24 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirm, setConfirm] = useState("");
+  const [deps, setDeps] = useState<AssetDependencies | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const details = useRef<HTMLDetailsElement>(null);
 
   const run = (action: LifecycleAction, confirmSymbol?: string) =>
     start(async () => {
-      const r = await assetLifecycleAction(asset.id, action, confirmSymbol);
+      const r = await assetLifecycleAction(asset.id, action, confirmSymbol, action === "delete");
       const ok = r.status !== "FORBIDDEN" && r.status !== "BLOCKED_HAS_DEPENDENCIES" && r.status !== "NOT_FOUND";
       setMsg({ ok, text: r.message });
       if (ok) {
         dialog.current?.close();
         details.current?.removeAttribute("open");
-        router.refresh();
+        // The asset page no longer exists after a delete: go back to the holdings list.
+        if (action === "delete" && variant === "page") router.push("/holdings");
+        else router.refresh();
       }
     });
 
-  const deleteReason = held ? "ยังถืออยู่" : dependencyCount > 0 ? `มีข้อมูลอ้างถึง ${dependencyCount} รายการ — ใช้ซ่อน/เก็บถาวรแทน` : null;
   const items = (
     <>
       {variant === "chip" && (
@@ -63,16 +65,18 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
       <button
         type="button"
         role="menuitem"
-        className={clsx("menu-item", !deleteReason && "text-neg")}
-        disabled={pending || !!deleteReason}
-        title={deleteReason ?? undefined}
+        className="menu-item text-neg"
+        disabled={pending}
+        title={dependencyCount > 0 ? `ลบพร้อมข้อมูลที่เกี่ยวข้อง ${dependencyCount} รายการ` : undefined}
         onClick={() => {
           setConfirm("");
           setMsg(null);
+          setDeps(null);
           dialog.current?.showModal();
+          start(async () => setDeps(await assetDependenciesAction(asset.id)));
         }}
       >
-        ลบถาวร{deleteReason ? ` — ${deleteReason}` : ""}
+        ลบถาวร
       </button>
     </>
   );
@@ -100,9 +104,26 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
         <h2 id={`del-${asset.id}`} className="text-[15px] font-semibold text-neg">
           ลบ {asset.symbol} ถาวร
         </h2>
-        <p className="mt-2 text-xs text-muted">
-          ลบได้เฉพาะสินทรัพย์ที่ไม่มีรายการ ราคา valuation งบ ปันผล หรือบันทึกอ้างถึง — ระบบตรวจซ้ำอีกครั้งตอนลบ และไม่ลบข้อมูลอื่นให้ ถ้าต้องการแค่เอาออกจากหน้าจอ ให้ใช้ “ซ่อน” หรือ “เก็บถาวร”
-        </p>
+        <p className="mt-2 text-xs text-muted">ลบสินทรัพย์นี้และข้อมูลทั้งหมดที่ผูกกับมัน — กู้คืนไม่ได้ บันทึก (notes) ยังอยู่แต่จะไม่ผูกกับสินทรัพย์นี้แล้ว</p>
+        <div className="mt-2 rounded-lg border border-neg/40 bg-neg/5 p-2 text-xs" aria-live="polite">
+          {!deps ? (
+            <span className="text-muted">กำลังนับข้อมูลที่จะถูกลบ…</span>
+          ) : dependencySummary({ ...deps, notes: 0 }).total || deps.notes ? (
+            <>
+              {dependencySummary({ ...deps, notes: 0 }).total > 0 && (
+                <>
+                  <div className="font-medium text-neg">จะถูกลบไปด้วย:</div>
+                  <div className="mt-0.5">{dependencySummary({ ...deps, notes: 0 }).text}</div>
+                </>
+              )}
+              {deps.notes > 0 && <div className="mt-1 text-muted">บันทึก {deps.notes} รายการ: เก็บไว้ แต่ตัดการผูกกับ {asset.symbol}</div>}
+              {held && <div className="mt-1 text-neg">ยังถืออยู่ — ยอดในพอร์ตและผลตอบแทนย้อนหลังจะเปลี่ยน</div>}
+            </>
+          ) : (
+            <span className="text-muted">ไม่มีข้อมูลอื่นผูกอยู่</span>
+          )}
+        </div>
+        {!held && <p className="mt-2 text-[11px] text-muted">ถ้าแค่ต้องการเอาออกจากหน้าจอ ใช้ “ซ่อน” หรือ “เก็บถาวร” แทน (ข้อมูลยังอยู่ครบ)</p>}
         <label className="mt-3 block">
           <span className="label">พิมพ์ {asset.symbol} เพื่อยืนยัน</span>
           <input className="input" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
@@ -115,7 +136,7 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
           <button
             type="button"
             className="inline-flex items-center rounded-lg bg-neg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-            disabled={pending || confirm.trim().toUpperCase() !== asset.symbol.toUpperCase()}
+            disabled={pending || !deps || confirm.trim().toUpperCase() !== asset.symbol.toUpperCase()}
             onClick={() => run("delete", confirm)}
           >
             {pending ? "กำลังลบ…" : "ลบถาวร"}

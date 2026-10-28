@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import type { AssetClass } from "@/db/schema";
-import { createAsset, getAsset, updateAsset, updateAssetProfile } from "@/server/services/assets";
-import { changeAssetLifecycle } from "@/server/services/asset-lifecycle";
+import { createAsset, editAssetBasics, getAsset, updateAsset, updateAssetProfile } from "@/server/services/assets";
+import { assetDependencies, changeAssetLifecycle } from "@/server/services/asset-lifecycle";
 import type { LifecycleAction } from "@/lib/asset-lifecycle";
 import { createNote, deleteNote, updateNote } from "@/server/services/notes";
 import { recordPrice } from "@/server/services/prices";
@@ -110,6 +110,24 @@ export async function addAssetAction(_: ActionState, f: FormData): Promise<Actio
   }
 }
 
+/** Correct symbol / name / class / currency / price source and code of an existing asset. */
+export async function editAssetBasicsAction(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  try {
+    const row = await editAssetBasics(id, {
+      symbol: str(f, "symbol") ?? "",
+      name: str(f, "name") ?? "",
+      assetClass: (str(f, "assetClass") ?? "thai_stock") as AssetClass,
+      currency: (str(f, "currency") ?? "THB") as "THB",
+      priceSource: (str(f, "priceSource") ?? "manual") as "manual",
+      providerSymbol: str(f, "providerSymbol") ?? null,
+      confirmChange: f.get("confirmChange") === "on",
+    });
+    return done(`บันทึกข้อมูล ${row.symbol} แล้ว`);
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Bond terms on an existing asset (coupon, maturity, face, frequency, day count). */
 export async function updateBondTermsAction(id: number, _: ActionState, f: FormData): Promise<ActionState> {
   try {
@@ -145,9 +163,14 @@ export async function updateBondTermsAction(id: number, _: ActionState, f: FormD
   }
 }
 
-/** Hide / archive / restore / guarded delete by asset id; returns the typed result for the UI. */
-export async function assetLifecycleAction(assetId: number, action: LifecycleAction, confirmSymbol?: string) {
-  const r = await changeAssetLifecycle({ assetId, action, confirmSymbol, source: "web" });
+/** Counts of everything a permanent delete would remove (shown in the confirmation dialog). */
+export async function assetDependenciesAction(assetId: number) {
+  return assetDependencies(assetId);
+}
+
+/** Hide / archive / restore / delete by asset id; web deletes cascade (`cascade`) once the counts were shown. */
+export async function assetLifecycleAction(assetId: number, action: LifecycleAction, confirmSymbol?: string, cascade = false) {
+  const r = await changeAssetLifecycle({ assetId, action, confirmSymbol, source: "web", cascade });
   revalidatePath("/", "layout");
   return { status: r.status, message: r.message, unchanged: !!r.unchanged, dependencies: r.dependencies ?? null };
 }

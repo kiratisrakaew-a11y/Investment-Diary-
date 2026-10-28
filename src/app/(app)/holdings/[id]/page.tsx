@@ -8,6 +8,7 @@ import { getPortfolioSummary } from "@/server/services/portfolio";
 import { PriceChart } from "@/components/charts";
 import { NoteCard } from "@/components/NoteCard";
 import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
+import { EditAssetForm } from "@/components/EditAssetForm";
 import { ActionForm } from "@/components/ActionForm";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { AssetProfileForm } from "@/components/AssetProfileForm";
@@ -146,6 +147,11 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           </ActionForm>
         </Section>
       )}
+      <Section title="ข้อมูลสินทรัพย์ (แก้เมื่อกรอกผิด)">
+        <EditAssetForm
+          asset={{ id, symbol: asset.symbol, name: asset.name, assetClass: asset.assetClass, currency: asset.currency, priceSource: asset.priceSource, providerSymbol: asset.providerSymbol }}
+          hasHistory={!!deps && deps.transactions + deps.prices > 0} />
+      </Section>
       <Section title="ผู้ออกและหมวด (ใช้กับข้อจำกัดความเสี่ยง)">
         <AssetProfileForm symbol={asset.symbol} issuer={asset.issuer} sector={asset.sector} sectorSource={asset.sectorSource} sectorAsOf={asset.sectorAsOf} today={today()} />
       </Section>

@@ -9,6 +9,9 @@ import "dotenv/config";
 import { eq, inArray, like } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import { changeAssetLifecycle } from "../server/services/asset-lifecycle";
+import { editAssetBasics } from "../server/services/assets";
+import { addObservation, addThresholdVersion, createMetric } from "../server/services/asset-metrics";
+import { sql } from "drizzle-orm";
 import { createTransaction, deleteTransaction } from "../server/services/transactions";
 import { getPerformance, getPortfolioSummary } from "../server/services/portfolio";
 import { loadUniverse, optimizePortfolio } from "../server/services/optimizer";
@@ -111,6 +114,70 @@ try {
   const bp2 = (await db.select().from(schema.prices).where(eq(schema.prices.assetId, bond.id))).map((p) => ({ date: p.date, close: p.close }));
   const after2 = bondReturnInputs(bond, bp2);
   check("archived bond keeps prices and coupon history", bp2.length === bp.length && before.ok && after2.ok && JSON.stringify(before.distributions) === JSON.stringify(after2.distributions), `${bp2.length} prices`);
+
+  // 10. Web delete with cascade: a held asset with every kind of related record goes; notes stay unlinked.
+  const casc = await makeAsset("TLC-CASC", "thai_stock", "PTT");
+  const cp = await db.select().from(schema.prices).where(eq(schema.prices.assetId, casc.id));
+  const cascTx = await createTransaction({ type: "buy", symbol: "TLC-CASC", date: "2026-10-02", quantity: 10, price: cp[cp.length - 1].close, fee: 0, memo: "TEST-LOCAL" } as never);
+  await db.insert(schema.valuations).values({ assetId: casc.id, symbol: "TLC-CASC", date: "2026-10-01", method: "multiples", assumptions: {}, result: {} } as never);
+  await db.insert(schema.financialStatements).values({ symbol: "tlc-casc", fiscalYear: 2025, data: {} } as never);
+  await db.insert(schema.dividendEvents).values({ symbol: "TLC-CASC", assetId: casc.id, dividendPerShare: 0.5, source: "test-local", sourceEventId: "tlc-casc-1" } as never);
+  await db.insert(schema.statementUploads).values({ symbol: "TLC-CASC", filename: "x.pdf", mimeType: "application/pdf", size: 1, status: "ok" });
+  const [note] = await db.insert(schema.notes).values({ date: "2026-10-01", title: "TEST-LOCAL note", assetIds: [casc.id, never.id] }).returning();
+  const m = await createMetric(casc.id, { name: "TLC metric", unit: "%" });
+  await addObservation(casc.id, m.id, { observedOn: "2026-01-01", value: 1 });
+  await addThresholdVersion(casc.id, m.id, { ruleType: "lower_is_better", effectiveFrom: "2026-01-01", greenBound: 1, yellowBound: 2 });
+  const otherPrices = (await db.select({ c: sql<number>`count(*)::int` }).from(schema.prices))[0].c - cp.length;
+  const noCascade = await changeAssetLifecycle({ assetId: casc.id, action: "delete", confirmSymbol: "TLC-CASC" });
+  check("API / MCP delete without cascade still blocked", noCascade.status === "BLOCKED_HAS_DEPENDENCIES");
+  const wrong = await changeAssetLifecycle({ assetId: casc.id, action: "delete", confirmSymbol: "TLC", cascade: true });
+  check("cascade delete still needs the typed symbol", wrong.status === "FORBIDDEN");
+  const gone = await changeAssetLifecycle({ assetId: casc.id, action: "delete", confirmSymbol: "tlc-casc", cascade: true, source: "web" });
+  const left = async (t: typeof schema.valuations | typeof schema.financialStatements | typeof schema.dividendEvents) =>
+    (await db.select({ c: sql<number>`count(*)::int` }).from(t).where(sql`upper(${t.symbol}) = 'TLC-CASC' or ${t.assetId} = ${casc.id}`))[0].c;
+  const remaining = {
+    asset: (await db.select().from(schema.assets).where(eq(schema.assets.id, casc.id))).length,
+    tx: (await db.select().from(schema.transactions).where(eq(schema.transactions.id, cascTx.id))).length,
+    prices: (await db.select().from(schema.prices).where(eq(schema.prices.assetId, casc.id))).length,
+    valuations: await left(schema.valuations),
+    statements: await left(schema.financialStatements),
+    dividends: await left(schema.dividendEvents),
+    uploads: (await db.select().from(schema.statementUploads).where(eq(schema.statementUploads.symbol, "TLC-CASC"))).length,
+    metrics: (await db.select().from(schema.assetMetricDefinitions).where(eq(schema.assetMetricDefinitions.id, m.id))).length,
+    observations: (await db.select().from(schema.assetMetricObservations).where(eq(schema.assetMetricObservations.metricId, m.id))).length,
+    thresholds: (await db.select().from(schema.assetMetricThresholdVersions).where(eq(schema.assetMetricThresholdVersions.metricId, m.id))).length,
+  };
+  check("cascade delete removes the held asset and every related record", gone.status === "DELETED" && Object.values(remaining).every((v) => v === 0), JSON.stringify(remaining));
+  const [noteAfter] = await db.select().from(schema.notes).where(eq(schema.notes.id, note.id));
+  check("note kept, unlinked from the deleted asset only", !!noteAfter && JSON.stringify(noteAfter.assetIds) === JSON.stringify([never.id]));
+  await db.delete(schema.notes).where(eq(schema.notes.id, note.id));
+  const otherAfter = (await db.select({ c: sql<number>`count(*)::int` }).from(schema.prices))[0].c;
+  check("other assets' prices untouched", otherAfter === otherPrices);
+
+  // 11. Edit basics: rename (case-normalised), follow-up of symbol-keyed rows, clash refused, class change guarded.
+  const ren = await makeAsset("TLC-REN", "thai_stock", "PTT");
+  await db.insert(schema.valuations).values({ assetId: ren.id, symbol: "TLC-REN", date: "2026-10-01", method: "multiples", assumptions: {}, result: {} } as never);
+  await db.insert(schema.financialStatements).values({ symbol: "TLC-REN", fiscalYear: 2025, data: {} } as never);
+  await db.insert(schema.dividendEvents).values({ symbol: "TLC-REN", dividendPerShare: 0.5, source: "test-local", sourceEventId: "tlc-ren-1" } as never);
+  const renPrices = (await db.select().from(schema.prices).where(eq(schema.prices.assetId, ren.id))).length;
+  const base = { name: "TEST-LOCAL renamed", assetClass: "thai_stock" as const, currency: "THB" as const, priceSource: "yahoo" as const };
+  const r1 = await editAssetBasics(ren.id, { ...base, symbol: " tlc-ren.bk ", providerSymbol: "PTT.BK" });
+  const follow = async (t: typeof schema.valuations | typeof schema.financialStatements | typeof schema.dividendEvents) => (await db.select().from(t).where(eq(t.symbol, "TLC-REN.BK"))).length;
+  check("rename normalises to upper case and keeps id", r1.id === ren.id && r1.symbol === "TLC-REN.BK" && r1.providerSymbol === "PTT.BK" && r1.name === "TEST-LOCAL renamed");
+  check("valuations / statements / dividends follow the new symbol", (await follow(schema.valuations)) === 1 && (await follow(schema.financialStatements)) === 1 && (await follow(schema.dividendEvents)) === 1);
+  check("prices stay attached after rename", (await db.select().from(schema.prices).where(eq(schema.prices.assetId, ren.id))).length === renPrices);
+  const clash = await editAssetBasics(ren.id, { ...base, symbol: "TLC-NEVER" }).then(() => "OK", (e: Error) => e.message);
+  check("rename onto an existing symbol refused", clash.includes("มีสินทรัพย์ symbol TLC-NEVER อยู่แล้ว"), clash);
+  const cls = await editAssetBasics(ren.id, { ...base, symbol: "TLC-REN.BK", assetClass: "fund" }).then(() => "OK", (e: Error) => e.message);
+  const cls2 = await editAssetBasics(ren.id, { ...base, symbol: "TLC-REN.BK", assetClass: "fund", confirmChange: true });
+  check("class change with prices needs confirmation", cls.includes("ติ๊กยืนยัน") && cls2.assetClass === "fund", cls);
+  const cleared = await editAssetBasics(ren.id, { ...base, symbol: "TLC-REN.BK", assetClass: "fund", providerSymbol: "" });
+  check("empty price code clears it", cleared.providerSymbol === null);
+  const editEv = await db.select().from(schema.assetLifecycleEvents).where(eq(schema.assetLifecycleEvents.assetId, ren.id));
+  check("edits audited with before / after", editEv.filter((e) => e.action === "edit").length === 3);
+  await db.delete(schema.valuations).where(eq(schema.valuations.assetId, ren.id));
+  await db.delete(schema.financialStatements).where(eq(schema.financialStatements.symbol, "TLC-REN.BK"));
+  await db.delete(schema.dividendEvents).where(eq(schema.dividendEvents.symbol, "TLC-REN.BK"));
 
   // 9. Audit trail.
   const events = await db.select().from(schema.assetLifecycleEvents).where(like(schema.assetLifecycleEvents.symbol, "TLC-%"));

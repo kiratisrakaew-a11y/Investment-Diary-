@@ -6,8 +6,9 @@
  *                       valuations or optimizer eligibility. Not for a position still held.
  *   archive / unarchive — reversible inactivity: excluded by default from new selections (optimizer
  *                       universe, pickers); all history stays. Not for a position still held.
- *   delete            — only with zero dependent records and the exact symbol typed as confirmation.
- *                       Never cascades; otherwise BLOCKED_HAS_DEPENDENCIES with the counts.
+ *   delete            — exact symbol typed as confirmation. Default: only with zero dependent records,
+ *                       otherwise BLOCKED_HAS_DEPENDENCIES with the counts (API / MCP). With `cascade`
+ *                       (web, after the counts were shown): the asset and everything referencing it go.
  * There is no watchlist module, so "remove from watchlist" does not exist here.
  */
 export type LifecycleAction = "hide" | "unhide" | "archive" | "unarchive" | "delete";
@@ -62,7 +63,7 @@ export function dependencySummary(d: AssetDependencies): { total: number; nonZer
   return { total, nonZero, text: Object.entries(nonZero).map(([k, v]) => `${DEP_LABEL[k as keyof AssetDependencies]} ${v}`).join(" · ") };
 }
 
-export function decideLifecycle(action: LifecycleAction, s: LifecycleState, opts: { confirmSymbol?: string; now?: Date } = {}): LifecycleDecision {
+export function decideLifecycle(action: LifecycleAction, s: LifecycleState, opts: { confirmSymbol?: string; now?: Date; cascade?: boolean } = {}): LifecycleDecision {
   const now = opts.now ?? new Date();
   if (!s.exists) return { status: "NOT_FOUND", message: "ไม่พบสินทรัพย์นี้" };
   const held = Math.abs(s.heldQuantity) > 1e-12;
@@ -82,8 +83,19 @@ export function decideLifecycle(action: LifecycleAction, s: LifecycleState, opts
     case "delete": {
       if ((opts.confirmSymbol ?? "").trim().toUpperCase() !== s.symbol.toUpperCase())
         return { status: "FORBIDDEN", message: `ยืนยันการลบถาวรต้องพิมพ์สัญลักษณ์ ${s.symbol} ให้ตรง` };
-      if (held) return { status: "BLOCKED_HAS_DEPENDENCIES", message: `${s.symbol} ยังถืออยู่ — ลบไม่ได้`, dependencies: s.dependencies };
       const d = dependencySummary(s.dependencies);
+      if (opts.cascade) {
+        // Notes are kept (only unlinked), so they are reported separately from what is deleted.
+        const gone = dependencySummary({ ...s.dependencies, notes: 0 });
+        const notes = s.dependencies.notes ? ` · บันทึก ${s.dependencies.notes} รายการถูกตัดการผูก (ไม่ได้ลบ)` : "";
+        return {
+          status: "DELETED",
+          change: { delete: true },
+          message: `ลบ ${s.symbol} ถาวรแล้ว${gone.total ? ` พร้อม ${gone.text}` : ""}${notes}${held ? " — รวมสถานะที่ยังถืออยู่" : ""}`,
+          dependencies: d.nonZero,
+        };
+      }
+      if (held) return { status: "BLOCKED_HAS_DEPENDENCIES", message: `${s.symbol} ยังถืออยู่ — ลบไม่ได้`, dependencies: s.dependencies };
       if (d.total > 0)
         return {
           status: "BLOCKED_HAS_DEPENDENCIES",

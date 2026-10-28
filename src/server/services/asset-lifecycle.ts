@@ -1,4 +1,4 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { decideLifecycle, type AssetDependencies, type LifecycleAction, type LifecycleDecision } from "@/lib/asset-lifecycle";
 import { metricDefinitionCount } from "./asset-metrics";
@@ -38,16 +38,20 @@ export async function assetDependencies(id: number) {
 
 /**
  * Apply a lifecycle action by immutable id inside one transaction (row locked), with typed result and an
- * audit event. Hide / archive are idempotent; delete never cascades and requires the typed symbol.
+ * audit event. Hide / archive are idempotent; delete requires the typed symbol and, unless `cascade`
+ * is set, no dependent records.
  */
-export async function changeAssetLifecycle(input: { assetId: number; action: LifecycleAction; confirmSymbol?: string; source?: string }): Promise<LifecycleDecision & { assetId: number; symbol: string | null }> {
+export async function changeAssetLifecycle(input: { assetId: number; action: LifecycleAction; confirmSymbol?: string; source?: string; cascade?: boolean }): Promise<LifecycleDecision & { assetId: number; symbol: string | null }> {
   const qty = await heldQuantity(input.assetId);
   return getDb().transaction(async (tx) => {
     const [a] = await tx.select().from(schema.assets).where(eq(schema.assets.id, input.assetId)).for("update");
     if (!a) return { ...decideLifecycle(input.action, { exists: false, symbol: "", hiddenAt: null, archivedAt: null, heldQuantity: 0, dependencies: emptyDeps() }), assetId: input.assetId, symbol: null };
     const deps = input.action === "delete" ? await countDependencies(tx, a.id, a.symbol) : emptyDeps();
-    const d = decideLifecycle(input.action, { exists: true, symbol: a.symbol, hiddenAt: a.hiddenInHoldingsAt, archivedAt: a.archivedAt, heldQuantity: qty, dependencies: deps }, { confirmSymbol: input.confirmSymbol });
-    if (d.change?.delete) await tx.delete(schema.assets).where(and(eq(schema.assets.id, a.id)));
+    const d = decideLifecycle(input.action, { exists: true, symbol: a.symbol, hiddenAt: a.hiddenInHoldingsAt, archivedAt: a.archivedAt, heldQuantity: qty, dependencies: deps }, { confirmSymbol: input.confirmSymbol, cascade: input.cascade });
+    if (d.change?.delete) {
+      if (input.cascade) await deleteDependents(tx, a.id, a.symbol);
+      await tx.delete(schema.assets).where(and(eq(schema.assets.id, a.id)));
+    }
     else if (d.change) await tx.update(schema.assets).set(d.change).where(eq(schema.assets.id, a.id));
     await tx.insert(schema.assetLifecycleEvents).values({
       assetId: a.id,
@@ -55,10 +59,31 @@ export async function changeAssetLifecycle(input: { assetId: number; action: Lif
       action: input.action,
       result: d.unchanged ? `${d.status}_UNCHANGED` : d.status,
       source: input.source ?? "web",
-      detail: d.dependencies ? { dependencies: d.dependencies } : null,
+      detail: d.dependencies ? { dependencies: d.dependencies, ...(d.change?.delete && input.cascade ? { cascade: true } : {}) } : null,
     });
     return { ...d, assetId: a.id, symbol: a.symbol };
   });
+}
+
+/**
+ * Remove everything that references the asset (cascade delete). Transactions and prices go with the
+ * asset row (FK cascade); notes are kept but unlinked from the asset.
+ */
+async function deleteDependents(tx: Tx, id: number, symbol: string) {
+  const S = symbol.toUpperCase();
+  const M = schema.assetMetricDefinitions;
+  const defs = (await tx.select({ id: M.id }).from(M).where(eq(M.assetId, id))).map((r) => r.id);
+  if (defs.length) {
+    await tx.delete(schema.assetMetricObservations).where(inArray(schema.assetMetricObservations.metricId, defs));
+    await tx.delete(schema.assetMetricThresholdVersions).where(inArray(schema.assetMetricThresholdVersions.metricId, defs));
+    await tx.delete(M).where(inArray(M.id, defs));
+  }
+  await tx.delete(schema.assetMetricEvents).where(eq(schema.assetMetricEvents.assetId, id));
+  await tx.delete(schema.valuations).where(or(eq(schema.valuations.assetId, id), sql`upper(${schema.valuations.symbol}) = ${S}`));
+  await tx.delete(schema.financialStatements).where(or(eq(schema.financialStatements.assetId, id), sql`upper(${schema.financialStatements.symbol}) = ${S}`));
+  await tx.delete(schema.dividendEvents).where(or(eq(schema.dividendEvents.assetId, id), sql`upper(${schema.dividendEvents.symbol}) = ${S}`));
+  await tx.delete(schema.statementUploads).where(sql`upper(${schema.statementUploads.symbol}) = ${S}`);
+  await tx.update(schema.notes).set({ assetIds: sql`array_remove(${schema.notes.assetIds}, ${id})` }).where(sql`${id} = any(${schema.notes.assetIds})`);
 }
 
 function emptyDeps(): AssetDependencies {

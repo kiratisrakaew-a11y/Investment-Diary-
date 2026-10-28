@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-28 — Edit asset basics and permanent delete with related data
+- New "ข้อมูลสินทรัพย์" section on the asset page.
+  - Edit the symbol (e.g. AP → AP.BK, upper-cased automatically), name, type, currency, price source and price code.
+  - The id never changes, so transactions, prices, metrics and notes stay attached. Valuations, financial statements, dividend events and statement uploads follow the new symbol.
+  - Refused when the new symbol clashes with an existing asset, or when statements already exist under the new symbol.
+  - Changing type or currency once transactions or prices exist needs a tick to confirm; stored values are not converted.
+  - Every edit is audited.
+- Permanent delete from the web now works for held or referenced assets.
+  - The dialog lists what will be removed, and the symbol must be typed to confirm.
+  - Removed in one transaction: transactions, prices, valuations, statements, dividends, uploads and custom metrics. Notes are kept but unlinked.
+  - REST and MCP deletes keep the old guard (blocked when anything references the asset).
+
 ## 2026-10-28 — Custom metric charts: one chart per metric
 - Every metric now has its own chart card in Actual, Indexed 100 and % Change, with its own y-axis, threshold bands (Actual only), tooltip and empty state. Metrics are no longer merged by unit or scale, and there are no dual axes. `actualLayout`, `unionRows` and `baseDateWarning` have been removed, replaced by `singleMetricChart` / `metricCharts`.
 - The "connect missing dates" setting is honoured in every mode. Previously it was forced on for single-metric and small-multiple charts. Gaps longer than the metric's frequency allows stay visible when it is off.
