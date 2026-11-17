@@ -63,6 +63,8 @@ export interface BacktestInput {
   useLots: boolean;
   /** min_cvar: confidence (default 0.95); scenarios are the training-window returns. */
   cvarConfidence?: number;
+  /** First trading index, when later than the strategy's own start (aligns several strategies on one test period). */
+  startIndex?: number;
   /** Required for dividend strategies; ignored by the built-in ones. */
   decisionProvider?: DecisionProvider;
   dividendCashflows?: DividendCashflows;
@@ -99,6 +101,41 @@ export interface BacktestResult {
   decisions?: { date: string; cutoff: string; selected: string[]; diagnostics: string[] }[];
 }
 
+/**
+ * μ / Σ (annualised) from the returns between price indices k0 and k1 — the estimator the walk-forward
+ * uses at each decision, exported so reports can quote the same ex-ante numbers. Uses prices up to k1 only.
+ */
+export function estimateWindow(
+  x: Pick<BacktestInput, "dates" | "prices" | "benchmark" | "returnMethod" | "covMethod" | "rf" | "erp">,
+  k0: number,
+  k1: number,
+): { mu: number[]; cov: Matrix; win: number[][]; periodsPerYear: number } {
+  const win = x.prices.map((p) => p.slice(k0, k1 + 1)).map((p) => p.slice(1).map((v, k) => v / p[k] - 1));
+  const years = (Date.parse(x.dates[k1]) - Date.parse(x.dates[k0])) / (365 * 86_400_000);
+  const N = years > 0 ? (k1 - k0) / years : 252;
+  const cov: Matrix = x.covMethod === "ledoit_wolf" ? ledoitWolf(win).cov.map((r) => r.map((v) => v * N)) : estimateInputs(win, N).cov;
+  const hist = win.map((r) => mean(r) * N);
+  let mu = hist;
+  const benchSeries = x.benchmark?.series.length ? x.benchmark.series : null;
+  if (x.returnMethod !== "historical" && benchSeries) {
+    // Window prices k0 … k1: data strictly before the trade date.
+    const wDates = x.dates.slice(k0, k1 + 1);
+    const capm = win.map((_, i) => {
+      const al = alignWithBenchmark(wDates.map((d, k) => [d, x.prices[i][k0 + k]] as [string, number]), benchSeries.filter(([d]) => d <= x.dates[k1]), wDates);
+      const be = al.dates.length > 2 ? calcBeta(al.asset, al.benchmark) : null;
+      return be != null ? x.rf + be * x.erp : hist[i];
+    });
+    mu = x.returnMethod === "capm" ? capm : hist.map((h, i) => 0.5 * h + 0.5 * capm[i]);
+  }
+  return { mu, cov, win, periodsPerYear: N };
+}
+
+/**
+ * Cash after a rebalance may sit a rounding error below zero (the trade search allows −1e-9); once
+ * interest accrues on it the next rebalance would be refused. Sub-micro-baht negatives are zero.
+ */
+const settle = (cash: number) => (cash < 0 && cash > -1e-6 ? 0 : cash);
+
 const addCost = (a: CostBreakdown, b: CostBreakdown): CostBreakdown => ({
   commission: a.commission + b.commission,
   vat: a.vat + b.vat,
@@ -120,14 +157,10 @@ export function backtest(x: BacktestInput): BacktestResult {
   const needsWindow = !isProviderStrategy && !["buy_and_hold", "equal_weight", "custom"].includes(x.strategy);
   // First trading index: the window needs `window` returns ending at price index start − 1.
   // Provider strategies decide at t with data up to t − 1, so they start at index 1.
-  const start = needsWindow ? x.window + 1 : isProviderStrategy ? 1 : 0;
+  const start = Math.max(needsWindow ? x.window + 1 : isProviderStrategy ? 1 : 0, Math.floor(x.startIndex ?? 0));
   if (needsWindow && n < 2) return fail("กลยุทธ์ที่ใช้ optimizer ต้องมีอย่างน้อย 2 สินทรัพย์");
   if (start >= T - 1) return fail(`ข้อมูล ${T} วัน ไม่พอสำหรับช่วงฝึก ${x.window} วัน + ช่วงทดสอบ`);
 
-  // Returns r[i][k] from price k to k+1.
-  const R = x.prices.map((p) => p.slice(1).map((v, k) => v / p[k] - 1));
-  // Benchmark actual prints only (no forward fill); β uses common actual dates (return-series.ts).
-  const benchSeries = x.benchmark?.series.length ? x.benchmark.series : null;
   const yearsPer = (a: number, b: number) => (Date.parse(x.dates[b]) - Date.parse(x.dates[a])) / (365 * 86_400_000);
 
   /** Target weights decided at index t with data up to price t − 1 only. */
@@ -142,22 +175,9 @@ export function backtest(x: BacktestInput): BacktestResult {
     const k1 = t - 1;
     const k0 = k1 - x.window;
     if (k0 < 0) return { error: "window" };
-    const win = R.map((r) => r.slice(k0, k1));
-    const years = yearsPer(k0, k1);
-    const N = years > 0 ? x.window / years : 252;
-    const cov: Matrix = x.covMethod === "ledoit_wolf" ? ledoitWolf(win).cov.map((r) => r.map((v) => v * N)) : estimateInputs(win, N).cov;
-    const hist = win.map((r) => mean(r) * N);
-    let mu = hist;
-    if (x.returnMethod !== "historical" && benchSeries) {
-      // Window prices k0 … k1 (= t − 1): data strictly before the trade date.
-      const wDates = x.dates.slice(k0, k1 + 1);
-      const capm = win.map((_, i) => {
-        const al = alignWithBenchmark(wDates.map((d, k) => [d, x.prices[i][k0 + k]] as [string, number]), benchSeries.filter(([d]) => d <= x.dates[k1]), wDates);
-        const be = al.dates.length > 2 ? calcBeta(al.asset, al.benchmark) : null;
-        return be != null ? x.rf + be * x.erp : hist[i];
-      });
-      mu = x.returnMethod === "capm" ? capm : hist.map((h, i) => 0.5 * h + 0.5 * capm[i]);
-    }
+    const est = estimateWindow(x, k0, k1);
+    const { win, cov } = est;
+    let mu = est.mu;
     if (x.strategy === "black_litterman") {
       if (!x.blackLitterman) return { error: "Black–Litterman ต้องมี marketWeights" };
       const bl = blackLitterman({
@@ -275,7 +295,7 @@ export function backtest(x: BacktestInput): BacktestResult {
             div.reinvested += tr.value;
           }
           q = rr.trades.map((tr) => tr.finalQuantity);
-          cash = rr.cash.end;
+          cash = settle(rr.cash.end);
         }
       }
     }
@@ -305,7 +325,7 @@ export function backtest(x: BacktestInput): BacktestResult {
         traded += tr.value;
       }
       q = r.trades.map((tr) => tr.finalQuantity);
-      cash = r.cash.end;
+      cash = settle(r.cash.end);
       const nav = q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash;
       weights.push({
         date: x.dates[t],

@@ -21,7 +21,7 @@ describe("MCP build info", () => {
     expect(names).toContain("list_dividend_events");
     expect(names).toContain("screen_factor_stocks");
     expect(names).toContain("plan_bond_ladder");
-    for (const n of ["get_performance_metrics", "analyze_valuation", "manage_asset_lifecycle", "get_risk_free_rate", "value_security", "add_asset", "list_assets"]) expect(names).toContain(n);
+    for (const n of ["compare_portfolio_models", "get_performance_metrics", "analyze_valuation", "manage_asset_lifecycle", "get_risk_free_rate", "value_security", "add_asset", "list_assets"]) expect(names).toContain(n);
   });
   it("registers the 12 asset custom-metric tools", () => {
     const names = mcpToolNames();

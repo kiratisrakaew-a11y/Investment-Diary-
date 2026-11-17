@@ -1,5 +1,7 @@
 import { loadUniverse } from "@/server/services/optimizer";
 import { OptimizerClient } from "@/components/OptimizerClient";
+import { OptimizerTabs } from "@/components/OptimizerTabs";
+import { ModelComparisonClient } from "@/components/ModelComparisonClient";
 import { Empty, PageHeader } from "@/components/ui";
 
 export default async function OptimizerPage() {
@@ -8,7 +10,7 @@ export default async function OptimizerPage() {
     <>
       <PageHeader
         title="จัดพอร์ตตาม Modern Portfolio Theory"
-        subtitle="Efficient frontier, tangency portfolio, complete portfolio ตาม risk aversion และน้ำหนักที่แนะนำ"
+        subtitle="Efficient frontier, tangency portfolio, น้ำหนักที่แนะนำ และการเปรียบเทียบโมเดลแบบ Out-of-Sample"
       />
       {!u.ok ? (
         <Empty>
@@ -23,15 +25,20 @@ export default async function OptimizerPage() {
           {u.skipped.length > 0 && (
             <p className="text-xs text-muted">ไม่รวม: {u.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}</p>
           )}
-          <OptimizerClient
-            assets={u.assets}
-            cov={u.cov}
-            covShrunk={u.covShrunk}
-            shrinkage={u.shrinkage}
-            periodsPerYear={u.periodsPerYear}
-            rf={u.riskFree}
-            rfInfo={u.riskFreeInfo}
-            erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
+          <OptimizerTabs
+            optimizer={
+              <OptimizerClient
+                assets={u.assets}
+                cov={u.cov}
+                covShrunk={u.covShrunk}
+                shrinkage={u.shrinkage}
+                periodsPerYear={u.periodsPerYear}
+                rf={u.riskFree}
+                rfInfo={u.riskFreeInfo}
+                erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
+            }
+            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} />}
+          />
         </>
       )}
     </>

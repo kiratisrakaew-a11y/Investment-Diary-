@@ -304,6 +304,29 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
   );
 }
 
+/**
+ * Several models on one shared scale (same unit, compared on purpose): one 2px line per model in a
+ * fixed colour order, the benchmark as a dashed neutral line. `percent` formats values as % (drawdown).
+ */
+export function ModelLinesChart({ data, series, benchmark, percent = false, height = 280 }: { data: Record<string, number | string | null>[]; series: { key: string; name: string }[]; benchmark?: string | null; percent?: boolean; height?: number }) {
+  const f = (v: number) => (percent ? `${(v * 100).toFixed(1)}%` : v.toFixed(1));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <XAxis dataKey="date" {...axis} minTickGap={48} />
+        <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => (percent ? pct(Number(v)) : Number(v).toFixed(0))} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [f(Number(v)), n]} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {benchmark && <Line type="linear" dataKey="benchmark" name={benchmark} stroke="var(--muted)" strokeDasharray="4 3" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
+        {series.map((m, i) => (
+          <Line key={m.key} type="linear" dataKey={m.key} name={m.name} stroke={SERIES[i % SERIES.length]} strokeWidth={2} dot={false} isAnimationActive={false} />
+        ))}
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 const INCOME_SERIES = [
   { key: "received", name: "ได้รับแล้ว (บัญชี)", color: "var(--pos)" },
   { key: "missing_confirmation", name: "ถึงกำหนดแต่ยังไม่บันทึก", color: "var(--warn)" },

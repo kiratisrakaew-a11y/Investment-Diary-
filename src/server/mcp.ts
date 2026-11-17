@@ -29,6 +29,7 @@ import { backtestInput, backtestPortfolio } from "./services/backtest";
 import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, screenFactorInput, screenFactorStocks, summarizeDividendScreen } from "./services/strategies";
 import { dividendEventInput, listDividendEvents, upsertDividendEvents } from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
+import { comparePortfolioModels, modelComparisonInput, summarizeModelComparison } from "./services/model-comparison";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
@@ -311,6 +312,18 @@ export function createMcpServer() {
     "backtest_portfolio",
     { title: "Walk-forward backtest", description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).", inputSchema: backtestInput.shape, annotations: { readOnlyHint: true } },
     safe(async (x) => summarizeBacktest(await backtestPortfolio(x))),
+  );
+
+  server.registerTool(
+    "compare_portfolio_models",
+    {
+      title: "Compare portfolio models (out-of-sample)",
+      description:
+        "Same assets, calendar, weight bounds, costs and μ/Σ estimator for six models: equal_weight | min_variance | max_sharpe | risk_parity | max_diversification | min_cvar. Split mode: weights estimated once on the first splitPct% of history, then tested on the unseen rest — returns the weights, the ex-ante expected return / volatility / Sharpe, the realised in-sample fit, the realised out-of-sample return / volatility / Sharpe / max drawdown and the gap between estimate and outcome. Walk-forward mode: weights re-estimated at every rebalance from the trailing window, all models starting the same day. No look-ahead. Read-only; a single test period does not prove one model is better.",
+      inputSchema: modelComparisonInput.shape,
+      annotations: { readOnlyHint: true },
+    },
+    safe(async (x) => summarizeModelComparison(await comparePortfolioModels(x))),
   );
 
   server.registerTool(

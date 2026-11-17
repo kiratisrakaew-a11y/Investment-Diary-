@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17 — Portfolio model comparison (Optimizer tab)
+- New "เปรียบเทียบโมเดล" tab on the Optimizer page. It runs six models on one set of assets: Equal Weight, Min Variance, Max Sharpe, Risk Parity, Max Diversification and Min CVaR. All share the same calendar, weight bounds, costs and μ/Σ estimator.
+- Train / test split: weights are estimated once on the training part. The table shows each model's weights, the ex-ante E[R] / σ / Sharpe, the realised in-sample fit, and the realised out-of-sample return / σ / Sharpe / max drawdown, with the gap between estimate and outcome.
+- Walk-forward: weights are re-estimated at every rebalance. Every model now starts on the same day, so the test periods are identical.
+- Out-of-sample wealth-index and drawdown charts, plus the methodology and limitations.
+- REST `POST /api/v1/portfolio/compare-models` and MCP tool `compare_portfolio_models` (read-only).
+- Engine: the backtest gains an optional `startIndex` and an exported `estimateWindow`.
+- Fix: cash left a rounding error below zero after a rebalance could make the next rebalance fail once interest accrued. Existing backtest results are unchanged beyond rounding (≤ 1e-8).
+
 ## 2026-10-28 — Edit asset basics and permanent delete with related data
 - New "ข้อมูลสินทรัพย์" section on the asset page.
   - Edit the symbol (e.g. AP → AP.BK, upper-cased automatically), name, type, currency, price source and price code.

@@ -51,13 +51,13 @@ export const backtestInput = z
 
 const PER_YEAR = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 } as const;
 
-/** Walk-forward backtest on stored prices. Read-only. */
-export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
-  const x = backtestInput.parse(input);
-  // Dividend strategies / cashflows: one economic treatment (tradable prices + cash events) — checked first.
-  const isDividend = (DIVIDEND_STRATEGY_IDS as readonly string[]).includes(x.strategy);
-  const withCash = isDividend || !!x.dividendCashflows;
-  assertSingleDividendTreatment(x.returnBasis, withCash);
+export type BacktestDataRequest = Pick<z.output<typeof backtestInput>, "symbols" | "startDate" | "endDate" | "returnBasis" | "rebalance" | "useCosts" | "costs" | "useLots">;
+
+/**
+ * Tradable universe on one common calendar (THB levels, actual prints only), benchmark, cost model and
+ * the rebalance step — shared by the single-strategy backtest and the model comparison.
+ */
+export async function loadBacktestData(x: BacktestDataRequest) {
   const [assets, prices, fx, settings, savedCosts] = await Promise.all([listAssets(), loadPriceHistory(), loadFxHistory(), getSettings(), getTradingCosts()]);
   const wanted = x.symbols?.length ? new Set(x.symbols.map((s) => s.toUpperCase())) : null;
   if (wanted) {
@@ -127,8 +127,18 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   const every = Math.max(1, Math.round(obsPerYear / PER_YEAR[x.rebalance]));
   const bench = await loadBenchmark(settings.benchmarkSymbol, start);
   const costs = x.useCosts ? tradingCostsSchema.parse({ ...savedCosts, ...(x.costs ?? {}) }) : tradingCostsSchema.parse({ lotSize: {}, ...(x.costs ?? {}) });
+  return { pool, symbols: pool.map((a) => a.symbol), dates, px, fx, settings, bench, costs, excluded, every, obsPerYear };
+}
+
+/** Walk-forward backtest on stored prices. Read-only. */
+export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
+  const x = backtestInput.parse(input);
+  // Dividend strategies / cashflows: one economic treatment (tradable prices + cash events) — checked first.
+  const isDividend = (DIVIDEND_STRATEGY_IDS as readonly string[]).includes(x.strategy);
+  const withCash = isDividend || !!x.dividendCashflows;
+  assertSingleDividendTreatment(x.returnBasis, withCash);
+  const { pool, symbols, dates, px, fx, settings, bench, costs, excluded, every, obsPerYear } = await loadBacktestData(x);
   const weights = x.weights ? Object.fromEntries(Object.entries(x.weights).map(([k, v]) => [k.toUpperCase(), v])) : undefined;
-  const symbols = pool.map((a) => a.symbol);
   if (weights) {
     const unknown = Object.keys(weights).filter((k) => !symbols.map((s) => s.toUpperCase()).includes(k));
     if (unknown.length) throw new Error(`น้ำหนักของ ${unknown.join(", ")} ไม่อยู่ในชุดที่ทดสอบได้`);
