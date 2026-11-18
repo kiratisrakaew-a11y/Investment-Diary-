@@ -505,6 +505,27 @@ async function main() {
     });
     check("delete_event", del.ok && del.data.deleted === true);
 
+    // Data quality: TLX-A has volume, shares and history → no issues; TLX-US (not Thai) is not listed.
+    const dq = await call("get_data_quality", {});
+    const tlx = dq.ok
+      ? dq.data.abnormalTrading.stocks.find(
+          (s: { symbol: string }) => s.symbol === "TLX-A",
+        )
+      : null;
+    check(
+      "get_data_quality: abnormal-trading readiness per Thai stock (TLX-A complete, TLX-US excluded) + check row",
+      dq.ok &&
+        !!tlx &&
+        tlx.issues.length === 0 &&
+        !dq.data.abnormalTrading.stocks.some(
+          (s: { symbol: string }) => s.symbol === "TLX-US",
+        ) &&
+        dq.data.checks.some(
+          (c: { area: string }) => c.area === "ข้อมูลตรวจการซื้อขายผิดปกติ",
+        ),
+      tlx ? JSON.stringify(tlx.issues) : codeOf(dq),
+    );
+
     check(
       "other assets' prices byte-identical",
       (await othersHash()) === before,

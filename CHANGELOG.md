@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-18 — Abnormal trading, phases 2–6: calculations, scan, tools, data quality
+- Abnormal return (event study):
+  - market model (OLS), Dimson (lags −1/0/+1) and market-adjusted;
+  - estimation −250…−30, event −10…+10 trading days, ≥ 120 observations or an error with the reason;
+  - AR / CAR with t-statistics, CAR sub-windows (run-up before the news, announcement) and volume z of the same days.
+- Abnormal volume: mean-adjusted log turnover (Campbell & Wasley); raw volume with a warning when shares outstanding is missing.
+- Daily scan of Thai stocks:
+  - levels ปกติ / น่าสังเกต / ผิดปกติ with adjustable thresholds;
+  - "ผิดปกติก่อน event X วัน" label;
+  - XD and single-day-CAR notes;
+  - days without enough index data are never flagged on returns.
+- MCP tools: `run_event_study`, `get_abnormal_volume`, `scan_abnormal_trading`, `list_events`, `record_event`, `delete_event`, `set_shares_outstanding`; matching REST endpoints and OpenAPI entries.
+- `get_data_quality` adds an abnormal-trading readiness check (no volume, no shares outstanding, history < 150 days, > 10% zero-volume days, no SET TRI) with per-stock detail.
+  - The dashboard status can now show "warnings" for Thai stocks missing these inputs.
+- Docs: `docs/abnormal-trading.md`. Checks: `npm run check:abnormal`.
+- Read-only on existing data: no migration in these phases; prices and other computed figures unchanged.
+
 ## 2026-11-18 — Abnormal trading, phase 1: data
 - Migration 0018 (additive):
   - `prices.volume` (nullable);
