@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-18 — Abnormal trading, phase 7: asset page
+- Thai stock pages get a "ความผิดปกติการซื้อขาย" section under the price chart. It loads after the page, so the price chart never waits.
+  - Status badge.
+  - AR / 5-day CAR chart with a ±2σ band.
+  - Volume z-score chart.
+  - Flagged-days table; clicking a row highlights that day on every chart.
+  - Event study panel, which can also record an event.
+  - Settings / data quality panel with adjustable thresholds.
+  - Disclaimer.
+- Price chart:
+  - 1 / 3 / 5 year and "all" range buttons (default all);
+  - optional event lines and flag dots, with a toggle.
+- The three charts share dates and a sync id, so the cursor follows the same day; plot areas stay aligned when a custom metric adds a right axis.
+- Same service as the MCP tools; display only. No database change, no new dependency.
+- Other asset classes and the existing metric overlay are unchanged.
+
 ## 2026-11-18 — Abnormal trading, phases 2–6: calculations, scan, tools, data quality
 - Abnormal return (event study):
   - market model (OLS), Dimson (lags −1/0/+1) and market-adjusted;

@@ -40,6 +40,8 @@ export interface ScanDay {
   car5: number | null;
   tCAR5: number | null;
   z: number | null;
+  /** Shares traded that day (null = unknown). */
+  volume: number | null;
   level: Level;
   /** Why the day got its level (empty when normal). */
   reasons: string[];
@@ -251,6 +253,7 @@ export function scanStock(
       car5,
       tCAR5,
       z,
+      volume: v?.volume ?? null,
       level,
       reasons,
       missing,
