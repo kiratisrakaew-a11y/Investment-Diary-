@@ -420,6 +420,48 @@ export const statementUploads = pgTable("statement_uploads", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Analyst consensus target prices — other people's opinion, kept apart from the user's own valuations.
+ * One row per (symbol, source, as-of date): a re-fetch on the same day replaces it, other days build history.
+ * Keyed by symbol like `valuations` (a stock can be valued before it is an asset).
+ */
+export const analystConsensus = pgTable(
+  "analyst_consensus",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    asOf: date("as_of").notNull(),
+    /** yahoo = fetched; manual = typed on the web; mcp = recorded by an AI from a cited report. */
+    source: text("source").notNull(),
+    sourceNote: text("source_note"),
+    currency: text("currency"),
+    targetMean: numeric("target_mean", { mode: "number" }),
+    targetMedian: numeric("target_median", { mode: "number" }),
+    targetHigh: numeric("target_high", { mode: "number" }),
+    targetLow: numeric("target_low", { mode: "number" }),
+    analysts: integer("analysts"),
+    recommendationKey: text("recommendation_key"),
+    /** Yahoo scale 1 = strong buy … 5 = sell. */
+    recommendationMean: numeric("recommendation_mean", { mode: "number" }),
+    priceAtFetch: numeric("price_at_fetch", { mode: "number" }),
+    yahooSymbol: text("yahoo_symbol"),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("analyst_consensus_symbol_source_asof_uq").on(t.symbol, t.source, t.asOf),
+    index("analyst_consensus_symbol_idx").on(t.symbol),
+    check("analyst_consensus_source_ck", sql`${t.source} in ('yahoo','manual','mcp')`),
+    check("analyst_consensus_has_target_ck", sql`${t.targetMean} is not null or ${t.targetMedian} is not null`),
+    check(
+      "analyst_consensus_positive_ck",
+      sql`coalesce(${t.targetMean}, 1) > 0 and coalesce(${t.targetMedian}, 1) > 0 and coalesce(${t.targetHigh}, 1) > 0 and coalesce(${t.targetLow}, 1) > 0`,
+    ),
+    check("analyst_consensus_range_ck", sql`${t.targetLow} is null or ${t.targetHigh} is null or ${t.targetLow} <= ${t.targetHigh}`),
+    check("analyst_consensus_analysts_ck", sql`${t.analysts} is null or ${t.analysts} >= 0`),
+  ],
+);
+
 /** In-app AI advisor conversations (text turns only). */
 export const advisorThreads = pgTable("advisor_threads", {
   id: serial("id").primaryKey(),
@@ -431,6 +473,7 @@ export const advisorThreads = pgTable("advisor_threads", {
 
 export type Asset = typeof assets.$inferSelect;
 export type Valuation = typeof valuations.$inferSelect;
+export type AnalystConsensus = typeof analystConsensus.$inferSelect;
 export type ValuationMethod = (typeof valuationMethodEnum.enumValues)[number];
 export type Note = typeof notes.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;

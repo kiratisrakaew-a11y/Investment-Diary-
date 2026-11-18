@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { CONSENSUS_SOURCE_LABEL } from "@/lib/consensus";
 import { Badge } from "./ui";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
 
@@ -22,6 +23,8 @@ export interface OverviewRow {
   lastDate: string;
   /** Latest valuations whose value would change under today's formulas. */
   changedCount: number;
+  /** Latest analyst consensus found (other people's opinion; not part of the averages). */
+  consensus: { target: number; upside: number | null; asOf: string; ageDays: number; stale: boolean; source: string } | null;
 }
 
 type SortKey = "upside" | "date" | "symbol";
@@ -92,6 +95,9 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                 <th className="num" title="เทียบมัธยฐาน — ไม่ถูกดึงด้วยค่าโดดของวิธีเดียว">
                   Upside (มัธยฐาน)
                 </th>
+                <th className="num" title="ราคาเป้าหมายนักวิเคราะห์ล่าสุดที่พบ (ไม่ใช่การประเมินของคุณ) และ upside เทียบราคา">
+                  Consensus
+                </th>
                 <th>ประเมินล่าสุด</th>
               </tr>
             </thead>
@@ -135,6 +141,19 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                       </div>
                     </td>
                     <td className={`num ${signClass(g.upside)}`}>{fmtPct(g.upside, 1)}</td>
+                    <td className="num" title={g.consensus ? `${CONSENSUS_SOURCE_LABEL[g.consensus.source] ?? g.consensus.source} · ณ ${g.consensus.asOf} (${g.consensus.ageDays} วันก่อน)` : "ยังไม่มีข้อมูล consensus"}>
+                      {g.consensus ? (
+                        <>
+                          {fmtNum(g.consensus.target)}
+                          <div className={clsx("text-[11px]", g.consensus.stale ? "text-warn" : signClass(g.consensus.upside) || "text-muted")}>
+                            {fmtPct(g.consensus.upside, 1)}
+                            {g.consensus.stale && " · เก่า"}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-muted">–</span>
+                      )}
+                    </td>
                     <td>
                       {g.lastDate}{" "}
                       <Link href={`/valuation/stock/${encodeURIComponent(g.symbol)}`} className="ml-2 text-xs text-accent">

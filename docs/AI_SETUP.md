@@ -50,6 +50,22 @@ claude mcp add --transport http investment-diary https://<your-app>.vercel.app/a
 
 บันทึกที่มาจาก Claude จะติดป้าย **via Claude** ใน timeline
 
+### ราคาเป้าหมาย Consensus ของนักวิเคราะห์
+ใช้ได้ทั้ง Claude และ ChatGPT (ผ่าน MCP endpoint เดียวกัน) และ ChatGPT Custom GPT (Actions ผ่าน `/api/openapi.json`)
+
+| MCP tool | REST (Actions) | หน้าที่ |
+|---|---|---|
+| `get_analyst_consensus` | `GET /api/v1/valuation/consensus?symbols=PTT,BBL&history=1` | ข้อมูลล่าสุดที่เจอ + upside เทียบราคา + อายุข้อมูล (อ่านอย่างเดียว) |
+| `refresh_analyst_consensus` | `POST /api/v1/valuation/consensus/refresh` `{ "symbol": "PTT" }` | ดึงจาก Yahoo ตอนนี้ — ถ้าไม่มีข้อมูล (`NO_COVERAGE`) ไม่เขียนทับของเดิม |
+| `record_analyst_consensus` | `POST /api/v1/valuation/consensus` | บันทึกจากรายงานที่อ้างอิงได้ (`sourceNote` + `asOf` บังคับ) |
+| `delete_analyst_consensus` | `DELETE /api/v1/valuation/consensus/:id` | ลบหนึ่งรายการ (MCP ต้องส่ง `confirmDelete: true`) |
+
+- consensus คือ**ความเห็นของนักวิเคราะห์ ไม่ใช่ valuation ของคุณ** — แสดงแยกและไม่นำไปเฉลี่ย `list_valuations` คืนฟิลด์ `analystConsensus` แยกจากรายการ valuation
+- **AI ห้ามแต่งตัวเลข** — บันทึกเฉพาะค่าที่คุณให้หรือจากรายงานที่ระบุแหล่งได้ ช่องที่ไม่รู้ให้เว้นว่าง
+- Yahoo ไม่เป็นทางการ หุ้นไทยหลายตัวอาจไม่มีข้อมูล → ใช้ `record_analyst_consensus` จากบทวิเคราะห์แทน
+- ตัวอย่างคำสั่ง: “ดึง consensus ของ PTT แล้วเทียบกับมูลค่าที่ฉันประเมินไว้” · “บันทึก consensus ของ BBL เป้าเฉลี่ย 180 บาท จากบทวิเคราะห์ บล.xxx ลงวันที่ 2026-11-10”
+- หลัง deploy กด **Refresh tools list** ใน Claude / ChatGPT หรือเรียก `get_server_info` เพื่อดูว่ามี tool ใหม่แล้ว (ChatGPT Custom GPT ต้อง Import OpenAPI ใหม่)
+
 ### Custom Metrics ผ่าน MCP
 ใช้ติดตามตัวชี้วัดของสินทรัพย์รายตัวที่คุณกำหนดเอง เช่น NPL Ratio ของ BBL พร้อมไฟเขียว/เหลือง/แดง ใช้ service, กฎ และ audit ชุดเดียวกับหน้าสินทรัพย์และ REST (รายละเอียด: [ASSET_CUSTOM_METRICS.md](ASSET_CUSTOM_METRICS.md))
 

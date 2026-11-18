@@ -12,6 +12,7 @@ import { dividendEventInput } from "./services/dividends";
 import { bondLadderInput } from "./services/bonds";
 import { recordSplitInput } from "./services/splits";
 import { backtestInput } from "./services/backtest";
+import { consensusInput } from "@/lib/consensus";
 
 const schema = (s: z.ZodType) => {
   const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
@@ -210,6 +211,28 @@ export function buildOpenApi(origin: string) {
           responses: { "200": ok("Saved valuation") },
         },
       },
+      "/api/v1/valuation/consensus": {
+        get: {
+          operationId: "getAnalystConsensus",
+          summary: "Latest analyst consensus target price found per symbol (Yahoo or a cited report), with upside vs the last stored price and data age. Not the user's own valuation.",
+          parameters: [q("symbols", "Comma-separated symbols, e.g. PTT,BBL"), q("history", "1 = include stored history")],
+          responses: { "200": ok("{ results: [{ symbol, latest, view: { target, upside, ageDays, stale, warnings }, price, history? }] }") },
+        },
+        post: {
+          operationId: "recordAnalystConsensus",
+          summary: "Record a consensus target from a cited report (sourceNote + asOf required). Never invent figures.",
+          requestBody: body("ConsensusInput"),
+          responses: { "200": ok("Stored consensus row") },
+        },
+      },
+      "/api/v1/valuation/consensus/refresh": {
+        post: {
+          operationId: "refreshAnalystConsensus",
+          summary: "Fetch the analyst consensus from Yahoo now. If Yahoo has no data (NO_COVERAGE) nothing is overwritten and the latest found is returned.",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { symbol: { type: "string" } }, required: ["symbol"] } } } },
+          responses: { "200": ok("{ status: UPDATED | NO_COVERAGE | FETCH_FAILED, message, latest }") },
+        },
+      },
       "/api/v1/statements": {
         get: {
           operationId: "getFinancialStatements",
@@ -345,6 +368,7 @@ export function buildOpenApi(origin: string) {
         AssetProfile: schema(assetProfileInput),
         YieldCurve: schema(yieldCurveInput),
         BacktestInput: schema(backtestInput),
+        ConsensusInput: schema(consensusInput),
         ScreenDividendInput: schema(screenDividendInput),
         ScreenFactorInput: schema(screenFactorInput),
         BondLadderInput: schema(bondLadderInput),

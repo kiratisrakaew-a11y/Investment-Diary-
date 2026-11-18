@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { fetchFundamentals, type Fundamentals } from "@/lib/prices/yahoo";
 import type { ValuationInput } from "@/lib/valuation-schemas";
-import { getAssetBySymbol } from "@/server/services/assets";
+import { yahooSymbolFor } from "@/server/services/assets";
+import { deleteConsensus, recordConsensus, refreshConsensusFromYahoo } from "@/server/services/consensus";
+import type { ConsensusInput } from "@/lib/consensus";
 import { deleteValuation, saveValuation } from "@/server/services/valuations";
 import { deleteYear, getStatementsWithMeta, saveYears } from "@/server/services/statements";
 import type { FinancialYear } from "@/lib/financials";
@@ -43,8 +45,7 @@ export async function deleteValuationAction(id: number) {
 }
 
 export async function fetchFundamentalsAction(symbol: string): Promise<{ ok: true; data: Fundamentals; yahoo: string } | { ok: false; error: string }> {
-  const asset = await getAssetBySymbol(symbol);
-  const yahoo = asset?.providerSymbol ?? (asset?.assetClass === "thai_stock" ? `${asset.symbol}.BK` : symbol);
+  const yahoo = await yahooSymbolFor(symbol);
   try {
     return { ok: true, data: await fetchFundamentals(yahoo), yahoo };
   } catch (e) {
@@ -67,4 +68,36 @@ export async function deleteStatementYearAction(symbol: string, fiscalYear: numb
 
 export async function loadStatementsAction(symbol: string) {
   return getStatementsWithMeta(symbol);
+}
+
+/** Analyst consensus: fetch from Yahoo now (button). Nothing is overwritten when Yahoo has no data. */
+export async function refreshConsensusAction(symbol: string) {
+  try {
+    const r = await refreshConsensusFromYahoo(symbol);
+    if (r.status === "UPDATED") revalidatePath("/", "layout");
+    return { ok: r.status === "UPDATED", status: r.status, message: r.message };
+  } catch (e) {
+    return { ok: false, status: "ERROR", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function saveConsensusAction(input: ConsensusInput): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await recordConsensus(input, "manual");
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof ZodError) return { ok: false, error: e.issues.map((i) => i.message).join(" · ") };
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function deleteConsensusAction(id: number, symbol: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await deleteConsensus(id, symbol);
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

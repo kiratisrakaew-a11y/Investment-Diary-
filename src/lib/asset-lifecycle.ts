@@ -24,6 +24,8 @@ export interface AssetDependencies {
   notes: number;
   /** User-defined custom metric definitions (their observations and thresholds go with them). */
   customMetrics: number;
+  /** Stored analyst consensus target prices (by symbol). */
+  analystConsensus: number;
 }
 
 export interface LifecycleState {
@@ -55,6 +57,7 @@ const DEP_LABEL: Record<keyof AssetDependencies, string> = {
   dividendEvents: "เหตุการณ์ปันผล",
   notes: "บันทึก",
   customMetrics: "ตัวชี้วัดที่ติดตาม",
+  analystConsensus: "ราคาเป้าหมายนักวิเคราะห์",
 };
 
 export function dependencySummary(d: AssetDependencies): { total: number; nonZero: Partial<AssetDependencies>; text: string } {

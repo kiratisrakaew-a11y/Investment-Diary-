@@ -1,4 +1,5 @@
 import YahooFinance from "yahoo-finance2";
+import { fromYahoo, type YahooConsensusSource } from "../consensus";
 
 /**
  * Free (unofficial) Yahoo Finance data.
@@ -93,4 +94,10 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     payoutRatio: r.summaryDetail?.payoutRatio,
     returnOnEquity: r.financialData?.returnOnEquity,
   };
+}
+
+/** Analyst target prices from quoteSummary (financialData + price). Unofficial; coverage of Thai stocks varies. */
+export async function fetchAnalystConsensus(symbol: string) {
+  const r = await yf.quoteSummary(symbol, { modules: ["financialData", "price"] });
+  return fromYahoo(r as unknown as YahooConsensusSource);
 }

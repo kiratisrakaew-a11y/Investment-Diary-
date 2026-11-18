@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-18 — Analyst consensus target prices
+- Stock valuation page: a "ราคาเป้าหมายนักวิเคราะห์ (Consensus)" card showing:
+  - mean / median target, low–high range, number of analysts and rating;
+  - upside vs the last stored close, source, as-of date and data age;
+  - a "ดึงจาก Yahoo" button (press-only, no cron), manual entry with a cited source, and history.
+- The football field gets a separate consensus row; it is not included in the user's averages.
+- Valuation list: a Consensus column (target + upside, stale flag).
+- "Latest found": when Yahoo has no data (`NO_COVERAGE`) or the request fails, nothing is overwritten and the latest stored consensus (any source) stays.
+- MCP for Claude / ChatGPT: `get_analyst_consensus`, `refresh_analyst_consensus`, `record_analyst_consensus`, `delete_analyst_consensus`. `list_valuations` now returns `{ valuations, analystConsensus }`.
+- REST + OpenAPI for ChatGPT Actions: `GET/POST /api/v1/valuation/consensus`, `POST …/refresh` and `DELETE …/:id`.
+- Migration 0017 (new table `analyst_consensus`, additive).
+- Asset rename carries consensus rows to the new symbol; cascade delete removes them.
+
 ## 2026-11-17 — Portfolio model comparison (Optimizer tab)
 - New "เปรียบเทียบโมเดล" tab on the Optimizer page. It runs six models on one set of assets: Equal Weight, Min Variance, Max Sharpe, Risk Parity, Max Diversification and Min CVaR. All share the same calendar, weight bounds, costs and μ/Σ estimator.
 - Train / test split: weights are estimated once on the training part. The table shows each model's weights, the ex-ante E[R] / σ / Sharpe, the realised in-sample fit, and the realised out-of-sample return / σ / Sharpe / max drawdown, with the gap between estimate and outcome.

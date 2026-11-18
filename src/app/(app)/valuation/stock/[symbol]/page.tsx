@@ -10,12 +10,15 @@ import { SavedValuationList, type SavedValuationRow } from "@/components/SavedVa
 import { PageHeader, Section } from "@/components/ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
+import { consensusSummary } from "@/server/services/consensus";
+import { ConsensusCard } from "@/components/ConsensusCard";
+import { today } from "@/lib/validation";
 
 const ALL_METHODS = ["dcf_fcff", "dcf_fcfe", "ddm", "residual_income", "multiples", "sotp"];
 
 export default async function StockValuationPage({ params }: { params: Promise<{ symbol: string }> }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase();
-  const [group, asset, statements, tsPolicy] = await Promise.all([valuationsForSymbol(symbol), getAssetBySymbol(symbol), getStatements(symbol), getTimestampPolicy()]);
+  const [group, asset, statements, tsPolicy, consensus] = await Promise.all([valuationsForSymbol(symbol), getAssetBySymbol(symbol), getStatements(symbol), getTimestampPolicy(), consensusSummary(symbol, { history: true })]);
   if (!group && !asset) notFound();
   const hist = asset ? await priceHistoryFor(asset.id) : [];
   const price = hist[hist.length - 1]?.close ?? group?.latestByMethod[0]?.priceAtValuation ?? null;
@@ -39,7 +42,9 @@ export default async function StockValuationPage({ params }: { params: Promise<{
       tsPolicy,
     );
   };
-  const max = Math.max(price ?? 0, ...(group?.latestByMethod.map((r) => r.intrinsicValue ?? 0) ?? [0])) * 1.1 || 1;
+  const cons = consensus.latest;
+  const consTarget = consensus.view?.target ?? null;
+  const max = Math.max(price ?? 0, cons?.targetHigh ?? 0, consTarget ?? 0, ...(group?.latestByMethod.map((r) => r.intrinsicValue ?? 0) ?? [0])) * 1.1 || 1;
 
   return (
     <>
@@ -77,6 +82,8 @@ export default async function StockValuationPage({ params }: { params: Promise<{
         </dl>
       </section>
 
+      <ConsensusCard symbol={symbol} latest={cons} view={consensus.view} history={consensus.history ?? []} price={consensus.price} priceDate={consensus.priceDate} today={today()} />
+
       {group && (
         <Section title="เทียบแต่ละวิธี (ฉบับล่าสุด)" explain={{ data: compact({ symbol, ราคาล่าสุด: hist.at(-1) ?? null, ต่ำสุด: group.low, สูงสุด: group.high, เฉลี่ย: group.average, มัธยฐาน: group.median, รายวิธี: group.latestByMethod.map((v) => ({ วิธี: v.method, วันที่: v.date, มูลค่าต่อหุ้น: v.intrinsicValue })) }), hint: "แต่ละวิธีใช้สมมติฐานต่างกัน ช่วงมูลค่าที่กว้างแปลว่าความไม่แน่นอนสูง" }}>
           <div className="glass-inset space-y-3 rounded-xl p-3" role="group" aria-label="football field: มูลค่าล่าสุดของแต่ละวิธีเทียบราคา">
@@ -100,6 +107,29 @@ export default async function StockValuationPage({ params }: { params: Promise<{
                 </div>
               </div>
             ))}
+            {cons && consTarget != null && (
+              <div className="border-t border-dashed border-border pt-2 text-xs">
+                <div className="mb-0.5 flex justify-between">
+                  <span>
+                    Consensus นักวิเคราะห์ <span className="text-muted">· {cons.asOf} · ไม่นับรวมในค่าเฉลี่ย</span>
+                  </span>
+                  <span className="tabular-nums">
+                    {fmtNum(consTarget)}
+                    {cons.targetLow != null && cons.targetHigh != null && <span className="text-muted"> ({fmtNum(cons.targetLow)} – {fmtNum(cons.targetHigh)})</span>}
+                  </span>
+                </div>
+                <div className="relative h-2.5 rounded-full bg-panel-2" role="img" aria-label={`Consensus นักวิเคราะห์ ${fmtNum(consTarget)}${cons.targetLow != null && cons.targetHigh != null ? ` ช่วง ${fmtNum(cons.targetLow)}–${fmtNum(cons.targetHigh)}` : ""}`}>
+                  {cons.targetLow != null && cons.targetHigh != null && (
+                    <div
+                      className="absolute h-2.5 rounded-full border border-dashed border-muted/70 bg-muted/20"
+                      style={{ left: `${(cons.targetLow / max) * 100}%`, width: `${Math.max(0.5, ((cons.targetHigh - cons.targetLow) / max) * 100)}%` }}
+                    />
+                  )}
+                  <div className="absolute -top-[2px] h-3.5 w-3.5 -translate-x-1/2 rotate-45 rounded-[2px] border-2 border-panel-solid bg-muted" style={{ left: `${(consTarget / max) * 100}%` }} />
+                  {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded bg-text" style={{ left: `${(price / max) * 100}%` }} />}
+                </div>
+              </div>
+            )}
             <div className="text-right text-[11px] text-muted">
               เส้นตั้ง = ราคาปิดล่าสุด {fmtNum(price)}
               {hist.length ? ` ณ ${hist[hist.length - 1].date}` : ""}

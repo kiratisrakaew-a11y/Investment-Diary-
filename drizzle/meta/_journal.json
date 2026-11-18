@@ -120,6 +120,13 @@
       "when": 1793159031637,
       "tag": "0016_asset_custom_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794968925934,
+      "tag": "0017_analyst_consensus",
+      "breakpoints": true
     }
   ]
 }

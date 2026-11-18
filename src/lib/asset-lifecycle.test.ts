@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decideLifecycle, dependencySummary, type LifecycleState } from "./asset-lifecycle";
 
-const none = { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0 };
+const none = { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0, analystConsensus: 0 };
 const base: LifecycleState = { exists: true, symbol: "AP", hiddenAt: null, archivedAt: null, heldQuantity: 0, dependencies: none };
 const now = new Date("2026-10-27T00:00:00Z");
 

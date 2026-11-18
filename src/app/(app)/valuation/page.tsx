@@ -8,10 +8,14 @@ import { ValuationOverview, type OverviewRow } from "@/components/ValuationOverv
 import { METHOD_LABEL } from "@/lib/format";
 import { MODEL_VERSION } from "@/lib/governance";
 import { today } from "@/lib/validation";
+import { latestConsensusFor } from "@/server/services/consensus";
+import { consensusView } from "@/lib/consensus";
 
 export default async function ValuationListPage() {
   const [groups, assets, prices, policy] = await Promise.all([listValuationsGrouped(), listAssets(), loadPriceHistory(), getTimestampPolicy()]);
   const now = today();
+  const consensus = await latestConsensusFor(groups.map((g) => g.symbol));
+  const assetCurrency = new Map(assets.map((a) => [a.symbol.toUpperCase(), a.currency]));
   const valued = new Set(groups.map((g) => g.symbol));
   const stocks = assets.filter((a) => (a.assetClass === "thai_stock" || a.assetClass === "us_stock") && !valued.has(a.symbol));
   const rows: OverviewRow[] = groups.map((g) => {
@@ -32,6 +36,13 @@ export default async function ValuationListPage() {
       upside: g.median && price ? g.median / price - 1 : null,
       lastDate: g.lastDate,
       changedCount: g.latestByMethod.filter((r) => (r.result as { modelVersion?: string } | null)?.modelVersion !== MODEL_VERSION && valueChangedSinceSave(r) !== false).length,
+      consensus: (() => {
+        const c = consensus.get(g.symbol.toUpperCase());
+        if (!c) return null;
+        // Upside only against a stored price (not the valuation-time price) and in the same currency.
+        const v = consensusView(c, { price: last?.[1] ?? null, priceCurrency: assetCurrency.get(g.symbol.toUpperCase()) ?? null, today: now });
+        return { target: v.target, upside: v.upside, asOf: c.asOf, ageDays: v.ageDays, stale: v.stale, source: c.source };
+      })(),
     };
   });
 

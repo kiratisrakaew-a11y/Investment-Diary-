@@ -15,6 +15,12 @@ export async function getAssetBySymbol(symbol: string) {
   return row ?? null;
 }
 
+/** Yahoo symbol for a stock: the asset's price code, else SYMBOL.BK for Thai stocks, else the symbol itself. */
+export async function yahooSymbolFor(symbol: string) {
+  const asset = await getAssetBySymbol(symbol);
+  return asset?.providerSymbol ?? (asset?.assetClass === "thai_stock" ? `${asset.symbol}.BK` : symbol.trim().toUpperCase());
+}
+
 export async function getAsset(id: number) {
   const [row] = await getDb().select().from(schema.assets).where(eq(schema.assets.id, id));
   return row ?? null;
@@ -74,6 +80,9 @@ export async function editAssetBasics(id: number, input: AssetBasicsInput, sourc
       const FS = schema.financialStatements;
       const [{ c }] = await tx.select({ c: sql<number>`count(*)::int` }).from(FS).where(and(sql`upper(${FS.symbol}) = ${x.symbol}`, or(sql`${FS.assetId} is null`, ne(FS.assetId, id))));
       if (c > 0) throw new Error(`มีงบการเงินของ ${x.symbol} อยู่แล้ว ${c} ปี (ไม่ได้ผูกกับสินทรัพย์นี้) — ระบบไม่รวมงบให้อัตโนมัติ`);
+      const AC = schema.analystConsensus;
+      const [{ k }] = await tx.select({ k: sql<number>`count(*)::int` }).from(AC).where(sql`upper(${AC.symbol}) = ${x.symbol}`);
+      if (k > 0) throw new Error(`มีราคาเป้าหมายนักวิเคราะห์ของ ${x.symbol} อยู่แล้ว ${k} รายการ — ลบรายการนั้นก่อน ระบบไม่รวมให้อัตโนมัติ`);
     }
     if ((x.assetClass !== a.assetClass || x.currency !== a.currency) && !input.confirmChange) {
       const [{ t }] = await tx.select({ t: sql<number>`count(*)::int` }).from(schema.transactions).where(eq(schema.transactions.assetId, id));
@@ -92,6 +101,7 @@ export async function editAssetBasics(id: number, input: AssetBasicsInput, sourc
       await follow(schema.financialStatements);
       await follow(schema.dividendEvents);
       await tx.update(schema.statementUploads).set({ symbol: x.symbol }).where(sql`upper(${schema.statementUploads.symbol}) = ${old}`);
+      await tx.update(schema.analystConsensus).set({ symbol: x.symbol }).where(sql`upper(${schema.analystConsensus.symbol}) = ${old}`);
     }
     const pick = (r: typeof a) => ({ symbol: r.symbol, name: r.name, assetClass: r.assetClass, currency: r.currency, priceSource: r.priceSource, providerSymbol: r.providerSymbol });
     await tx.insert(schema.assetLifecycleEvents).values({ assetId: id, symbol: row.symbol, action: "edit", result: "UPDATED", source, detail: { before: pick(a), after: pick(row) } });

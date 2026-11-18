@@ -30,6 +30,8 @@ import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDivi
 import { dividendEventInput, listDividendEvents, upsertDividendEvents } from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
 import { comparePortfolioModels, modelComparisonInput, summarizeModelComparison } from "./services/model-comparison";
+import { consensusSummary, deleteConsensus, latestConsensusFor, recordConsensus, refreshConsensusFromYahoo } from "./services/consensus";
+import { consensusInput } from "@/lib/consensus";
 import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
@@ -449,8 +451,71 @@ export function createMcpServer() {
 
   server.registerTool(
     "list_valuations",
-    { title: "List valuations", description: "Saved valuations, optionally for one symbol.", inputSchema: { symbol: z.string().optional() }, annotations: { readOnlyHint: true } },
-    safe(async ({ symbol }) => listValuations({ symbol, limit: 50 })),
+    {
+      title: "List valuations",
+      description:
+        "Saved valuations, optionally for one symbol. Also returns analystConsensus: the latest analyst consensus target found for each symbol listed (other people's opinion, kept separate — never average it into the user's valuations).",
+      inputSchema: { symbol: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ symbol }) => {
+      const valuations = await listValuations({ symbol, limit: 50 });
+      const symbols = [...new Set(valuations.map((v) => v.symbol.toUpperCase()).concat(symbol ? [symbol.toUpperCase()] : []))];
+      const latest = await latestConsensusFor(symbols);
+      return {
+        valuations,
+        analystConsensus: Object.fromEntries(
+          [...latest].map(([k, r]) => [k, { asOf: r.asOf, source: r.source, sourceNote: r.sourceNote, currency: r.currency, targetMean: r.targetMean, targetMedian: r.targetMedian, targetLow: r.targetLow, targetHigh: r.targetHigh, analysts: r.analysts, recommendation: r.recommendationKey }]),
+        ),
+      };
+    }),
+  );
+
+  server.registerTool(
+    "get_analyst_consensus",
+    {
+      title: "Analyst consensus target price",
+      description:
+        "Latest analyst consensus target price found for one or more stocks (from Yahoo or a report the user cited), with source, as-of date, data age, upside vs the last stored price, and optional history. It is other analysts' opinion, not the user's valuation. If nothing is stored, call refresh_analyst_consensus (Yahoo) or ask the user for a cited source — never invent targets.",
+      inputSchema: { symbols: z.array(z.string().min(1)).min(1).max(30).describe("Symbols as stored in the app, e.g. [\"PTT\", \"BBL\"]"), history: z.boolean().default(false).describe("Include stored history (up to 20 rows per symbol)") },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ symbols, history }) => ({ results: await Promise.all(symbols.map((s) => consensusSummary(s, { history }))) })),
+  );
+
+  server.registerTool(
+    "refresh_analyst_consensus",
+    {
+      title: "Refresh analyst consensus from Yahoo",
+      description:
+        "Fetch the analyst consensus (mean / median / high / low target, number of analysts, rating) from Yahoo Finance now and store it as today's Yahoo entry. Yahoo is unofficial and often has no data for Thai stocks: then status is NO_COVERAGE (or FETCH_FAILED), nothing is overwritten, and the latest consensus found earlier is returned.",
+      inputSchema: { symbol: z.string().min(1).describe("Symbol as stored in the app; the asset's price code (e.g. PTT.BK) is used for Yahoo") },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    safe(async ({ symbol }) => refreshConsensusFromYahoo(symbol)),
+  );
+
+  server.registerTool(
+    "record_analyst_consensus",
+    {
+      title: "Record analyst consensus (cited)",
+      description:
+        "Store a consensus target price the user gave you or that you read in an identifiable report. sourceNote (who published it) and asOf (report date, not today unless that is the date) are required. NEVER invent or estimate figures; leave unknown fields out. A second entry for the same symbol and date replaces the first.",
+      inputSchema: consensusInput.shape,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    safe(async (x) => recordConsensus(x, "mcp")),
+  );
+
+  server.registerTool(
+    "delete_analyst_consensus",
+    {
+      title: "Delete analyst consensus entry",
+      description: "Permanently delete one stored consensus entry by id (ids from get_analyst_consensus with history). Requires confirmDelete: true. Only when the user asks.",
+      inputSchema: { id: z.number().int().positive(), symbol: z.string().min(1).describe("Symbol the entry belongs to (checked)"), confirmDelete: z.literal(true) },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    safe(async ({ id, symbol }) => deleteConsensus(id, symbol)),
   );
 
   server.registerTool(
