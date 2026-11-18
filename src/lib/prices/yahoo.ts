@@ -21,8 +21,8 @@ export async function fetchDailyCloses(symbol: string, from: string): Promise<Da
 }
 
 export interface DailyHistory {
-  /** `close` = Yahoo close (split-adjusted, not dividend-adjusted); `adjClose` = split- and dividend-adjusted. */
-  rows: { date: string; close: number; adjClose: number | null }[];
+  /** `close` = Yahoo close (split-adjusted, not dividend-adjusted); `adjClose` = split- and dividend-adjusted; `volume` = shares traded (null when not reported). */
+  rows: { date: string; close: number; adjClose: number | null; volume?: number | null }[];
   splits: { date: string; numerator: number; denominator: number }[];
   dividends: { date: string; amount: number }[];
 }
@@ -37,7 +37,12 @@ export async function fetchDailyHistory(symbol: string, range: { from: string; t
   return {
     rows: res.quotes
       .filter((q) => q.close != null && Number.isFinite(q.close))
-      .map((q) => ({ date: isoDay(q.date), close: q.close as number, adjClose: q.adjclose != null && Number.isFinite(q.adjclose) ? q.adjclose : null }))
+      .map((q) => ({
+        date: isoDay(q.date),
+        close: q.close as number,
+        adjClose: q.adjclose != null && Number.isFinite(q.adjclose) ? q.adjclose : null,
+        volume: q.volume != null && Number.isFinite(q.volume) && q.volume >= 0 ? q.volume : null,
+      }))
       .filter((r) => r.date >= range.from && r.date <= range.to),
     splits: (res.events?.splits ?? []).map((e) => ({ date: isoDay(e.date), numerator: e.numerator, denominator: e.denominator })),
     dividends: (res.events?.dividends ?? []).map((e) => ({ date: isoDay(e.date), amount: e.amount })),

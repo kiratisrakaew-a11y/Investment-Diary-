@@ -127,6 +127,13 @@
       "when": 1794968925934,
       "tag": "0017_analyst_consensus",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794983433910,
+      "tag": "0018_abnormal_trading",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@
  * - long:   symbol, date, close[, adj close]
  * - wide:   date, SYM1, SYM2, …            (one column per symbol)
  * - single: date, [open, high, low,] close[, adj close, volume]  (one symbol; e.g. a Yahoo/Investing export)
+ * A volume column (shares traded) is kept for long and single formats when present.
  * Dates may be ISO, day-first (Thai), Buddhist-era years, Excel serial numbers or month names.
  */
 
@@ -12,6 +13,8 @@ export interface ImportRow {
   date: string;
   close: number;
   adjClose: number | null;
+  /** Shares traded; only present when the table has a volume column. */
+  volume?: number | null;
 }
 
 export interface ParseResult {
@@ -89,6 +92,7 @@ const DATE_KEYS = ["date", "วันที่", "วัน", "trade date", "as 
 const SYMBOL_KEYS = ["symbol", "ticker", "สัญลักษณ์", "หุ้น", "หลักทรัพย์", "asset", "code"];
 const CLOSE_KEYS = ["close", "price", "nav", "ราคา", "ราคาปิด", "ปิด", "close price", "last", "ราคาล่าสุด"];
 const ADJ_KEYS = ["adj close", "adjclose", "adjusted close", "adj. close", "ราคาปรับ"];
+const VOLUME_KEYS = ["volume", "vol", "vol.", "ปริมาณ", "ปริมาณ (หุ้น)", "volume (shares)"];
 const OTHER_KEYS = ["open", "high", "low", "volume", "vol", "change", "change %", "change%", "ราคาเปิด", "สูงสุด", "ต่ำสุด", "ปริมาณ"];
 const has = (keys: string[], h: string) => keys.includes(norm(h));
 
@@ -117,6 +121,7 @@ export function parsePriceTable(text: string, opts: { symbol?: string } = {}): P
   const symCol = header.findIndex((h) => has(SYMBOL_KEYS, h));
   const closeCol = header.findIndex((h) => has(CLOSE_KEYS, h));
   const adjCol = header.findIndex((h) => has(ADJ_KEYS, h));
+  const volCol = header.findIndex((h) => has(VOLUME_KEYS, h));
   const format: ParseResult["format"] = symCol >= 0 && closeCol >= 0 ? "long" : closeCol >= 0 ? "single" : "wide";
   const fixedSymbol = opts.symbol?.trim().toUpperCase();
   if (format === "single" && !fixedSymbol) {
@@ -138,12 +143,18 @@ export function parsePriceTable(text: string, opts: { symbol?: string } = {}): P
       errors.push({ line: lineNo, reason: `วันที่ไม่ถูกต้อง: "${c[dateCol] ?? ""}"` });
       continue;
     }
-    const push = (symbol: string, closeRaw: string | undefined, adjRaw?: string) => {
+    const push = (symbol: string, closeRaw: string | undefined, adjRaw?: string, volRaw?: string) => {
       const close = parseNumber(closeRaw ?? "");
       if (close == null) return format === "wide" ? undefined : errors.push({ line: lineNo, reason: "ไม่มีราคา" });
       if (!(close > 0)) return errors.push({ line: lineNo, reason: `ราคาไม่ถูกต้อง: "${closeRaw}"` });
       const adj = adjRaw != null ? parseNumber(adjRaw) : null;
-      rows.push({ symbol, date, close, adjClose: adj != null && adj > 0 ? adj : null });
+      const row: ImportRow = { symbol, date, close, adjClose: adj != null && adj > 0 ? adj : null };
+      if (volCol >= 0) {
+        const v = parseNumber(volRaw ?? "");
+        // Missing / invalid volume stays null (never 0): unknown is not "no trading".
+        row.volume = v != null && Number.isFinite(v) && v >= 0 ? v : null;
+      }
+      rows.push(row);
     };
     if (format === "long") {
       const sym = (c[symCol] ?? "").trim().toUpperCase();
@@ -151,8 +162,8 @@ export function parsePriceTable(text: string, opts: { symbol?: string } = {}): P
         errors.push({ line: lineNo, reason: "ไม่มี symbol" });
         continue;
       }
-      push(sym, c[closeCol], adjCol >= 0 ? c[adjCol] : undefined);
-    } else if (format === "single") push(fixedSymbol!, c[closeCol], adjCol >= 0 ? c[adjCol] : undefined);
+      push(sym, c[closeCol], adjCol >= 0 ? c[adjCol] : undefined, volCol >= 0 ? c[volCol] : undefined);
+    } else if (format === "single") push(fixedSymbol!, c[closeCol], adjCol >= 0 ? c[adjCol] : undefined, volCol >= 0 ? c[volCol] : undefined);
     else for (const w of wideCols) push(w.h.toUpperCase(), c[w.i]);
   }
   return { format, rows, errors };

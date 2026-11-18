@@ -10,7 +10,7 @@ const n = (r: { c: number }[]) => Number(r[0]?.c ?? 0);
 async function countDependencies(db: Tx | ReturnType<typeof getDb>, id: number, symbol: string): Promise<AssetDependencies> {
   const S = symbol.toUpperCase();
   const c = sql<number>`count(*)::int`;
-  const [transactions, prices, valuations, financialStatements, statementUploads, dividendEvents, notes, customMetrics, analystConsensus] = await Promise.all([
+  const [transactions, prices, valuations, financialStatements, statementUploads, dividendEvents, notes, customMetrics, analystConsensus, stockEvents, sharesOutstanding] = await Promise.all([
     db.select({ c }).from(schema.transactions).where(eq(schema.transactions.assetId, id)),
     db.select({ c }).from(schema.prices).where(eq(schema.prices.assetId, id)),
     db.select({ c }).from(schema.valuations).where(or(eq(schema.valuations.assetId, id), sql`upper(${schema.valuations.symbol}) = ${S}`)),
@@ -20,8 +20,10 @@ async function countDependencies(db: Tx | ReturnType<typeof getDb>, id: number, 
     db.select({ c }).from(schema.notes).where(sql`${id} = any(${schema.notes.assetIds})`),
     metricDefinitionCount(db, id),
     db.select({ c }).from(schema.analystConsensus).where(sql`upper(${schema.analystConsensus.symbol}) = ${S}`),
+    db.select({ c }).from(schema.stockEvents).where(sql`upper(${schema.stockEvents.symbol}) = ${S}`),
+    db.select({ c }).from(schema.sharesOutstanding).where(sql`upper(${schema.sharesOutstanding.symbol}) = ${S}`),
   ]);
-  return { transactions: n(transactions), prices: n(prices), valuations: n(valuations), financialStatements: n(financialStatements), statementUploads: n(statementUploads), dividendEvents: n(dividendEvents), notes: n(notes), customMetrics, analystConsensus: n(analystConsensus) };
+  return { transactions: n(transactions), prices: n(prices), valuations: n(valuations), financialStatements: n(financialStatements), statementUploads: n(statementUploads), dividendEvents: n(dividendEvents), notes: n(notes), customMetrics, analystConsensus: n(analystConsensus), stockEvents: n(stockEvents), sharesOutstanding: n(sharesOutstanding) };
 }
 
 /** Units held from the ledger (signed sum of buy/sell/split effects is in the portfolio service; here: quantity from transactions). */
@@ -85,11 +87,13 @@ async function deleteDependents(tx: Tx, id: number, symbol: string) {
   await tx.delete(schema.dividendEvents).where(or(eq(schema.dividendEvents.assetId, id), sql`upper(${schema.dividendEvents.symbol}) = ${S}`));
   await tx.delete(schema.statementUploads).where(sql`upper(${schema.statementUploads.symbol}) = ${S}`);
   await tx.delete(schema.analystConsensus).where(sql`upper(${schema.analystConsensus.symbol}) = ${S}`);
+  await tx.delete(schema.stockEvents).where(sql`upper(${schema.stockEvents.symbol}) = ${S}`);
+  await tx.delete(schema.sharesOutstanding).where(sql`upper(${schema.sharesOutstanding.symbol}) = ${S}`);
   await tx.update(schema.notes).set({ assetIds: sql`array_remove(${schema.notes.assetIds}, ${id})` }).where(sql`${id} = any(${schema.notes.assetIds})`);
 }
 
 function emptyDeps(): AssetDependencies {
-  return { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0, analystConsensus: 0 };
+  return { transactions: 0, prices: 0, valuations: 0, financialStatements: 0, statementUploads: 0, dividendEvents: 0, notes: 0, customMetrics: 0, analystConsensus: 0, stockEvents: 0, sharesOutstanding: 0 };
 }
 
 /** Dependency counts for many assets at once (holdings chips: show why delete is unavailable). */

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-18 — Abnormal trading, phase 1: data
+- Migration 0018 (additive):
+  - `prices.volume` (nullable);
+  - new tables `shares_outstanding` (effective-dated) and `stock_events`.
+  - Manual rollback: `drizzle/rollback/0018_abnormal_trading.down.sql` (drops only what 0018 added).
+- Volume:
+  - `sync_historical_prices` stores Yahoo volume. On stored rows it fills volume only where it is empty, never changing close / adjusted close.
+  - `import_prices` accepts a volume column, and `target: "benchmark"` for index series such as SETTRI (SET TRI).
+- Shares outstanding: value as of each date, or null with a reason.
+- Events: list includes XD dates from dividend data.
+- Asset rename / cascade delete cover the new tables.
+- No existing prices or computed figures change (verified by hash and parity).
+
 ## 2026-11-18 — Custom metrics on the asset price chart
 - Asset page price chart: "+ เพิ่ม Metric ลงกราฟ" chips put custom metrics on a right-hand axis. Readings are dots on their own dates with threshold-status rings; nothing is filled between them.
   - The right axis takes one unit only, and only metrics within 10× of each other in magnitude; others are disabled with the reason.

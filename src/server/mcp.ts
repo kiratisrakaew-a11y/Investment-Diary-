@@ -196,7 +196,8 @@ export function createMcpServer() {
     {
       title: "Import many prices",
       description:
-        "Store many prices at once for assets already in the app: rows [{symbol, date, close, adjClose?}] (≤ 50,000) or csv text " +
+        "Store many prices at once for assets already in the app: rows [{symbol, date, close, adjClose?, volume?}] (≤ 50,000) or csv text " +
+        "(a volume column is kept when present). target \"benchmark\" stores an index series instead, e.g. SETTRI (SET Total Return Index) for event studies. " +
         "(symbol,date,close · or date,SYM1,SYM2,… · or a one-symbol export with `symbol`). Day-first and Buddhist-era dates are understood. " +
         "Keeps stored prices unless overwriteExisting; dryRun validates only. Unknown symbols are reported, not created.",
       inputSchema: importPricesInput.shape,

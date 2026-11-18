@@ -249,6 +249,8 @@ export const prices = pgTable(
     close: doublePrecision("close").notNull(),
     /** Split- and dividend-adjusted close (total-return series); null unless synced with priceType adjusted_close. */
     adjClose: doublePrecision("adj_close"),
+    /** Shares traded that day (provider volume, split-adjusted); null when unknown. */
+    volume: doublePrecision("volume"),
   },
   (t) => [uniqueIndex("prices_asset_date_uq").on(t.assetId, t.date)],
 );
@@ -460,6 +462,39 @@ export const analystConsensus = pgTable(
     check("analyst_consensus_range_ck", sql`${t.targetLow} is null or ${t.targetHigh} is null or ${t.targetLow} <= ${t.targetHigh}`),
     check("analyst_consensus_analysts_ck", sql`${t.analysts} is null or ${t.analysts} >= 0`),
   ],
+);
+
+/**
+ * Shares outstanding effective from a date (capital increases / buybacks change it). Turnover uses the
+ * value effective on each day; nothing is assumed when no row covers a date.
+ */
+export const sharesOutstanding = pgTable(
+  "shares_outstanding",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    effectiveDate: date("effective_date").notNull(),
+    shares: doublePrecision("shares").notNull(),
+    source: text("source").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("shares_outstanding_symbol_date_uq").on(t.symbol, t.effectiveDate), check("shares_outstanding_positive_ck", sql`${t.shares} > 0`)],
+);
+
+/** Company events for event studies and scan context (earnings, M&A, XD, news). XD also comes from dividend_events. */
+export const stockEvents = pgTable(
+  "stock_events",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    eventDate: date("event_date").notNull(),
+    eventType: text("event_type").notNull(),
+    description: text("description").notNull().default(""),
+    source: text("source"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("stock_events_symbol_date_idx").on(t.symbol, t.eventDate), check("stock_events_type_ck", sql`${t.eventType} in ('earnings','ma','xd','news','other')`)],
 );
 
 /** In-app AI advisor conversations (text turns only). */

@@ -54,7 +54,7 @@ export interface AssetLike {
   providerSymbol: string | null;
 }
 
-type Existing = Map<string, { close: number; adjClose: number | null }>;
+type Existing = Map<string, { close: number; adjClose: number | null; volume?: number | null }>;
 
 export interface SyncDeps {
   today(): string;
@@ -64,6 +64,8 @@ export interface SyncDeps {
   /** Series key: `asset:<id>`, `fx:USDTHB` or `bench:<symbol>`. */
   loadExisting(key: string, range: SyncRange): Promise<Existing>;
   write(key: string, inserts: PricePoint[], updates: PricePoint[]): Promise<void>;
+  /** Set volume on stored asset rows whose volume is empty (never touches close / adjusted close). Optional for test doubles. */
+  fillVolume?(key: string, fills: { date: string; volume: number }[]): Promise<number>;
   loadFx(): Promise<[string, number][]>;
   sleep(ms: number): Promise<void>;
   eligibility(symbols: string[], lookbackDays: number): Promise<{ lookbackDays: number; ok: boolean; reason?: string; eligible: string[]; skipped: { symbol: string; reason: string }[] }>;
@@ -86,6 +88,8 @@ export interface SeriesResult {
   updated: number;
   skippedExisting: number;
   unchanged: number;
+  /** Stored rows that received a volume (prices unchanged). */
+  volumeFilled?: number;
   coverage?: Coverage;
   corporateActions?: { splits: DailyHistory["splits"]; dividends: DailyHistory["dividends"] };
   warnings: string[];
@@ -115,6 +119,9 @@ async function applySeries(deps: SyncDeps, key: string, label: string, history: 
   const existing = await deps.loadExisting(key, o.range);
   const plan = planWrites(existing, history.rows, { overwrite: o.overwrite, priceType: o.priceType });
   if (!o.dryRun && (plan.inserts.length || plan.updates.length)) await deps.write(key, plan.inserts, plan.updates);
+  // Volume is stored for assets only (benchmark / FX rows have none).
+  const volumeFills = key.startsWith("asset:") ? plan.volumeFills : [];
+  const volumeFilled = !o.dryRun && volumeFills.length && deps.fillVolume ? await deps.fillVolume(key, volumeFills) : o.dryRun ? volumeFills.length : 0;
   const dates = new Set([...existing.keys(), ...plan.inserts.map((r) => r.date)]);
   const warnings = corporateActionWarnings(label, history.splits, history.dividends, held);
   if (plan.changedButKept) warnings.push(`${label}: ${plan.changedButKept} วันที่ราคา${base.source === "import" ? "ในไฟล์" : "จากผู้ให้ข้อมูล"}ต่างจากที่เก็บไว้ — เก็บของเดิมไว้ (ใช้ overwriteExisting เพื่ออัปเดต)`);
@@ -129,6 +136,7 @@ async function applySeries(deps: SyncDeps, key: string, label: string, history: 
     updated: plan.updates.length,
     skippedExisting: plan.skippedExisting,
     unchanged: plan.unchanged,
+    ...(key.startsWith("asset:") ? { volumeFilled } : {}),
     coverage: coverage([...dates], o.range, deps.today()),
     corporateActions: { splits: history.splits, dividends: history.dividends },
     warnings,
@@ -273,14 +281,18 @@ export const MAX_IMPORT_ROWS = 50_000;
 
 export const importPricesInput = z.object({
   rows: z
-    .array(z.object({ symbol: z.string().min(1), date: z.string(), close: z.number(), adjClose: z.number().nullable().optional() }))
+    .array(z.object({ symbol: z.string().min(1), date: z.string(), close: z.number(), adjClose: z.number().nullable().optional(), volume: z.number().min(0).nullable().optional() }))
     .max(MAX_IMPORT_ROWS)
     .optional()
-    .describe("Prices to store: [{ symbol, date YYYY-MM-DD, close, adjClose? }]"),
+    .describe("Prices to store: [{ symbol, date YYYY-MM-DD, close, adjClose?, volume? (shares traded) }]"),
   csv: z.string().max(5_000_000).optional().describe("Alternative to rows: CSV text (symbol,date,close | date,SYM1,SYM2,… | one-symbol export with `symbol`)"),
   symbol: z.string().optional().describe("Symbol for a one-symbol CSV export (Date, Open, High, Low, Close, …)"),
   overwriteExisting: z.boolean().default(false).describe("false = keep stored prices, only add missing dates"),
   dryRun: z.boolean().default(false).describe("true = validate and report what would change, write nothing"),
+  target: z
+    .enum(["asset", "benchmark"])
+    .default("asset")
+    .describe("asset = prices of assets in the app (default). benchmark = an index series such as SETTRI (SET Total Return Index) stored by symbol in the benchmark table; volume is ignored"),
 });
 export type ImportPricesInput = z.input<typeof importPricesInput>;
 
@@ -292,7 +304,7 @@ export type ImportPricesInput = z.input<typeof importPricesInput>;
 export async function importPrices(input: ImportPricesInput, deps: SyncDeps = dbDeps) {
   const x = importPricesInput.parse(input);
   const parseErrors: { line: number; reason: string }[] = [];
-  let rows = (x.rows ?? []).map((r) => ({ ...r, symbol: r.symbol.trim().toUpperCase(), adjClose: r.adjClose ?? null }));
+  let rows: { symbol: string; date: string; close: number; adjClose: number | null; volume?: number | null }[] = (x.rows ?? []).map((r) => ({ ...r, symbol: r.symbol.trim().toUpperCase(), adjClose: r.adjClose ?? null }));
   let format: string | null = x.rows ? "rows" : null;
   if (x.csv) {
     const { parsePriceTable } = await import("@/lib/prices/price-import");
@@ -304,14 +316,15 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
   if (rows.length > MAX_IMPORT_ROWS) throw new PriceSyncError("INVALID_INPUT", `มี ${rows.length} แถว เกินสูงสุด ${MAX_IMPORT_ROWS} — แบ่งไฟล์`);
   const today = deps.today();
   const bySymbol = new Map<string, PricePoint[]>();
-  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), { date: r.date, close: r.close, adjClose: r.adjClose }]);
+  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), { date: r.date, close: r.close, adjClose: r.adjClose, ...(r.volume != null ? { volume: r.volume } : {}) }]);
+  const isBench = x.target === "benchmark";
 
   const held = await deps.heldAssetIds();
   const results: SeriesResult[] = [];
   for (const [symbol, list] of bySymbol) {
-    const asset = await deps.findAsset(symbol);
-    if (!asset) {
-      results.push({ ...empty(symbol, "unknown_asset", `ไม่พบ ${symbol} ในรายการสินทรัพย์ — เพิ่มสินทรัพย์ก่อนแล้วนำเข้าใหม่`), fetched: list.length });
+    const asset = isBench ? null : await deps.findAsset(symbol);
+    if (!isBench && !asset) {
+      results.push({ ...empty(symbol, "unknown_asset", `ไม่พบ ${symbol} ในรายการสินทรัพย์ — เพิ่มสินทรัพย์ก่อนแล้วนำเข้าใหม่ (ถ้าเป็นดัชนี เช่น SETTRI ให้ใช้ target: "benchmark")`), fetched: list.length });
       continue;
     }
     const warnings: string[] = [];
@@ -342,9 +355,10 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
     }
     const range = { from: points[0].date, to: points[points.length - 1].date };
     const priceType: PriceType = points.some((p) => p.adjClose != null) ? "adjusted_close" : "close";
-    const r = await applySeries(deps, `asset:${asset.id}`, asset.symbol, { rows: points, splits: [], dividends: [] }, { range, priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun }, held.has(asset.id), {
+    const r = await applySeries(deps, asset ? `asset:${asset.id}` : `bench:${symbol}`, asset?.symbol ?? symbol, { rows: points, splits: [], dividends: [] }, { range, priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun }, asset ? held.has(asset.id) : false, {
       source: "import",
     });
+    if (isBench && points.some((p) => p.volume != null)) r.warnings.push(`${symbol}: ไม่เก็บ volume ของ benchmark`);
     r.fetched = list.length;
     r.warnings.unshift(...warnings);
     results.push(r);
@@ -352,7 +366,7 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
 
   const known = results.filter((r) => r.status === "ok").map((r) => r.symbol);
   let eligibility: Awaited<ReturnType<SyncDeps["eligibility"]>> | null = null;
-  if (known.length && !x.dryRun) {
+  if (known.length && !x.dryRun && !isBench) {
     try {
       eligibility = await deps.eligibility(known, 365);
     } catch {
@@ -363,6 +377,7 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
     format,
     dryRun: x.dryRun,
     overwriteExisting: x.overwriteExisting,
+    target: x.target,
     parseErrors: parseErrors.slice(0, 200),
     parseErrorCount: parseErrors.length,
     results,
@@ -405,8 +420,8 @@ export const dbDeps: SyncDeps = {
     const out: Existing = new Map();
     if (kind === "asset") {
       const t = schema.prices;
-      const rows = await db.select({ d: t.date, c: t.close, a: t.adjClose }).from(t).where(and(eq(t.assetId, Number(id)), gte(t.date, range.from), lte(t.date, range.to)));
-      for (const r of rows) out.set(r.d, { close: r.c, adjClose: r.a });
+      const rows = await db.select({ d: t.date, c: t.close, a: t.adjClose, v: t.volume }).from(t).where(and(eq(t.assetId, Number(id)), gte(t.date, range.from), lte(t.date, range.to)));
+      for (const r of rows) out.set(r.d, { close: r.c, adjClose: r.a, volume: r.v });
     } else if (kind === "bench") {
       const t = schema.benchmarkPrices;
       const rows = await db.select({ d: t.date, c: t.close, a: t.adjClose }).from(t).where(and(eq(t.symbol, id), gte(t.date, range.from), lte(t.date, range.to)));
@@ -429,7 +444,7 @@ export const dbDeps: SyncDeps = {
         const part = rows.slice(i, i + CHUNK);
         if (kind === "asset") {
           const t = schema.prices;
-          const q = db.insert(t).values(part.map((r) => ({ assetId: Number(id), date: r.date, close: r.close, adjClose: r.adjClose })));
+          const q = db.insert(t).values(part.map((r) => ({ assetId: Number(id), date: r.date, close: r.close, adjClose: r.adjClose, volume: r.volume ?? null })));
           await (update ? q.onConflictDoUpdate({ target: [t.assetId, t.date], set: { close: sql`excluded.close`, adjClose: sql`excluded.adj_close` } }) : q.onConflictDoNothing());
         } else if (kind === "bench") {
           const t = schema.benchmarkPrices;
@@ -442,6 +457,26 @@ export const dbDeps: SyncDeps = {
         }
       }
     }
+  },
+  async fillVolume(key, fills) {
+    const { kind, id } = tableFor(key);
+    if (kind !== "asset" || !fills.length) return 0;
+    const t = schema.prices;
+    let n = 0;
+    // One statement per chunk; `volume is null` guarantees a stored volume is never replaced and prices are not touched.
+    for (let i = 0; i < fills.length; i += CHUNK) {
+      const part = fills.slice(i, i + CHUNK);
+      const rows = await getDb().execute(sql`
+        update ${t} set volume = v.volume
+        from (values ${sql.join(
+          part.map((f) => sql`(${f.date}::date, ${f.volume}::double precision)`),
+          sql`, `,
+        )}) as v(d, volume)
+        where ${t.assetId} = ${Number(id)} and ${t.date} = v.d and ${t.volume} is null
+        returning ${t.id}`);
+      n += (rows as unknown as unknown[]).length;
+    }
+    return n;
   },
   async eligibility(symbols, lookbackDays) {
     // Imported lazily: the universe loader depends on the price services this module feeds.

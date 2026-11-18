@@ -26,6 +26,10 @@ export interface AssetDependencies {
   customMetrics: number;
   /** Stored analyst consensus target prices (by symbol). */
   analystConsensus: number;
+  /** Company events recorded for abnormal-trading analysis (by symbol). */
+  stockEvents: number;
+  /** Shares-outstanding rows (by symbol). */
+  sharesOutstanding: number;
 }
 
 export interface LifecycleState {
@@ -58,6 +62,8 @@ const DEP_LABEL: Record<keyof AssetDependencies, string> = {
   notes: "บันทึก",
   customMetrics: "ตัวชี้วัดที่ติดตาม",
   analystConsensus: "ราคาเป้าหมายนักวิเคราะห์",
+  stockEvents: "เหตุการณ์ของบริษัท",
+  sharesOutstanding: "จำนวนหุ้นจดทะเบียน",
 };
 
 export function dependencySummary(d: AssetDependencies): { total: number; nonZero: Partial<AssetDependencies>; text: string } {

@@ -83,6 +83,9 @@ export async function editAssetBasics(id: number, input: AssetBasicsInput, sourc
       const AC = schema.analystConsensus;
       const [{ k }] = await tx.select({ k: sql<number>`count(*)::int` }).from(AC).where(sql`upper(${AC.symbol}) = ${x.symbol}`);
       if (k > 0) throw new Error(`มีราคาเป้าหมายนักวิเคราะห์ของ ${x.symbol} อยู่แล้ว ${k} รายการ — ลบรายการนั้นก่อน ระบบไม่รวมให้อัตโนมัติ`);
+      const SO = schema.sharesOutstanding;
+      const [{ so }] = await tx.select({ so: sql<number>`count(*)::int` }).from(SO).where(sql`upper(${SO.symbol}) = ${x.symbol}`);
+      if (so > 0) throw new Error(`มีจำนวนหุ้นจดทะเบียนของ ${x.symbol} อยู่แล้ว ${so} รายการ — ลบรายการนั้นก่อน ระบบไม่รวมให้อัตโนมัติ`);
     }
     if ((x.assetClass !== a.assetClass || x.currency !== a.currency) && !input.confirmChange) {
       const [{ t }] = await tx.select({ t: sql<number>`count(*)::int` }).from(schema.transactions).where(eq(schema.transactions.assetId, id));
@@ -102,6 +105,8 @@ export async function editAssetBasics(id: number, input: AssetBasicsInput, sourc
       await follow(schema.dividendEvents);
       await tx.update(schema.statementUploads).set({ symbol: x.symbol }).where(sql`upper(${schema.statementUploads.symbol}) = ${old}`);
       await tx.update(schema.analystConsensus).set({ symbol: x.symbol }).where(sql`upper(${schema.analystConsensus.symbol}) = ${old}`);
+      await tx.update(schema.stockEvents).set({ symbol: x.symbol }).where(sql`upper(${schema.stockEvents.symbol}) = ${old}`);
+      await tx.update(schema.sharesOutstanding).set({ symbol: x.symbol }).where(sql`upper(${schema.sharesOutstanding.symbol}) = ${old}`);
     }
     const pick = (r: typeof a) => ({ symbol: r.symbol, name: r.name, assetClass: r.assetClass, currency: r.currency, priceSource: r.priceSource, providerSymbol: r.providerSymbol });
     await tx.insert(schema.assetLifecycleEvents).values({ assetId: id, symbol: row.symbol, action: "edit", result: "UPDATED", source, detail: { before: pick(a), after: pick(row) } });

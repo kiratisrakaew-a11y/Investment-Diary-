@@ -38,7 +38,7 @@ describe("parsePriceTable", () => {
     const csv = `Date,Open,High,Low,Close,Adj Close,Volume\n2026-01-02,34,35,33.5,34.5,33.9,1000\n2026-01-05,34.5,35.5,34,35,34.4,900`;
     const r = parsePriceTable(csv, { symbol: "ptt" });
     expect(r.format).toBe("single");
-    expect(r.rows[0]).toEqual({ symbol: "PTT", date: "2026-01-02", close: 34.5, adjClose: 33.9 });
+    expect(r.rows[0]).toEqual({ symbol: "PTT", date: "2026-01-02", close: 34.5, adjClose: 33.9, volume: 1000 }); // Volume is kept since abnormal-trading phase 1
     const missing = parsePriceTable(csv);
     expect(missing.rows).toEqual([]);
     expect(missing.errors[0].reason).toContain("symbol");
@@ -59,5 +59,21 @@ describe("parsePriceTable", () => {
     const r = parsePriceTable(`a,b,c\n1,2,3`);
     expect(r.rows).toEqual([]);
     expect(r.errors[0].reason).toContain("หัวตาราง");
+  });
+});
+
+describe("parsePriceTable — volume column", () => {
+  it("single export keeps Volume; missing volume is null (not 0)", () => {
+    const r = parsePriceTable(`Date,Open,High,Low,Close,Adj Close,Volume\n2026-01-05,5,5.2,4.9,5.1,5.0,"1,234,500"\n2026-01-06,5,5.2,4.9,5.15,5.05,\n2026-01-07,5,5.2,4.9,5.2,5.1,0`, { symbol: "PLANB" });
+    expect(r.rows.map((x) => x.volume)).toEqual([1234500, null, 0]);
+    expect(r.errors).toEqual([]);
+  });
+  it("long format with a ปริมาณ column", () => {
+    const r = parsePriceTable(`หลักทรัพย์,วันที่,ราคาปิด,ปริมาณ\nPLANB,05/01/2569,5.10,800000`);
+    expect(r.rows).toEqual([{ symbol: "PLANB", date: "2026-01-05", close: 5.1, adjClose: null, volume: 800000 }]);
+  });
+  it("tables without a volume column are unchanged (no volume key)", () => {
+    const r = parsePriceTable(`symbol,date,close\nPTT,2026-01-05,34`);
+    expect(r.rows[0]).toEqual({ symbol: "PTT", date: "2026-01-05", close: 34, adjClose: null });
   });
 });

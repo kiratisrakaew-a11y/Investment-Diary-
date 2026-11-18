@@ -116,3 +116,35 @@ describe("withRetry", () => {
     await expect(withRetry(async () => Promise.reject(new Error("down")), { attempts: 2, baseMs: 1, sleep: async () => {} })).rejects.toThrow("down");
   });
 });
+
+describe("planWrites — volume (abnormal trading phase 1)", () => {
+  const existing = new Map<string, { close: number; adjClose: number | null; volume?: number | null }>([
+    ["2026-01-02", { close: 10, adjClose: null, volume: null }],
+    ["2026-01-03", { close: 11, adjClose: null, volume: 5000 }],
+  ]);
+  const fetched = [
+    { date: "2026-01-02", close: 10.4, adjClose: null, volume: 1200 },
+    { date: "2026-01-03", close: 11, adjClose: null, volume: 9999 },
+    { date: "2026-01-04", close: 12, adjClose: null, volume: 0 },
+    { date: "2026-01-05", close: 13, adjClose: null, volume: null },
+  ];
+  it("new dates carry volume (0 is kept, null omitted); stored rows only get a volume where empty", () => {
+    const p = planWrites(existing, fetched, { overwrite: false, priceType: "close" });
+    expect(p.inserts).toEqual([
+      { date: "2026-01-04", close: 12, adjClose: null, volume: 0 },
+      { date: "2026-01-05", close: 13, adjClose: null },
+    ]);
+    expect(p.volumeFills).toEqual([{ date: "2026-01-02", volume: 1200 }]); // 01-03 already has a volume
+    expect(p.updates).toEqual([]); // the differing close on 01-02 is still kept
+    expect(p.changedButKept).toBe(1);
+  });
+  it("overwrite mode: price updates unchanged by volume; volume fill still only where empty", () => {
+    const p = planWrites(existing, fetched, { overwrite: true, priceType: "close" });
+    expect(p.updates).toEqual([{ date: "2026-01-02", close: 10.4, adjClose: null }]);
+    expect(p.volumeFills).toEqual([{ date: "2026-01-02", volume: 1200 }]);
+  });
+  it("negative / non-finite volume is treated as unknown", () => {
+    const p = planWrites(new Map(), [{ date: "2026-02-02", close: 5, adjClose: null, volume: -1 }, { date: "2026-02-03", close: 5, adjClose: null, volume: NaN }], { overwrite: false, priceType: "close" });
+    expect(p.inserts.every((r) => !("volume" in r))).toBe(true);
+  });
+});

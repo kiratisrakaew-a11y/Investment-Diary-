@@ -47,6 +47,8 @@ export interface PricePoint {
   date: string;
   close: number;
   adjClose: number | null;
+  /** Shares traded; omitted / null when unknown. */
+  volume?: number | null;
 }
 
 export interface WritePlan {
@@ -60,6 +62,8 @@ export interface WritePlan {
   unchanged: number;
   /** Provider rows rejected (non-positive / non-finite close). */
   invalid: number;
+  /** Stored rows whose volume is still empty: fill the volume only (close / adjusted close untouched). */
+  volumeFills: { date: string; volume: number }[];
 }
 
 const same = (a: number | null, b: number | null) => (a == null || b == null ? a === b : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)));
@@ -68,10 +72,16 @@ const same = (a: number | null, b: number | null) => (a == null || b == null ? a
  * Decide what to write. Rules:
  * - new dates are inserted (adjusted value only when priceType = adjusted_close);
  * - overwrite = false never changes a stored value, but fills a missing adjusted value;
- * - overwrite = true replaces values that differ; identical rows are not rewritten.
+ * - overwrite = true replaces values that differ; identical rows are not rewritten;
+ * - volume: inserted with new dates; on stored dates only filled where empty (volumeFills).
  */
-export function planWrites(existing: Map<string, { close: number; adjClose: number | null }>, fetched: PricePoint[], o: { overwrite: boolean; priceType: PriceType }): WritePlan {
-  const plan: WritePlan = { inserts: [], updates: [], skippedExisting: 0, changedButKept: 0, unchanged: 0, invalid: 0 };
+export function planWrites(
+  existing: Map<string, { close: number; adjClose: number | null; volume?: number | null }>,
+  fetched: PricePoint[],
+  o: { overwrite: boolean; priceType: PriceType },
+): WritePlan {
+  const plan: WritePlan = { inserts: [], updates: [], skippedExisting: 0, changedButKept: 0, unchanged: 0, invalid: 0, volumeFills: [] };
+  const vol = (v: number | null | undefined) => (v != null && Number.isFinite(v) && v >= 0 ? v : null);
   const wantAdj = o.priceType === "adjusted_close";
   for (const f of fetched) {
     if (!(Number.isFinite(f.close) && f.close > 0)) {
@@ -80,10 +90,13 @@ export function planWrites(existing: Map<string, { close: number; adjClose: numb
     }
     const adj = wantAdj && f.adjClose != null && Number.isFinite(f.adjClose) && f.adjClose > 0 ? f.adjClose : null;
     const cur = existing.get(f.date);
+    const v = vol(f.volume);
     if (!cur) {
-      plan.inserts.push({ date: f.date, close: f.close, adjClose: adj });
+      plan.inserts.push(v != null ? { date: f.date, close: f.close, adjClose: adj, volume: v } : { date: f.date, close: f.close, adjClose: adj });
       continue;
     }
+    // Volume is filled only where none is stored, in both modes; it never changes a price.
+    if (v != null && cur.volume == null) plan.volumeFills.push({ date: f.date, volume: v });
     if (o.overwrite) {
       const next = { date: f.date, close: f.close, adjClose: wantAdj ? adj : cur.adjClose };
       if (same(cur.close, next.close) && same(cur.adjClose, next.adjClose)) plan.unchanged++;
