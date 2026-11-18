@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { getAllocation, getPerformance, getPortfolioSummary } from "@/server/services/portfolio";
+import { getAllocation, getPerformance, getPortfolioSummary, loadPortfolioData } from "@/server/services/portfolio";
 import { listNotes } from "@/server/services/notes";
-import { getSettings } from "@/server/services/settings";
 import { AllocationDonut, GrowthChart, ValueChart } from "@/components/charts";
 import { AllocationTable } from "@/components/AllocationTable";
 import { Empty, PageHeader, Section, Stat } from "@/components/ui";
@@ -11,13 +10,10 @@ import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { compact, downsample } from "@/lib/explain-data";
 
 export default async function Dashboard() {
-  const [summary, allocation, perf, notes, settings] = await Promise.all([
-    getPortfolioSummary(),
-    getAllocation(),
-    getPerformance(),
-    listNotes({ limit: 4 }),
-    getSettings(),
-  ]);
+  // One load of prices / ledger / FX shared by the three calculations (was loaded three times).
+  const data = await loadPortfolioData();
+  const [summary, allocation, perf, notes] = await Promise.all([getPortfolioSummary(undefined, data), getAllocation(undefined, data), getPerformance(undefined, data), listNotes({ limit: 4 })]);
+  const settings = data.settings;
 
   if (summary.positions.length === 0 && summary.cashThb === 0) {
     return (

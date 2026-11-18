@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-18 — Faster Dashboard and Analytics
+- Dashboard loads the price table / ledger / FX once and shares it across summary, allocation and performance (it was loaded three times). Analytics shares one load between performance and MPT.
+- Measured locally: Dashboard 20 → 9 queries and 11,933 → 4,624 rows read; Analytics 12 → 7 queries and 7,995 → 4,307 rows read. Every computed figure is unchanged.
+- `vercel.json` pins serverless functions to Singapore (`sin1`), the same region as the database.
+- Read path only: no migration and no change to any write / delete code.
+
 ## 2026-11-18 — Analyst consensus target prices
 - Stock valuation page: a "ราคาเป้าหมายนักวิเคราะห์ (Consensus)" card showing:
   - mean / median target, low–high range, number of analysts and rating;

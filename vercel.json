@@ -1,3 +1,11 @@
 {
-  "crons": [{ "path": "/api/cron/prices", "schedule": "30 11 * * 1-5" }]
+  "regions": [
+    "sin1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/prices",
+      "schedule": "30 11 * * 1-5"
+    }
+  ]
 }

@@ -1,4 +1,4 @@
-import { getMptAnalysis, getPerformance } from "@/server/services/portfolio";
+import { getMptAnalysis, getPerformance, loadPortfolioData } from "@/server/services/portfolio";
 import { FrontierChart, GrowthChart } from "@/components/charts";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { fmtPct, fmtRatio, signClass } from "@/lib/format";
@@ -31,7 +31,8 @@ function corrColor(c: number) {
 }
 
 export default async function AnalyticsPage() {
-  const [perf, mpt] = await Promise.all([getPerformance(), getMptAnalysis()]);
+  const data = await loadPortfolioData();
+  const [perf, mpt] = await Promise.all([getPerformance(undefined, data), getMptAnalysis(undefined, data)]);
   const navNow = perf.valueSeries[perf.valueSeries.length - 1]?.value ?? 0;
 
   // Values sent to the "อธิบาย" buttons — the same figures each section renders.

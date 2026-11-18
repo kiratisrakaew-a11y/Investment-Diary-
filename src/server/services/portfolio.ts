@@ -18,6 +18,17 @@ import { loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
 import { getSettings, getTargets } from "./settings";
 import { allTransactions } from "./transactions";
 
+/** Everything the portfolio calculations read (assets, ledger, prices, FX, settings). Read-only. */
+export type PortfolioData = Awaited<ReturnType<typeof loadAll>>;
+
+/**
+ * Load once and pass the result to several calculations on the same page (summary, allocation,
+ * performance, MPT) instead of each reloading every price row. Callers must not mutate it.
+ */
+export function loadPortfolioData() {
+  return loadAll();
+}
+
 async function loadAll() {
   const [assets, txRows, prices, fx, settings] = await Promise.all([
     listAssets(),
@@ -54,13 +65,13 @@ export async function holdingsAt(dates: string[]): Promise<Map<string, Map<strin
   return out;
 }
 
-export async function getPortfolioSummary(date = today()) {
-  const { assetInputs, txs, prices, fx } = await loadAll();
+export async function getPortfolioSummary(date = today(), data?: PortfolioData) {
+  const { assetInputs, txs, prices, fx } = data ?? (await loadAll());
   return buildSnapshot(assetInputs, txs, prices, fx, date);
 }
 
-export async function getAllocation(date = today()) {
-  const [snap, targets] = await Promise.all([getPortfolioSummary(date), getTargets()]);
+export async function getAllocation(date = today(), data?: PortfolioData) {
+  const [snap, targets] = await Promise.all([getPortfolioSummary(date, data), getTargets()]);
   const byClass: Partial<Record<AssetClass, number>> = {};
   for (const p of snap.positions) byClass[p.assetClass] = (byClass[p.assetClass] ?? 0) + p.marketValueThb;
   if (snap.cashThb > 0) byClass.cash = (byClass.cash ?? 0) + snap.cashThb;
@@ -79,8 +90,8 @@ function valuationDates(txs: TxInput[], prices: Map<number, [string, number][]>,
   return [...set].filter((d) => d >= start && d <= end).sort();
 }
 
-export async function getPerformance(end = today()) {
-  const { assetInputs, txs, prices, fx, settings } = await loadAll();
+export async function getPerformance(end = today(), data?: PortfolioData) {
+  const { assetInputs, txs, prices, fx, settings } = data ?? (await loadAll());
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   const dates = valuationDates(txs, prices, bench, end);
   const series = buildValueSeries(assetInputs, txs, prices, fx, dates);
@@ -113,8 +124,8 @@ export async function getPerformance(end = today()) {
  * Markowitz analysis of the assets currently held: expected returns and
  * covariance from aligned daily THB returns over the look-back window.
  */
-export async function getMptAnalysis(lookbackDays = 365 * 2) {
-  const { assetInputs, txs, prices, fx, settings } = await loadAll();
+export async function getMptAnalysis(lookbackDays = 365 * 2, data?: PortfolioData) {
+  const { assetInputs, txs, prices, fx, settings } = data ?? (await loadAll());
   const snap = buildSnapshot(assetInputs, txs, prices, fx, today());
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   const from = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
