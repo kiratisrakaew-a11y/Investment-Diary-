@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mcpToolNames, serverVersion } from "./mcp";
 import { MODEL_VERSION } from "@/lib/governance";
+import { ABNORMAL_TOOL_NAMES } from "./mcp-abnormal";
 
 describe("MCP build info", () => {
   it("lists the multi-stage residual income tool and the server-info tool", () => {
@@ -21,7 +22,25 @@ describe("MCP build info", () => {
     expect(names).toContain("list_dividend_events");
     expect(names).toContain("screen_factor_stocks");
     expect(names).toContain("plan_bond_ladder");
-    for (const n of ["get_analyst_consensus", "refresh_analyst_consensus", "record_analyst_consensus", "delete_analyst_consensus", "compare_portfolio_models", "get_performance_metrics", "analyze_valuation", "manage_asset_lifecycle", "get_risk_free_rate", "value_security", "add_asset", "list_assets"]) expect(names).toContain(n);
+    for (const n of [
+      "get_analyst_consensus",
+      "refresh_analyst_consensus",
+      "record_analyst_consensus",
+      "delete_analyst_consensus",
+      "compare_portfolio_models",
+      "get_performance_metrics",
+      "analyze_valuation",
+      "manage_asset_lifecycle",
+      "get_risk_free_rate",
+      "value_security",
+      "add_asset",
+      "list_assets",
+    ])
+      expect(names).toContain(n);
+  });
+  it("registers the 7 abnormal-trading tools", () => {
+    const names = mcpToolNames();
+    for (const n of ABNORMAL_TOOL_NAMES) expect(names).toContain(n);
   });
   it("registers the 12 asset custom-metric tools", () => {
     const names = mcpToolNames();

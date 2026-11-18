@@ -21,6 +21,12 @@ import {
   type VolumeSeries,
 } from "./volume";
 
+/** True for a real calendar date in YYYY-MM-DD (rejects 2026-13-40, 2026-02-30). */
+export const isCalendarDate = (v: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+  !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) &&
+  new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+
 export interface ScanEvent {
   date: string;
   type: string;

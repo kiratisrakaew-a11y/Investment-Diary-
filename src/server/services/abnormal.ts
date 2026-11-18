@@ -9,6 +9,7 @@ import {
   DISCLAIMER,
   MODEL_LABEL,
   alignReturns,
+  carOf,
   eventStudy,
   type EventStudyOptions,
   type ExpectedModel,
@@ -20,6 +21,7 @@ import { listEvents, sharesHistory } from "./stock-data";
 import { scanStock } from "@/lib/finance/abnormal/scan";
 import {
   DEFAULT_THRESHOLDS,
+  eventVolumeZ,
   rollingVolumeZ,
   volumeSeries,
   zeroVolumeShare,
@@ -211,15 +213,57 @@ export async function runEventStudy(input: {
     event,
     disclaimer: DISCLAIMER,
   };
+  // Volume around the same event (independent of the benchmark, so it is reported even when AR cannot be).
+  const vs = volumeSeries(days, await sharesHistory(asset.symbol));
+  const ev = eventVolumeZ(vs, eventDate, {
+    estimation: input.estimationWindow,
+    event: input.eventWindow,
+  });
+  const volume = ev.ok
+    ? {
+        ok: true as const,
+        basis: vs.basis,
+        day0: ev.day0,
+        n: ev.n,
+        estimation: ev.estimation,
+        days: ev.days.map((d) => ({
+          rel: d.rel,
+          date: d.date,
+          volume: d.volume,
+          z: d.z,
+          level: d.level,
+        })),
+      }
+    : { ok: false as const, basis: vs.basis, reason: ev.reason };
+  const volWarnings = vs.warnings;
   if (!r.ok)
     return {
       ...common,
       ok: false as const,
       code: r.code,
       reason: r.reason,
-      warnings: choice.warnings,
+      volume,
+      warnings: [...choice.warnings, ...volWarnings],
     };
-  return { ...common, ...r, warnings: [...choice.warnings, ...r.warnings] };
+  // Standard sub-windows of the event window: run-up before the news, announcement, whole window.
+  const [w0, w1] = r.event.window;
+  const cars = (
+    [
+      [w0, -1, "ก่อนข่าว (run-up)"],
+      [-5, -1, "5 วันก่อนข่าว"],
+      [0, 1, "วันข่าว (0, +1)"],
+      [w0, w1, "ทั้ง event window"],
+    ] as [number, number, string][]
+  )
+    .filter(([a, b]) => a >= w0 && b <= w1 && a <= b)
+    .map(([a, b, label]) => ({ label, ...carOf(r.days, r.fit.sigma, a, b) }));
+  return {
+    ...common,
+    ...r,
+    cars,
+    volume,
+    warnings: [...choice.warnings, ...r.warnings, ...volWarnings],
+  };
 }
 
 /** Daily abnormal volume (mean-adjusted z of log turnover) for one stock over [from, to]. */
@@ -285,6 +329,8 @@ export async function getAbnormalVolume(input: {
 }
 
 type ScanInput = {
+  /** Every scanned day (for charts); off for MCP to keep the output short. */
+  includeDays?: boolean;
   from?: string;
   to?: string;
   estimationWindow?: [number, number];
@@ -363,6 +409,14 @@ async function scanOneStock(
     })),
     volumeOnly: r.volumeOnly,
     latest: r.latest,
+    ...(input.includeDays
+      ? {
+          days: r.days.map(({ fit, ...d }) => ({
+            ...d,
+            sigma: fit?.sigma ?? null,
+          })),
+        }
+      : {}),
     warnings,
   };
 }
@@ -374,6 +428,7 @@ async function scanOneStock(
  */
 export async function scanAbnormalTrading(input: {
   symbols?: string[];
+  includeDays?: boolean;
   from?: string;
   to?: string;
   thresholds?: Partial<Thresholds>;
@@ -453,5 +508,52 @@ export async function scanAbnormalTrading(input: {
     stocks,
     skipped,
     disclaimer: DISCLAIMER,
+  };
+}
+
+/** Everything the asset page section needs, from the same services as the MCP tools. */
+export async function abnormalOverview(
+  assetId: number,
+  input: { from?: string; to?: string; thresholds?: Partial<Thresholds> },
+) {
+  const [a] = await getDb()
+    .select({
+      symbol: schema.assets.symbol,
+      assetClass: schema.assets.assetClass,
+    })
+    .from(schema.assets)
+    .where(eq(schema.assets.id, assetId));
+  if (!a)
+    throw new MetricError(404, "ASSET_NOT_FOUND", `ไม่พบสินทรัพย์ #${assetId}`);
+  if (a.assetClass !== "thai_stock")
+    throw new MetricError(
+      400,
+      "UNSUPPORTED_ASSET",
+      `${a.symbol} ไม่ใช่หุ้นไทย — ฟีเจอร์นี้รองรับเฉพาะ thai_stock`,
+    );
+  const scan = await scanAbnormalTrading({
+    symbols: [a.symbol],
+    from: input.from,
+    to: input.to,
+    thresholds: input.thresholds,
+    includeDays: true,
+  });
+  const [events, shares] = await Promise.all([
+    listEvents({ symbol: a.symbol }),
+    sharesHistory(a.symbol),
+  ]);
+  const { stocks, skipped, summary: _s, ...meta } = scan;
+  if (!stocks.length)
+    throw new MetricError(
+      400,
+      "SCAN_FAILED",
+      skipped[0]?.reason ?? "สแกนไม่ได้",
+    );
+  return {
+    ...meta,
+    assetId,
+    stock: stocks[0],
+    events,
+    sharesOutstanding: shares,
   };
 }

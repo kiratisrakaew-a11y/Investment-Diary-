@@ -38,6 +38,7 @@ import { emptyYear, financialYearSchema } from "@/lib/financials";
 import { ZodError } from "zod";
 import { MetricError } from "./services/asset-metrics";
 import { registerAssetMetricTools } from "./mcp-asset-metrics";
+import { registerAbnormalTools } from "./mcp-abnormal";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -618,6 +619,7 @@ export function createMcpServer() {
 
   // User-defined per-asset metrics (12 tools) — same services as the asset page and REST.
   registerAssetMetricTools(server, safe);
+  registerAbnormalTools(server, safe);
 
   server.registerTool(
     "get_server_info",

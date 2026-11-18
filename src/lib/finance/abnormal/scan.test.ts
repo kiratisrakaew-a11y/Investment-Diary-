@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { fitModel, type ReturnSeries } from "./returns";
 import { volumeSeries } from "./volume";
-import { rollingMarketFits, scanStock } from "./scan";
+import { isCalendarDate, rollingMarketFits, scanStock } from "./scan";
 
 const N = 360;
 const dates = Array.from({ length: N + 1 }, (_, i) =>
@@ -188,5 +188,14 @@ describe("scanStock", () => {
     expect(r.days.find((y) => y.date === dates[t + 1])!.missing.join()).toMatch(
       /AR: ข้อมูลตลาดพอสำหรับ/,
     );
+  });
+});
+
+describe("isCalendarDate", () => {
+  it("accepts real dates only", () => {
+    expect(isCalendarDate("2026-02-28")).toBe(true);
+    expect(isCalendarDate("2024-02-29")).toBe(true);
+    for (const v of ["2026-02-30", "2026-13-40", "2026-1-01", "x"])
+      expect(isCalendarDate(v)).toBe(false);
   });
 });

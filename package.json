@@ -21,7 +21,8 @@
     "check:asset-metrics": "tsx src/scripts/asset-metrics-check.ts",
     "check:mcp-asset-metrics": "tsx src/scripts/mcp-asset-metrics-check.ts",
     "check:consensus": "tsx src/scripts/consensus-check.ts",
-    "check:abnormal-data": "tsx src/scripts/abnormal-data-check.ts"
+    "check:abnormal-data": "tsx src/scripts/abnormal-data-check.ts",
+    "check:abnormal": "tsx src/scripts/abnormal-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
