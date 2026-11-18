@@ -9,7 +9,8 @@ import { DISCLAIMER, MODEL_LABEL, alignReturns, eventStudy, type EventStudyOptio
 import { MetricError } from "./asset-metrics";
 import { getAssetBySymbol } from "./assets";
 import { getSettings } from "./settings";
-import { listEvents } from "./stock-data";
+import { listEvents, sharesHistory } from "./stock-data";
+import { DEFAULT_THRESHOLDS, rollingVolumeZ, volumeSeries, zeroVolumeShare, type Thresholds } from "@/lib/finance/abnormal/volume";
 
 export const DEFAULT_TRI_SYMBOL = "SETTRI";
 
@@ -102,4 +103,34 @@ export async function runEventStudy(input: { symbol: string; eventDate?: string;
   };
   if (!r.ok) return { ...common, ok: false as const, code: r.code, reason: r.reason, warnings: choice.warnings };
   return { ...common, ...r, warnings: [...choice.warnings, ...r.warnings] };
+}
+
+/** Daily abnormal volume (mean-adjusted z of log turnover) for one stock over [from, to]. */
+export async function getAbnormalVolume(input: { symbol: string; from?: string; to?: string; thresholds?: Partial<Thresholds>; estimationWindow?: [number, number] }) {
+  const { asset, days } = await loadStock(input.symbol);
+  const shares = await sharesHistory(asset.symbol);
+  const s = volumeSeries(days, shares);
+  const th = { ...DEFAULT_THRESHOLDS, ...(input.thresholds ?? {}) };
+  const rows = rollingVolumeZ(s, { from: input.from, to: input.to, estimation: input.estimationWindow, thresholds: th });
+  const zero = zeroVolumeShare(s, input.from, input.to);
+  const warnings = [...s.warnings];
+  if (!s.dates.length) warnings.push("ยังไม่มีข้อมูล volume — sync_historical_prices อีกครั้งเพื่อดึง volume จาก Yahoo");
+  if (zero.thin) warnings.push(`วันที่ volume = 0 มี ${(zero.share * 100).toFixed(1)}% (> 10%) — หุ้นซื้อขายไม่ต่อเนื่อง แนะนำ Dimson beta สำหรับ abnormal return`);
+  const lastShares = shares.at(-1) ?? null;
+  return {
+    symbol: asset.symbol,
+    model: "mean_adjusted",
+    modelLabel: "Mean-adjusted abnormal volume (Campbell & Wasley 1996)",
+    basis: s.basis,
+    transform: s.basis === "turnover" ? "V = ln(volume / shares outstanding + 0.00000255)" : "V = ln(volume + 1) (ไม่มีจำนวนหุ้น — ใช้ raw volume)",
+    estimationWindow: input.estimationWindow ?? [-250, -30],
+    thresholds: th,
+    period: { from: rows[0]?.date ?? null, to: rows.at(-1)?.date ?? null, days: rows.length },
+    sharesOutstanding: lastShares ? { shares: lastShares.shares, effectiveDate: lastShares.effectiveDate, source: lastShares.source } : null,
+    zeroVolume: zero,
+    flagged: rows.filter((r) => r.level !== "ปกติ").map((r) => ({ date: r.date, z: r.z, level: r.level, volume: r.volume })),
+    days: rows,
+    warnings,
+    disclaimer: DISCLAIMER,
+  };
 }
