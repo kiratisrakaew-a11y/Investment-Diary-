@@ -4,7 +4,7 @@
 import { useMemo, useState, useTransition } from "react";
 import clsx from "clsx";
 import type { MetricOverview } from "@/server/services/asset-metrics";
-import { MODE_HELP, MODE_LABEL, inWindow, windowStart, type ChartMode } from "@/lib/asset-metrics/series";
+import { MODE_HELP, MODE_LABEL, inWindow, metricColor, windowStart, type ChartMode } from "@/lib/asset-metrics/series";
 import { RULE_LABEL } from "@/lib/asset-metrics/thresholds";
 import { deleteObservationAction, updateMetricAction } from "@/app/(app)/holdings/metric-actions";
 import { AssetMetricChart, type ChartMetric } from "./AssetMetricChart";
@@ -14,7 +14,7 @@ export { StatusBadge };
 import { DeleteMetricForm, FREQ_LABEL, MetricForm, Modal, ObservationForm, ThresholdForm, describeRule, type ThresholdLite } from "./AssetMetricForm";
 
 const fmt = (v: number | null | undefined, d: number) => (v == null || !Number.isFinite(v) ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: Math.min(d, 2), maximumFractionDigits: d }));
-const colorOf = (m: { chartColor: string | null }, i: number) => `var(--${m.chartColor ?? `series-${(i % 6) + 1}`})`;
+const colorOf = metricColor;
 type Dialog =
   | { kind: "metric"; metricId?: number }
   | { kind: "obs"; metricId?: number; observationId?: number }

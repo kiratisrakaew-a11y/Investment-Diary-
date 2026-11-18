@@ -5,7 +5,7 @@ import { priceHistoryFor } from "@/server/services/prices";
 import { listTransactions } from "@/server/services/transactions";
 import { listNotes } from "@/server/services/notes";
 import { getPortfolioSummary } from "@/server/services/portfolio";
-import { PriceChart } from "@/components/charts";
+import { PriceMetricChart } from "@/components/PriceMetricChart";
 import { NoteCard } from "@/components/NoteCard";
 import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
 import { EditAssetForm } from "@/components/EditAssetForm";
@@ -157,7 +157,18 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       </Section>
 
       <Section title={`ราคา (${asset.currency})`}>
-        {prices.length > 1 ? <PriceChart data={prices} currency={asset.currency} /> : <Empty>ยังไม่มีประวัติราคา</Empty>}
+        {prices.length > 1 ? (
+          <PriceMetricChart
+            assetId={id}
+            prices={prices}
+            currency={asset.currency}
+            metrics={metricRows
+              .filter((m) => m.isActive)
+              .map((m) => ({ id: m.id, name: m.name, unit: m.unit, decimals: m.decimals, chartColor: m.chartColor, readings: m.observations.map((o) => ({ observedOn: o.observedOn, value: o.value, publishedOn: o.publishedOn, status: o.status })) }))}
+          />
+        ) : (
+          <Empty>ยังไม่มีประวัติราคา</Empty>
+        )}
         <div className="mt-4">
           <AddPriceForm assets={assets} symbol={asset.symbol} />
         </div>

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18 — Custom metrics on the asset price chart
+- Asset page price chart: "+ เพิ่ม Metric ลงกราฟ" chips put custom metrics on a right-hand axis. Readings are dots on their own dates with threshold-status rings; nothing is filled between them.
+  - The right axis takes one unit only, and only metrics within 10× of each other in magnitude; others are disabled with the reason.
+  - The selection is remembered per asset in the browser.
+- A correlation box shows Pearson r between the price return and the metric change over each interval between readings:
+  - % units are measured in percentage points; other units as % change, or as a plain difference when the earlier value is ≤ 0.
+  - The price is matched within 10 days, on either the data date or the published date.
+  - No r is shown below 8 intervals; the reason and n are shown instead.
+- Display only: no database change.
+
 ## 2026-11-18 — Faster Dashboard and Analytics
 - Dashboard loads the price table / ledger / FX once and shares it across summary, allocation and performance (it was loaded three times). Analytics shares one load between performance and MPT.
 - Measured locally: Dashboard 20 → 9 queries and 11,933 → 4,624 rows read; Analytics 12 → 7 queries and 7,995 → 4,307 rows read. Every computed figure is unchanged.

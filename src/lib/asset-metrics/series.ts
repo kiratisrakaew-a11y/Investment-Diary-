@@ -85,6 +85,9 @@ export function pctChangeSeries(points: Obs[]): ChangePoint[] {
   });
 }
 
+/** Colour of a metric by its position among the asset's active metrics (same everywhere it is drawn). */
+export const metricColor = (m: { chartColor: string | null }, i: number) => `var(--${m.chartColor ?? `series-${(i % 6) + 1}`})`;
+
 /** Units read as percentages: changes are shown in percentage points, not %. */
 export const isPercentUnit = (unit: string) => /^\s*%\s*$|percent|เปอร์เซ็นต์/i.test(unit);
 
