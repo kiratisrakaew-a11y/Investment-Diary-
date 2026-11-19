@@ -18,8 +18,20 @@ import {
   type ObservationInput,
   type ThresholdInput,
 } from "@/lib/asset-metrics/schemas";
-import { evaluateThreshold, freshness, ruleForDate, statusOn, type MetricStatus, type ThresholdVersion } from "@/lib/asset-metrics/thresholds";
-import { indexSeries, inWindow, latestChange, pctChangeSeries } from "@/lib/asset-metrics/series";
+import {
+  evaluateThreshold,
+  freshness,
+  ruleForDate,
+  statusOn,
+  type MetricStatus,
+  type ThresholdVersion,
+} from "@/lib/asset-metrics/thresholds";
+import {
+  indexSeries,
+  inWindow,
+  latestChange,
+  pctChangeSeries,
+} from "@/lib/asset-metrics/series";
 import { today } from "@/lib/validation";
 
 export class MetricError extends Error {
@@ -47,33 +59,89 @@ const isUnique = (e: unknown) => {
   return err?.code === "23505" || err?.cause?.code === "23505";
 };
 
-async function audit(db: Db | Tx, assetId: number, objectType: string, objectId: number, action: string, before: unknown, after: unknown, source = "web") {
-  await db.insert(schema.assetMetricEvents).values({ assetId, objectType, objectId, action, before: before ?? null, after: after ?? null, source });
+async function audit(
+  db: Db | Tx,
+  assetId: number,
+  objectType: string,
+  objectId: number,
+  action: string,
+  before: unknown,
+  after: unknown,
+  source = "web",
+) {
+  await db
+    .insert(schema.assetMetricEvents)
+    .values({
+      assetId,
+      objectType,
+      objectId,
+      action,
+      before: before ?? null,
+      after: after ?? null,
+      source,
+    });
 }
 
 async function requireAsset(db: Db | Tx, assetId: number) {
-  if (!Number.isInteger(assetId) || assetId <= 0) throw new MetricError(404, "ASSET_NOT_FOUND", "ไม่พบสินทรัพย์");
-  const [a] = await db.select({ id: schema.assets.id, symbol: schema.assets.symbol }).from(schema.assets).where(eq(schema.assets.id, assetId));
+  if (!Number.isInteger(assetId) || assetId <= 0)
+    throw new MetricError(404, "ASSET_NOT_FOUND", "ไม่พบสินทรัพย์");
+  const [a] = await db
+    .select({ id: schema.assets.id, symbol: schema.assets.symbol })
+    .from(schema.assets)
+    .where(eq(schema.assets.id, assetId));
   if (!a) throw new MetricError(404, "ASSET_NOT_FOUND", "ไม่พบสินทรัพย์");
   return a;
 }
 
 /** The metric only when it belongs to this asset (prevents cross-asset access). */
-async function requireMetric(db: Db | Tx, assetId: number, metricId: number, lock = false): Promise<Def> {
-  if (!Number.isInteger(metricId) || metricId <= 0) throw new MetricError(404, "METRIC_NOT_FOUND", "ไม่พบตัวชี้วัดของสินทรัพย์นี้");
-  const q = db.select().from(D).where(and(eq(D.id, metricId), eq(D.assetId, assetId)));
+async function requireMetric(
+  db: Db | Tx,
+  assetId: number,
+  metricId: number,
+  lock = false,
+): Promise<Def> {
+  if (!Number.isInteger(metricId) || metricId <= 0)
+    throw new MetricError(
+      404,
+      "METRIC_NOT_FOUND",
+      "ไม่พบตัวชี้วัดของสินทรัพย์นี้",
+    );
+  const q = db
+    .select()
+    .from(D)
+    .where(and(eq(D.id, metricId), eq(D.assetId, assetId)));
   const [m] = lock ? await q.for("update") : await q;
-  if (!m) throw new MetricError(404, "METRIC_NOT_FOUND", "ไม่พบตัวชี้วัดของสินทรัพย์นี้");
+  if (!m)
+    throw new MetricError(
+      404,
+      "METRIC_NOT_FOUND",
+      "ไม่พบตัวชี้วัดของสินทรัพย์นี้",
+    );
   return m;
 }
 
-async function requireObservation(db: Db | Tx, metricId: number, observationId: number): Promise<ObsRow> {
-  const [o] = await db.select().from(O).where(and(eq(O.id, observationId), eq(O.metricId, metricId)));
-  if (!o) throw new MetricError(404, "OBSERVATION_NOT_FOUND", "ไม่พบค่าที่บันทึกของตัวชี้วัดนี้");
+async function requireObservation(
+  db: Db | Tx,
+  metricId: number,
+  observationId: number,
+): Promise<ObsRow> {
+  const [o] = await db
+    .select()
+    .from(O)
+    .where(and(eq(O.id, observationId), eq(O.metricId, metricId)));
+  if (!o)
+    throw new MetricError(
+      404,
+      "OBSERVATION_NOT_FOUND",
+      "ไม่พบค่าที่บันทึกของตัวชี้วัดนี้",
+    );
   return o;
 }
 
-const toVersion = (t: ThrRow): ThresholdVersion & ThrRow => ({ ...t, effectiveTo: t.effectiveTo ?? null });
+const toVersion = (t: ThrRow): ThresholdVersion & ThrRow => ({
+  ...t,
+  effectiveTo: t.effectiveTo ?? null,
+});
 const obsOut = (o: ObsRow, versions: ThresholdVersion[]) => ({
   id: o.id,
   observedOn: o.observedOn,
@@ -91,99 +159,234 @@ export type ObservationOut = ReturnType<typeof obsOut>;
 
 // ------------------------------------------------------------------ definitions
 
-export async function createMetric(assetId: number, input: MetricDefinitionInput, source = "web") {
+export async function createMetric(
+  assetId: number,
+  input: MetricDefinitionInput,
+  source = "web",
+) {
   const x = metricDefinitionInput.parse(input);
   const key = metricKey(x.name);
-  if (!key) throw new MetricError(400, "INVALID_NAME", "ชื่อตัวชี้วัดต้องมีตัวอักษรหรือตัวเลข");
+  if (!key)
+    throw new MetricError(
+      400,
+      "INVALID_NAME",
+      "ชื่อตัวชี้วัดต้องมีตัวอักษรหรือตัวเลข",
+    );
   return getDb().transaction(async (tx) => {
     await requireAsset(tx, assetId);
-    const [{ n }] = await tx.select({ n: sql<number>`coalesce(max(${D.displayOrder}), -1)::int + 1` }).from(D).where(eq(D.assetId, assetId));
+    const [{ n }] = await tx
+      .select({ n: sql<number>`coalesce(max(${D.displayOrder}), -1)::int + 1` })
+      .from(D)
+      .where(eq(D.assetId, assetId));
     try {
-      const [row] = await tx.insert(D).values({ ...x, key, assetId, displayOrder: n }).returning();
+      const [row] = await tx
+        .insert(D)
+        .values({ ...x, key, assetId, displayOrder: n })
+        .returning();
       await audit(tx, assetId, "metric", row.id, "create", null, row, source);
       return row;
     } catch (e) {
-      if (isUnique(e)) throw new MetricError(409, "DUPLICATE_METRIC", `สินทรัพย์นี้มีตัวชี้วัดชื่อ "${x.name}" (หรือชื่อที่ตรงกันหลังปรับรูปแบบ) อยู่แล้ว`);
+      if (isUnique(e))
+        throw new MetricError(
+          409,
+          "DUPLICATE_METRIC",
+          `สินทรัพย์นี้มีตัวชี้วัดชื่อ "${x.name}" (หรือชื่อที่ตรงกันหลังปรับรูปแบบ) อยู่แล้ว`,
+        );
       throw e;
     }
   });
 }
 
-export async function updateMetric(assetId: number, metricId: number, patch: unknown, source = "web") {
+export async function updateMetric(
+  assetId: number,
+  metricId: number,
+  patch: unknown,
+  source = "web",
+) {
   const x = metricDefinitionPatch.parse(patch);
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId, true);
     if (x.unit != null && x.unit.trim() !== m.unit) {
-      const [{ c }] = await tx.select({ c: sql<number>`count(*)::int` }).from(O).where(eq(O.metricId, m.id));
+      const [{ c }] = await tx
+        .select({ c: sql<number>`count(*)::int` })
+        .from(O)
+        .where(eq(O.metricId, m.id));
       if (c > 0 && !x.confirmUnitChange)
-        throw new MetricError(409, "UNIT_CHANGE_NEEDS_CONFIRMATION", `มีค่าที่บันทึกไว้ ${c} รายการในหน่วย "${m.unit}" — เปลี่ยนหน่วยจะไม่แปลงค่าเดิม ยืนยัน (confirmUnitChange) ถ้าต้องการเปลี่ยนจริง`, { observations: c });
+        throw new MetricError(
+          409,
+          "UNIT_CHANGE_NEEDS_CONFIRMATION",
+          `มีค่าที่บันทึกไว้ ${c} รายการในหน่วย "${m.unit}" — เปลี่ยนหน่วยจะไม่แปลงค่าเดิม ยืนยัน (confirmUnitChange) ถ้าต้องการเปลี่ยนจริง`,
+          { observations: c },
+        );
     }
     const { confirmUnitChange: _c, ...rest } = x;
-    const set = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+    const set = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => v !== undefined),
+    );
     if (!Object.keys(set).length) return m;
     // The key is immutable: renaming never detaches history.
-    const [row] = await tx.update(D).set({ ...set, updatedAt: new Date() }).where(eq(D.id, m.id)).returning();
-    await audit(tx, assetId, "metric", m.id, x.isActive === false ? "archive" : x.isActive === true && !m.isActive ? "restore" : "update", m, row, source);
+    const [row] = await tx
+      .update(D)
+      .set({ ...set, updatedAt: new Date() })
+      .where(eq(D.id, m.id))
+      .returning();
+    await audit(
+      tx,
+      assetId,
+      "metric",
+      m.id,
+      x.isActive === false
+        ? "archive"
+        : x.isActive === true && !m.isActive
+          ? "restore"
+          : "update",
+      m,
+      row,
+      source,
+    );
     return row;
   });
 }
 
 /** Hard delete (metric, its observations and thresholds) — only with the exact metric name typed. */
-export async function deleteMetric(assetId: number, metricId: number, confirmName: string, source = "web") {
+export async function deleteMetric(
+  assetId: number,
+  metricId: number,
+  confirmName: string,
+  source = "web",
+) {
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId, true);
-    if ((confirmName ?? "").trim() !== m.name) throw new MetricError(403, "CONFIRMATION_REQUIRED", `พิมพ์ชื่อตัวชี้วัด "${m.name}" ให้ตรงเพื่อยืนยันการลบถาวร`);
-    const [{ obs }] = await tx.select({ obs: sql<number>`count(*)::int` }).from(O).where(eq(O.metricId, m.id));
-    const [{ thr }] = await tx.select({ thr: sql<number>`count(*)::int` }).from(T).where(eq(T.metricId, m.id));
+    if ((confirmName ?? "").trim() !== m.name)
+      throw new MetricError(
+        403,
+        "CONFIRMATION_REQUIRED",
+        `พิมพ์ชื่อตัวชี้วัด "${m.name}" ให้ตรงเพื่อยืนยันการลบถาวร`,
+      );
+    const [{ obs }] = await tx
+      .select({ obs: sql<number>`count(*)::int` })
+      .from(O)
+      .where(eq(O.metricId, m.id));
+    const [{ thr }] = await tx
+      .select({ thr: sql<number>`count(*)::int` })
+      .from(T)
+      .where(eq(T.metricId, m.id));
     await tx.delete(O).where(eq(O.metricId, m.id));
     await tx.delete(T).where(eq(T.metricId, m.id));
     await tx.delete(D).where(eq(D.id, m.id));
-    await audit(tx, assetId, "metric", m.id, "delete", { ...m, observations: obs, thresholds: thr }, null, source);
+    await audit(
+      tx,
+      assetId,
+      "metric",
+      m.id,
+      "delete",
+      { ...m, observations: obs, thresholds: thr },
+      null,
+      source,
+    );
     return { deleted: true, observations: obs, thresholds: thr };
   });
 }
 
 // ------------------------------------------------------------------ observations
 
-export async function addObservation(assetId: number, metricId: number, input: ObservationInput, source = "web") {
+export async function addObservation(
+  assetId: number,
+  metricId: number,
+  input: ObservationInput,
+  source = "web",
+) {
   const x = observationInput.parse(input);
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId);
-    const [dup] = await tx.select({ id: O.id, value: O.value }).from(O).where(and(eq(O.metricId, m.id), eq(O.observedOn, x.observedOn)));
-    if (dup) throw new MetricError(409, "DUPLICATE_OBSERVATION", `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว (${dup.value}) — แก้ค่าเดิมแทนการเพิ่มซ้ำ`, { observationId: dup.id, value: dup.value });
+    const [dup] = await tx
+      .select({ id: O.id, value: O.value })
+      .from(O)
+      .where(and(eq(O.metricId, m.id), eq(O.observedOn, x.observedOn)));
+    if (dup)
+      throw new MetricError(
+        409,
+        "DUPLICATE_OBSERVATION",
+        `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว (${dup.value}) — แก้ค่าเดิมแทนการเพิ่มซ้ำ`,
+        { observationId: dup.id, value: dup.value },
+      );
     try {
       const [row] = await tx
         .insert(O)
-        .values({ metricId: m.id, observedOn: x.observedOn, value: x.value, source: x.source ?? m.sourceDefault, note: x.note, publishedOn: x.publishedOn, sourceKind: source === "web" ? "manual" : source })
+        .values({
+          metricId: m.id,
+          observedOn: x.observedOn,
+          value: x.value,
+          source: x.source ?? m.sourceDefault,
+          note: x.note,
+          publishedOn: x.publishedOn,
+          sourceKind: source === "web" ? "manual" : source,
+        })
         .returning();
-      await audit(tx, assetId, "observation", row.id, "create", null, row, source);
+      await audit(
+        tx,
+        assetId,
+        "observation",
+        row.id,
+        "create",
+        null,
+        row,
+        source,
+      );
       return row;
     } catch (e) {
-      if (isUnique(e)) throw new MetricError(409, "DUPLICATE_OBSERVATION", `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว — แก้ค่าเดิมแทน`);
+      if (isUnique(e))
+        throw new MetricError(
+          409,
+          "DUPLICATE_OBSERVATION",
+          `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว — แก้ค่าเดิมแทน`,
+        );
       throw e;
     }
   });
 }
 
-export async function updateObservation(assetId: number, metricId: number, observationId: number, patch: unknown, source = "web") {
+export async function updateObservation(
+  assetId: number,
+  metricId: number,
+  observationId: number,
+  patch: unknown,
+  source = "web",
+) {
   const x = observationPatch.parse(patch);
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId);
     const o = await requireObservation(tx, m.id, observationId);
-    const set = Object.fromEntries(Object.entries(x).filter(([, v]) => v !== undefined));
+    const set = Object.fromEntries(
+      Object.entries(x).filter(([, v]) => v !== undefined),
+    );
     if (!Object.keys(set).length) return o;
     try {
-      const [row] = await tx.update(O).set({ ...set, updatedAt: new Date() }).where(eq(O.id, o.id)).returning();
+      const [row] = await tx
+        .update(O)
+        .set({ ...set, updatedAt: new Date() })
+        .where(eq(O.id, o.id))
+        .returning();
       await audit(tx, assetId, "observation", o.id, "update", o, row, source);
       return row;
     } catch (e) {
-      if (isUnique(e)) throw new MetricError(409, "DUPLICATE_OBSERVATION", `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว`);
+      if (isUnique(e))
+        throw new MetricError(
+          409,
+          "DUPLICATE_OBSERVATION",
+          `มีค่าของวันที่ ${x.observedOn} อยู่แล้ว`,
+        );
       throw e;
     }
   });
 }
 
-export async function deleteObservation(assetId: number, metricId: number, observationId: number, source = "web") {
+export async function deleteObservation(
+  assetId: number,
+  metricId: number,
+  observationId: number,
+  source = "web",
+) {
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId);
     const o = await requireObservation(tx, m.id, observationId);
@@ -193,18 +396,47 @@ export async function deleteObservation(assetId: number, metricId: number, obser
   });
 }
 
-export async function listObservations(assetId: number, metricId: number, query: unknown = {}) {
+export async function listObservations(
+  assetId: number,
+  metricId: number,
+  query: unknown = {},
+) {
   const q = observationQuery.parse(query);
   const db = getDb();
   await requireAsset(db, assetId);
   const m = await requireMetric(db, assetId, metricId);
-  const versions = (await db.select().from(T).where(eq(T.metricId, m.id)).orderBy(asc(T.effectiveFrom))).map(toVersion);
-  const where = and(eq(O.metricId, m.id), q.from ? gte(O.observedOn, q.from) : undefined, q.to ? lte(O.observedOn, q.to) : undefined);
+  const versions = (
+    await db
+      .select()
+      .from(T)
+      .where(eq(T.metricId, m.id))
+      .orderBy(asc(T.effectiveFrom))
+  ).map(toVersion);
+  const where = and(
+    eq(O.metricId, m.id),
+    q.from ? gte(O.observedOn, q.from) : undefined,
+    q.to ? lte(O.observedOn, q.to) : undefined,
+  );
   const [rows, [{ total }]] = await Promise.all([
-    db.select().from(O).where(where).orderBy(desc(O.observedOn)).limit(q.limit).offset(q.offset),
-    db.select({ total: sql<number>`count(*)::int` }).from(O).where(where),
+    db
+      .select()
+      .from(O)
+      .where(where)
+      .orderBy(desc(O.observedOn))
+      .limit(q.limit)
+      .offset(q.offset),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(O)
+      .where(where),
   ]);
-  return { metric: { id: m.id, name: m.name, unit: m.unit }, total, limit: q.limit, offset: q.offset, observations: rows.map((o) => obsOut(o, versions)) };
+  return {
+    metric: { id: m.id, name: m.name, unit: m.unit },
+    total,
+    limit: q.limit,
+    offset: q.offset,
+    observations: rows.map((o) => obsOut(o, versions)),
+  };
 }
 
 // ------------------------------------------------------------------ thresholds
@@ -212,25 +444,50 @@ export async function listObservations(assetId: number, metricId: number, query:
 export async function listThresholds(assetId: number, metricId: number) {
   const db = getDb();
   const m = await requireMetric(db, assetId, metricId);
-  return (await db.select().from(T).where(eq(T.metricId, m.id)).orderBy(asc(T.effectiveFrom))).map(toVersion);
+  return (
+    await db
+      .select()
+      .from(T)
+      .where(eq(T.metricId, m.id))
+      .orderBy(asc(T.effectiveFrom))
+  ).map(toVersion);
 }
 
 /**
  * Effect of a proposed version on observations dated on/after its start (nothing is written).
  * Earlier observations keep the rule that was in effect on their own date.
  */
-export async function previewThreshold(assetId: number, metricId: number, input: ThresholdInput) {
+export async function previewThreshold(
+  assetId: number,
+  metricId: number,
+  input: ThresholdInput,
+) {
   const x = thresholdInput.parse(input);
   const db = getDb();
   const m = await requireMetric(db, assetId, metricId);
-  const versions = (await db.select().from(T).where(eq(T.metricId, m.id)).orderBy(asc(T.effectiveFrom))).map(toVersion);
-  const obs = await db.select().from(O).where(and(eq(O.metricId, m.id), gte(O.observedOn, x.effectiveFrom))).orderBy(asc(O.observedOn));
+  const versions = (
+    await db
+      .select()
+      .from(T)
+      .where(eq(T.metricId, m.id))
+      .orderBy(asc(T.effectiveFrom))
+  ).map(toVersion);
+  const obs = await db
+    .select()
+    .from(O)
+    .where(and(eq(O.metricId, m.id), gte(O.observedOn, x.effectiveFrom)))
+    .orderBy(asc(O.observedOn));
   const rows = obs.map((o) => {
     const before = statusOn(versions, o.observedOn, o.value).status;
     const after = evaluateThreshold(o.value, x).status;
     return { observedOn: o.observedOn, value: Number(o.value), before, after };
   });
-  return { effectiveFrom: x.effectiveFrom, affected: rows.length, changed: rows.filter((r) => r.before !== r.after).length, rows };
+  return {
+    effectiveFrom: x.effectiveFrom,
+    affected: rows.length,
+    changed: rows.filter((r) => r.before !== r.after).length,
+    rows,
+  };
 }
 
 /**
@@ -239,35 +496,196 @@ export async function previewThreshold(assetId: number, metricId: number, input:
  * - same start as the latest version → replaced, only while that start is still in the future;
  * - earlier start → refused (would rewrite statuses already shown for past observations).
  */
-export async function addThresholdVersion(assetId: number, metricId: number, input: ThresholdInput, source = "web") {
+export async function addThresholdVersion(
+  assetId: number,
+  metricId: number,
+  input: ThresholdInput,
+  source = "web",
+) {
   const x = thresholdInput.parse(input);
   const now = today();
   return getDb().transaction(async (tx) => {
     const m = await requireMetric(tx, assetId, metricId, true);
-    const versions = await tx.select().from(T).where(eq(T.metricId, m.id)).orderBy(desc(T.effectiveFrom));
+    const versions = await tx
+      .select()
+      .from(T)
+      .where(eq(T.metricId, m.id))
+      .orderBy(desc(T.effectiveFrom));
     const latest = versions[0];
-    const bounds = { ruleType: x.ruleType, greenBound: x.greenBound, yellowBound: x.yellowBound, greenMin: x.greenMin, greenMax: x.greenMax, yellowMin: x.yellowMin, yellowMax: x.yellowMax, reason: x.reason, source: x.source };
+    const bounds = {
+      ruleType: x.ruleType,
+      greenBound: x.greenBound,
+      yellowBound: x.yellowBound,
+      greenMin: x.greenMin,
+      greenMax: x.greenMax,
+      yellowMin: x.yellowMin,
+      yellowMax: x.yellowMax,
+      reason: x.reason,
+      source: x.source,
+    };
     if (latest && x.effectiveFrom < latest.effectiveFrom)
-      throw new MetricError(409, "THRESHOLD_OVERLAP", `มีเกณฑ์ที่เริ่ม ${latest.effectiveFrom} อยู่แล้ว — เกณฑ์ใหม่ต้องเริ่มหลังวันนั้น (ไม่ย้อนแก้สถานะในอดีต)`, { latestEffectiveFrom: latest.effectiveFrom });
+      throw new MetricError(
+        409,
+        "THRESHOLD_OVERLAP",
+        `มีเกณฑ์ที่เริ่ม ${latest.effectiveFrom} อยู่แล้ว — เกณฑ์ใหม่ต้องเริ่มหลังวันนั้น (ไม่ย้อนแก้สถานะในอดีต)`,
+        { latestEffectiveFrom: latest.effectiveFrom },
+      );
     if (latest && x.effectiveFrom === latest.effectiveFrom) {
       if (latest.effectiveFrom <= now)
-        throw new MetricError(409, "THRESHOLD_IN_EFFECT", `เกณฑ์ที่เริ่ม ${latest.effectiveFrom} มีผลแล้ว — ตั้งเกณฑ์ใหม่ด้วยวันเริ่มที่ใหม่กว่า แทนการแก้ย้อนหลัง`);
-      const [row] = await tx.update(T).set({ ...bounds, updatedAt: new Date() }).where(eq(T.id, latest.id)).returning();
-      await audit(tx, assetId, "threshold", row.id, "update", latest, row, source);
+        throw new MetricError(
+          409,
+          "THRESHOLD_IN_EFFECT",
+          `เกณฑ์ที่เริ่ม ${latest.effectiveFrom} มีผลแล้ว — ตั้งเกณฑ์ใหม่ด้วยวันเริ่มที่ใหม่กว่า แทนการแก้ย้อนหลัง`,
+        );
+      const [row] = await tx
+        .update(T)
+        .set({ ...bounds, updatedAt: new Date() })
+        .where(eq(T.id, latest.id))
+        .returning();
+      await audit(
+        tx,
+        assetId,
+        "threshold",
+        row.id,
+        "update",
+        latest,
+        row,
+        source,
+      );
       return row;
     }
-    if (latest && (latest.effectiveTo == null || latest.effectiveTo > x.effectiveFrom)) {
-      const [closed] = await tx.update(T).set({ effectiveTo: x.effectiveFrom, updatedAt: new Date() }).where(eq(T.id, latest.id)).returning();
-      await audit(tx, assetId, "threshold", latest.id, "close", latest, closed, source);
+    if (
+      latest &&
+      (latest.effectiveTo == null || latest.effectiveTo > x.effectiveFrom)
+    ) {
+      const [closed] = await tx
+        .update(T)
+        .set({ effectiveTo: x.effectiveFrom, updatedAt: new Date() })
+        .where(eq(T.id, latest.id))
+        .returning();
+      await audit(
+        tx,
+        assetId,
+        "threshold",
+        latest.id,
+        "close",
+        latest,
+        closed,
+        source,
+      );
     }
     try {
-      const [row] = await tx.insert(T).values({ metricId: m.id, effectiveFrom: x.effectiveFrom, effectiveTo: null, ...bounds }).returning();
-      await audit(tx, assetId, "threshold", row.id, "create", null, row, source);
+      const [row] = await tx
+        .insert(T)
+        .values({
+          metricId: m.id,
+          effectiveFrom: x.effectiveFrom,
+          effectiveTo: null,
+          ...bounds,
+        })
+        .returning();
+      await audit(
+        tx,
+        assetId,
+        "threshold",
+        row.id,
+        "create",
+        null,
+        row,
+        source,
+      );
       return row;
     } catch (e) {
-      if (isUnique(e)) throw new MetricError(409, "THRESHOLD_OVERLAP", `มีเกณฑ์ที่เริ่ม ${x.effectiveFrom} อยู่แล้ว`);
+      if (isUnique(e))
+        throw new MetricError(
+          409,
+          "THRESHOLD_OVERLAP",
+          `มีเกณฑ์ที่เริ่ม ${x.effectiveFrom} อยู่แล้ว`,
+        );
       throw e;
     }
+  });
+}
+
+/**
+ * Move the start date of one threshold version (backdating allowed — the user corrects a wrong start).
+ * The new date must stay strictly between the previous and the next version's start; the previous
+ * version's (exclusive) end follows it so versions stay contiguous. Before / after go to the audit log.
+ */
+export async function updateThresholdStart(
+  assetId: number,
+  metricId: number,
+  versionId: number,
+  newFrom: string,
+  source = "web",
+) {
+  const from = String(newFrom ?? "").trim();
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(from) ||
+    new Date(`${from}T00:00:00Z`).toISOString().slice(0, 10) !== from
+  )
+    throw new MetricError(
+      400,
+      "INVALID_INPUT",
+      "วันเริ่มต้องเป็นวันที่ที่มีจริง (YYYY-MM-DD)",
+    );
+  return getDb().transaction(async (tx) => {
+    const m = await requireMetric(tx, assetId, metricId, true);
+    const versions = await tx
+      .select()
+      .from(T)
+      .where(eq(T.metricId, m.id))
+      .orderBy(asc(T.effectiveFrom));
+    const i = versions.findIndex((v) => v.id === versionId);
+    if (i < 0)
+      throw new MetricError(
+        404,
+        "THRESHOLD_NOT_FOUND",
+        "ไม่พบเกณฑ์ฉบับนี้ของตัวชี้วัดนี้",
+      );
+    const v = versions[i];
+    const prev = versions[i - 1];
+    const next = versions[i + 1];
+    if (from === v.effectiveFrom) return v;
+    if (prev && from <= prev.effectiveFrom)
+      throw new MetricError(
+        409,
+        "THRESHOLD_OVERLAP",
+        `วันเริ่มต้องอยู่หลัง ${prev.effectiveFrom} (วันเริ่มของเกณฑ์ฉบับก่อนหน้า)`,
+        { previousFrom: prev.effectiveFrom },
+      );
+    if (next && from >= next.effectiveFrom)
+      throw new MetricError(
+        409,
+        "THRESHOLD_OVERLAP",
+        `วันเริ่มต้องอยู่ก่อน ${next.effectiveFrom} (วันเริ่มของเกณฑ์ฉบับถัดไป)`,
+        { nextFrom: next.effectiveFrom },
+      );
+    // This version first (its end, if any, is the next start, still after `from`), then the previous one's end.
+    const [row] = await tx
+      .update(T)
+      .set({ effectiveFrom: from, updatedAt: new Date() })
+      .where(eq(T.id, v.id))
+      .returning();
+    await audit(tx, assetId, "threshold", v.id, "update_start", v, row, source);
+    if (prev) {
+      const [p] = await tx
+        .update(T)
+        .set({ effectiveTo: from, updatedAt: new Date() })
+        .where(eq(T.id, prev.id))
+        .returning();
+      await audit(
+        tx,
+        assetId,
+        "threshold",
+        prev.id,
+        "update_end",
+        prev,
+        p,
+        source,
+      );
+    }
+    return row;
   });
 }
 
@@ -300,13 +718,21 @@ export interface MetricOverview {
 }
 
 /** Definitions with observations (ascending, bounded), statuses under the version in effect on each date, and thresholds. */
-export async function metricsOverview(assetId: number, opts: { includeInactive?: boolean; withObservations?: boolean } = {}): Promise<MetricOverview[]> {
+export async function metricsOverview(
+  assetId: number,
+  opts: { includeInactive?: boolean; withObservations?: boolean } = {},
+): Promise<MetricOverview[]> {
   const db = getDb();
   await requireAsset(db, assetId);
   const defs = await db
     .select()
     .from(D)
-    .where(and(eq(D.assetId, assetId), opts.includeInactive ? undefined : eq(D.isActive, true)))
+    .where(
+      and(
+        eq(D.assetId, assetId),
+        opts.includeInactive ? undefined : eq(D.isActive, true),
+      ),
+    )
     .orderBy(asc(D.displayOrder), asc(D.id));
   if (!defs.length) return [];
   const ids = defs.map((d) => d.id);
@@ -326,9 +752,14 @@ export async function metricsOverview(assetId: number, opts: { includeInactive?:
   const now = today();
   return defs.map((d) => {
     const versions = thr.filter((t) => t.metricId === d.id).map(toVersion);
-    const own = obs.filter((o) => o.metricId === d.id).sort((a, b) => a.observedOn.localeCompare(b.observedOn)).map((o) => obsOut(o, versions));
+    const own = obs
+      .filter((o) => o.metricId === d.id)
+      .sort((a, b) => a.observedOn.localeCompare(b.observedOn))
+      .map((o) => obsOut(o, versions));
     const latest = own[own.length - 1] ?? null;
-    const st = latest ? { status: latest.status, explanation: latest.explanation } : { status: "NO_DATA" as const, explanation: "ยังไม่มีค่าที่บันทึก" };
+    const st = latest
+      ? { status: latest.status, explanation: latest.explanation }
+      : { status: "NO_DATA" as const, explanation: "ยังไม่มีค่าที่บันทึก" };
     return {
       id: d.id,
       key: d.key,
@@ -343,7 +774,10 @@ export async function metricsOverview(assetId: number, opts: { includeInactive?:
       isActive: d.isActive,
       displayOrder: d.displayOrder,
       latest,
-      change: latestChange(own.map((o) => ({ date: o.observedOn, value: o.value })), d.unit),
+      change: latestChange(
+        own.map((o) => ({ date: o.observedOn, value: o.value })),
+        d.unit,
+      ),
       status: st.status,
       statusExplanation: st.explanation,
       freshness: freshness(d.frequency, latest?.observedOn ?? null, now),
@@ -356,11 +790,28 @@ export async function metricsOverview(assetId: number, opts: { includeInactive?:
 }
 
 /** Chart-ready series for selected metrics of one asset, with the transformation documented per mode. */
-export async function metricSeries(assetId: number, q: { metricIds?: number[]; from?: string | null; to?: string | null; mode?: "actual" | "indexed" | "change" }) {
+export async function metricSeries(
+  assetId: number,
+  q: {
+    metricIds?: number[];
+    from?: string | null;
+    to?: string | null;
+    mode?: "actual" | "indexed" | "change";
+  },
+) {
   const all = await metricsOverview(assetId, { includeInactive: true });
-  const pick = q.metricIds?.length ? all.filter((m) => q.metricIds!.includes(m.id)) : all.filter((m) => m.isActive);
-  const unknown = (q.metricIds ?? []).filter((id) => !all.some((m) => m.id === id));
-  if (unknown.length) throw new MetricError(404, "METRIC_NOT_FOUND", `ไม่พบตัวชี้วัด ${unknown.join(", ")} ของสินทรัพย์นี้`);
+  const pick = q.metricIds?.length
+    ? all.filter((m) => q.metricIds!.includes(m.id))
+    : all.filter((m) => m.isActive);
+  const unknown = (q.metricIds ?? []).filter(
+    (id) => !all.some((m) => m.id === id),
+  );
+  if (unknown.length)
+    throw new MetricError(
+      404,
+      "METRIC_NOT_FOUND",
+      `ไม่พบตัวชี้วัด ${unknown.join(", ")} ของสินทรัพย์นี้`,
+    );
   const mode = q.mode ?? "actual";
   return {
     mode,
@@ -373,20 +824,57 @@ export async function metricSeries(assetId: number, q: { metricIds?: number[]; f
           ? "100 × (value(t) − value(previous actual observation)) / |previous|; null when previous is 0, negative or the sign changes"
           : "raw observed values in the metric's unit; no interpolation or fill",
     series: pick.map((m) => {
-      const pts = inWindow(m.observations.map((o) => ({ date: o.observedOn, value: o.value })), q.from ?? null, q.to ?? null);
-      const statusBy = new Map(m.observations.map((o) => [o.observedOn, o.status]));
+      const pts = inWindow(
+        m.observations.map((o) => ({ date: o.observedOn, value: o.value })),
+        q.from ?? null,
+        q.to ?? null,
+      );
+      const statusBy = new Map(
+        m.observations.map((o) => [o.observedOn, o.status]),
+      );
       if (mode === "indexed") {
         const r = indexSeries(pts);
-        return { id: m.id, name: m.name, unit: m.unit, ...(r.ok ? { baseDate: r.baseDate, baseValue: r.baseValue, points: r.points.map((p) => ({ ...p, status: statusBy.get(p.date) })) } : { unavailable: r.reason, baseDate: r.baseDate, points: [] }) };
+        return {
+          id: m.id,
+          name: m.name,
+          unit: m.unit,
+          ...(r.ok
+            ? {
+                baseDate: r.baseDate,
+                baseValue: r.baseValue,
+                points: r.points.map((p) => ({
+                  ...p,
+                  status: statusBy.get(p.date),
+                })),
+              }
+            : { unavailable: r.reason, baseDate: r.baseDate, points: [] }),
+        };
       }
-      if (mode === "change") return { id: m.id, name: m.name, unit: m.unit, points: pctChangeSeries(pts).map((p) => ({ ...p, status: statusBy.get(p.date) })) };
-      return { id: m.id, name: m.name, unit: m.unit, points: pts.map((p) => ({ ...p, status: statusBy.get(p.date) })) };
+      if (mode === "change")
+        return {
+          id: m.id,
+          name: m.name,
+          unit: m.unit,
+          points: pctChangeSeries(pts).map((p) => ({
+            ...p,
+            status: statusBy.get(p.date),
+          })),
+        };
+      return {
+        id: m.id,
+        name: m.name,
+        unit: m.unit,
+        points: pts.map((p) => ({ ...p, status: statusBy.get(p.date) })),
+      };
     }),
   };
 }
 
 /** Number of metric definitions per asset (lifecycle delete guard). */
 export async function metricDefinitionCount(db: Db | Tx, assetId: number) {
-  const [{ c }] = await db.select({ c: sql<number>`count(*)::int` }).from(D).where(eq(D.assetId, assetId));
+  const [{ c }] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(D)
+    .where(eq(D.assetId, assetId));
   return c;
 }

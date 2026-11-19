@@ -11,14 +11,39 @@ import {
   previewThresholdAction,
   updateMetricAction,
   updateObservationAction,
+  updateThresholdStartAction,
   type MetricActionResult,
 } from "@/app/(app)/holdings/metric-actions";
-import { RULE_LABEL, STATUS_LABEL, validateRule, type MetricStatus, type RuleType } from "@/lib/asset-metrics/thresholds";
+import {
+  RULE_LABEL,
+  STATUS_LABEL,
+  validateRule,
+  type MetricStatus,
+  type RuleType,
+} from "@/lib/asset-metrics/thresholds";
 import { CHART_COLORS, FREQUENCIES } from "@/lib/asset-metrics/schemas";
 
-export const FREQ_LABEL: Record<string, string> = { daily: "รายวัน", monthly: "รายเดือน", quarterly: "รายไตรมาส", annual: "รายปี", irregular: "ไม่แน่นอน" };
+export const FREQ_LABEL: Record<string, string> = {
+  daily: "รายวัน",
+  monthly: "รายเดือน",
+  quarterly: "รายไตรมาส",
+  annual: "รายปี",
+  irregular: "ไม่แน่นอน",
+};
 
-export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean }) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  wide,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -26,7 +51,13 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
     if (open && !d.open) {
       d.showModal();
       // Focus the first field (not the close button) so keyboard users can type straight away.
-      requestAnimationFrame(() => d.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea")?.focus());
+      requestAnimationFrame(() =>
+        d
+          .querySelector<HTMLElement>(
+            "input:not([type=hidden]), select, textarea",
+          )
+          ?.focus(),
+      );
     }
     if (!open && d.open) d.close();
   }, [open]);
@@ -35,11 +66,19 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
       ref={ref}
       onClose={onClose}
       aria-label={title}
-      className={clsx("m-auto max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-panel-solid p-5 text-text backdrop:bg-black/50", wide ? "w-[min(40rem,94vw)]" : "w-[min(28rem,94vw)]")}
+      className={clsx(
+        "m-auto max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-panel-solid p-5 text-text backdrop:bg-black/50",
+        wide ? "w-[min(40rem,94vw)]" : "w-[min(28rem,94vw)]",
+      )}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <h2 className="text-[15px] font-semibold">{title}</h2>
-        <button type="button" aria-label="ปิด" className="text-muted hover:text-text" onClick={onClose}>
+        <button
+          type="button"
+          aria-label="ปิด"
+          className="text-muted hover:text-text"
+          onClick={onClose}
+        >
           ×
         </button>
       </div>
@@ -51,17 +90,30 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 function Msg({ r }: { r: MetricActionResult | null }) {
   if (!r) return null;
   return (
-    <p role={r.ok ? "status" : "alert"} className={clsx("text-xs", r.ok ? "text-pos" : "text-neg")}>
+    <p
+      role={r.ok ? "status" : "alert"}
+      className={clsx("text-xs", r.ok ? "text-pos" : "text-neg")}
+    >
       {r.ok ? "บันทึกแล้ว" : r.error}
     </p>
   );
 }
 
-const Field = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
+const Field = ({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+}) => (
   <label className="block">
     <span className="label">{label}</span>
     {children}
-    {hint && <span className="mt-0.5 block text-[11px] text-muted">{hint}</span>}
+    {hint && (
+      <span className="mt-0.5 block text-[11px] text-muted">{hint}</span>
+    )}
   </label>
 );
 
@@ -77,7 +129,15 @@ export interface MetricLite {
   observationCount: number;
 }
 
-export function MetricForm({ assetId, metric, onDone }: { assetId: number; metric?: MetricLite; onDone: () => void }) {
+export function MetricForm({
+  assetId,
+  metric,
+  onDone,
+}: {
+  assetId: number;
+  metric?: MetricLite;
+  onDone: () => void;
+}) {
   const [f, setF] = useState({
     name: metric?.name ?? "",
     unit: metric?.unit ?? "",
@@ -90,13 +150,26 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
   const [res, setRes] = useState<MetricActionResult | null>(null);
   const [needConfirm, setNeedConfirm] = useState(false);
   const [pending, start] = useTransition();
-  const set = (k: keyof typeof f, v: string | number) => setF((x) => ({ ...x, [k]: v }));
+  const set = (k: keyof typeof f, v: string | number) =>
+    setF((x) => ({ ...x, [k]: v }));
   const submit = (confirmUnitChange = false) =>
     start(async () => {
-      const payload = { ...f, chartColor: (f.chartColor || null) as never, frequency: f.frequency as never, description: f.description || null, sourceDefault: f.sourceDefault || null };
-      const r = metric ? await updateMetricAction(assetId, metric.id, { ...payload, confirmUnitChange }) : await createMetricAction(assetId, payload);
+      const payload = {
+        ...f,
+        chartColor: (f.chartColor || null) as never,
+        frequency: f.frequency as never,
+        description: f.description || null,
+        sourceDefault: f.sourceDefault || null,
+      };
+      const r = metric
+        ? await updateMetricAction(assetId, metric.id, {
+            ...payload,
+            confirmUnitChange,
+          })
+        : await createMetricAction(assetId, payload);
       setRes(r);
-      if (!r.ok && r.code === "UNIT_CHANGE_NEEDS_CONFIRMATION") setNeedConfirm(true);
+      if (!r.ok && r.code === "UNIT_CHANGE_NEEDS_CONFIRMATION")
+        setNeedConfirm(true);
       if (r.ok) onDone();
     });
   return (
@@ -108,11 +181,26 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
       }}
     >
       <Field label="ชื่อตัวชี้วัด *">
-        <input className="input" required maxLength={80} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="เช่น NPL Ratio" autoFocus />
+        <input
+          className="input"
+          required
+          maxLength={80}
+          value={f.name}
+          onChange={(e) => set("name", e.target.value)}
+          placeholder="เช่น NPL Ratio"
+          autoFocus
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="หน่วย *" hint="เช่น %, THB million, times, count">
-          <input className="input" required maxLength={30} value={f.unit} onChange={(e) => set("unit", e.target.value)} list="metric-units" />
+          <input
+            className="input"
+            required
+            maxLength={30}
+            value={f.unit}
+            onChange={(e) => set("unit", e.target.value)}
+            list="metric-units"
+          />
           <datalist id="metric-units">
             {["%", "THB million", "times", "count", "ratio", "THB"].map((u) => (
               <option key={u} value={u} />
@@ -120,7 +208,11 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
           </datalist>
         </Field>
         <Field label="ความถี่ของข้อมูล">
-          <select className="input" value={f.frequency} onChange={(e) => set("frequency", e.target.value)}>
+          <select
+            className="input"
+            value={f.frequency}
+            onChange={(e) => set("frequency", e.target.value)}
+          >
             {FREQUENCIES.map((x) => (
               <option key={x} value={x}>
                 {FREQ_LABEL[x]}
@@ -129,10 +221,26 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
           </select>
         </Field>
         <Field label="ทศนิยมที่แสดง">
-          <input className="input" type="number" min={0} max={8} value={f.decimals} onChange={(e) => set("decimals", Math.max(0, Math.min(8, Number(e.target.value) || 0)))} />
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={8}
+            value={f.decimals}
+            onChange={(e) =>
+              set(
+                "decimals",
+                Math.max(0, Math.min(8, Number(e.target.value) || 0)),
+              )
+            }
+          />
         </Field>
         <Field label="สีเส้นกราฟ">
-          <select className="input" value={f.chartColor} onChange={(e) => set("chartColor", e.target.value)}>
+          <select
+            className="input"
+            value={f.chartColor}
+            onChange={(e) => set("chartColor", e.target.value)}
+          >
             <option value="">อัตโนมัติ</option>
             {CHART_COLORS.map((c, i) => (
               <option key={c} value={c}>
@@ -143,15 +251,35 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
         </Field>
       </div>
       <Field label="แหล่งข้อมูลเริ่มต้น">
-        <input className="input" maxLength={200} value={f.sourceDefault} onChange={(e) => set("sourceDefault", e.target.value)} placeholder="เช่น รายงาน 56-1 / งบการเงิน" />
+        <input
+          className="input"
+          maxLength={200}
+          value={f.sourceDefault}
+          onChange={(e) => set("sourceDefault", e.target.value)}
+          placeholder="เช่น รายงาน 56-1 / งบการเงิน"
+        />
       </Field>
       <Field label="คำอธิบาย">
-        <textarea className="input" rows={2} maxLength={500} value={f.description} onChange={(e) => set("description", e.target.value)} />
+        <textarea
+          className="input"
+          rows={2}
+          maxLength={500}
+          value={f.description}
+          onChange={(e) => set("description", e.target.value)}
+        />
       </Field>
       {needConfirm && (
-        <div className="rounded-lg border border-warn/40 p-2 text-xs text-warn" role="alert">
+        <div
+          className="rounded-lg border border-warn/40 p-2 text-xs text-warn"
+          role="alert"
+        >
           {res && !res.ok && res.error}
-          <button type="button" className="btn-ghost mt-2 text-xs" onClick={() => submit(true)} disabled={pending}>
+          <button
+            type="button"
+            className="btn-ghost mt-2 text-xs"
+            onClick={() => submit(true)}
+            disabled={pending}
+          >
             ยืนยันเปลี่ยนหน่วย (ค่าเดิมไม่ถูกแปลง)
           </button>
         </div>
@@ -162,7 +290,11 @@ export function MetricForm({ assetId, metric, onDone }: { assetId: number; metri
           ยกเลิก
         </button>
         <button type="submit" className="btn" disabled={pending}>
-          {pending ? "กำลังบันทึก…" : metric ? "บันทึกการแก้ไข" : "เพิ่มตัวชี้วัด"}
+          {pending
+            ? "กำลังบันทึก…"
+            : metric
+              ? "บันทึกการแก้ไข"
+              : "เพิ่มตัวชี้วัด"}
         </button>
       </div>
     </form>
@@ -188,7 +320,12 @@ export function ObservationForm({
   onEditExisting,
 }: {
   assetId: number;
-  metrics: { id: number; name: string; unit: string; sourceDefault: string | null }[];
+  metrics: {
+    id: number;
+    name: string;
+    unit: string;
+    sourceDefault: string | null;
+  }[];
   metricId?: number;
   observation?: ObsLite;
   today: string;
@@ -197,20 +334,47 @@ export function ObservationForm({
 }) {
   const [metricId, setMetricId] = useState(initialMetric ?? metrics[0]?.id);
   const m = metrics.find((x) => x.id === metricId);
-  const [f, setF] = useState({ observedOn: observation?.observedOn ?? today, value: observation?.valueText ?? "", source: observation?.source ?? "", note: observation?.note ?? "", publishedOn: observation?.publishedOn ?? "" });
+  const [f, setF] = useState({
+    observedOn: observation?.observedOn ?? today,
+    value: observation?.valueText ?? "",
+    source: observation?.source ?? "",
+    note: observation?.note ?? "",
+    publishedOn: observation?.publishedOn ?? "",
+  });
   const [res, setRes] = useState<MetricActionResult | null>(null);
   const [pending, start] = useTransition();
   const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
-  if (!m) return <p className="text-xs text-muted">ยังไม่มีตัวชี้วัด — เพิ่มตัวชี้วัดก่อน</p>;
-  const dup = res && !res.ok && res.code === "DUPLICATE_OBSERVATION" ? (res.detail as { observationId?: number } | undefined) : undefined;
+  if (!m)
+    return (
+      <p className="text-xs text-muted">
+        ยังไม่มีตัวชี้วัด — เพิ่มตัวชี้วัดก่อน
+      </p>
+    );
+  const dup =
+    res && !res.ok && res.code === "DUPLICATE_OBSERVATION"
+      ? (res.detail as { observationId?: number } | undefined)
+      : undefined;
   return (
     <form
       className="space-y-3 text-sm"
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const payload = { observedOn: f.observedOn, value: f.value.trim(), source: f.source || null, note: f.note || null, publishedOn: f.publishedOn || null };
-          const r = observation ? await updateObservationAction(assetId, m.id, observation.id, payload) : await addObservationAction(assetId, m.id, payload);
+          const payload = {
+            observedOn: f.observedOn,
+            value: f.value.trim(),
+            source: f.source || null,
+            note: f.note || null,
+            publishedOn: f.publishedOn || null,
+          };
+          const r = observation
+            ? await updateObservationAction(
+                assetId,
+                m.id,
+                observation.id,
+                payload,
+              )
+            : await addObservationAction(assetId, m.id, payload);
           setRes(r);
           if (r.ok) onDone();
         });
@@ -218,7 +382,11 @@ export function ObservationForm({
     >
       {!observation && (
         <Field label="ตัวชี้วัด">
-          <select className="input" value={metricId} onChange={(e) => setMetricId(Number(e.target.value))}>
+          <select
+            className="input"
+            value={metricId}
+            onChange={(e) => setMetricId(Number(e.target.value))}
+          >
             {metrics.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name} ({x.unit})
@@ -228,25 +396,62 @@ export function ObservationForm({
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="วันที่ของข้อมูล *" hint="วันสิ้นงวด / วันที่ค่านี้หมายถึง (ไม่ใช่วันที่บันทึก)">
-          <input className="input" type="date" required value={f.observedOn} max="2100-12-31" onChange={(e) => set("observedOn", e.target.value)} />
+        <Field
+          label="วันที่ของข้อมูล *"
+          hint="วันสิ้นงวด / วันที่ค่านี้หมายถึง (ไม่ใช่วันที่บันทึก)"
+        >
+          <input
+            className="input"
+            type="date"
+            required
+            value={f.observedOn}
+            max="2100-12-31"
+            onChange={(e) => set("observedOn", e.target.value)}
+          />
         </Field>
         <Field label={`ค่า (${m.unit}) *`}>
-          <input className="input" required inputMode="decimal" value={f.value} onChange={(e) => set("value", e.target.value)} placeholder="เช่น 3.10" />
+          <input
+            className="input"
+            required
+            inputMode="decimal"
+            value={f.value}
+            onChange={(e) => set("value", e.target.value)}
+            placeholder="เช่น 3.10"
+          />
         </Field>
         <Field label="วันที่เผยแพร่ (ถ้าทราบ)">
-          <input className="input" type="date" value={f.publishedOn} onChange={(e) => set("publishedOn", e.target.value)} />
+          <input
+            className="input"
+            type="date"
+            value={f.publishedOn}
+            onChange={(e) => set("publishedOn", e.target.value)}
+          />
         </Field>
         <Field label="แหล่งข้อมูล">
-          <input className="input" maxLength={200} value={f.source} onChange={(e) => set("source", e.target.value)} placeholder={m.sourceDefault ?? ""} />
+          <input
+            className="input"
+            maxLength={200}
+            value={f.source}
+            onChange={(e) => set("source", e.target.value)}
+            placeholder={m.sourceDefault ?? ""}
+          />
         </Field>
       </div>
       <Field label="หมายเหตุ">
-        <input className="input" maxLength={1000} value={f.note} onChange={(e) => set("note", e.target.value)} />
+        <input
+          className="input"
+          maxLength={1000}
+          value={f.note}
+          onChange={(e) => set("note", e.target.value)}
+        />
       </Field>
       <Msg r={res} />
       {dup?.observationId && onEditExisting && (
-        <button type="button" className="btn-ghost text-xs" onClick={() => onEditExisting(m.id, dup.observationId!)}>
+        <button
+          type="button"
+          className="btn-ghost text-xs"
+          onClick={() => onEditExisting(m.id, dup.observationId!)}
+        >
           แก้ค่าเดิมของวันที่ {f.observedOn}
         </button>
       )}
@@ -255,7 +460,11 @@ export function ObservationForm({
           ยกเลิก
         </button>
         <button type="submit" className="btn" disabled={pending}>
-          {pending ? "กำลังบันทึก…" : observation ? "บันทึกการแก้ไข" : "บันทึกค่า"}
+          {pending
+            ? "กำลังบันทึก…"
+            : observation
+              ? "บันทึกการแก้ไข"
+              : "บันทึกค่า"}
         </button>
       </div>
     </form>
@@ -277,17 +486,124 @@ export interface ThresholdLite {
   source: string | null;
 }
 
-export function describeRule(t: Pick<ThresholdLite, "ruleType" | "greenBound" | "yellowBound" | "greenMin" | "greenMax" | "yellowMin" | "yellowMax">, unit: string) {
-  if (t.ruleType === "lower_is_better") return `เขียว ≤ ${t.greenBound} · เหลือง ≤ ${t.yellowBound} · แดง > ${t.yellowBound} ${unit}`;
-  if (t.ruleType === "higher_is_better") return `เขียว ≥ ${t.greenBound} · เหลือง ≥ ${t.yellowBound} · แดง < ${t.yellowBound} ${unit}`;
+/** Inline "แก้วันเริ่ม" for one threshold version (backdating allowed; neighbours are checked on the server). */
+function StartDateEditor({
+  assetId,
+  metricId,
+  version,
+  onDone,
+}: {
+  assetId: number;
+  metricId: number;
+  version: ThresholdLite;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(version.effectiveFrom);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  if (!open)
+    return (
+      <button
+        type="button"
+        className="mt-1 text-accent hover:underline"
+        onClick={() => setOpen(true)}
+      >
+        แก้วันเริ่ม
+      </button>
+    );
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <input
+        className="input w-auto"
+        type="date"
+        required
+        value={from}
+        onChange={(e) => setFrom(e.target.value)}
+        aria-label={`วันเริ่มใหม่ของเกณฑ์ที่เริ่ม ${version.effectiveFrom}`}
+      />
+      <button
+        type="button"
+        className="btn-ghost px-2 py-0.5"
+        disabled={pending || !from || from === version.effectiveFrom}
+        onClick={() =>
+          start(async () => {
+            setErr(null);
+            const r = await updateThresholdStartAction(
+              assetId,
+              metricId,
+              version.id,
+              from,
+            );
+            if (r.ok) onDone();
+            else setErr(r.error);
+          })
+        }
+      >
+        {pending ? "กำลังบันทึก…" : "บันทึกวันเริ่ม"}
+      </button>
+      <button
+        type="button"
+        className="text-muted hover:underline"
+        onClick={() => {
+          setOpen(false);
+          setFrom(version.effectiveFrom);
+          setErr(null);
+        }}
+      >
+        ยกเลิก
+      </button>
+      <span className="w-full text-muted">
+        สีสถานะของค่าตั้งแต่วันเริ่มใหม่จะคำนวณตามเกณฑ์นี้ ·
+        เกณฑ์ฉบับก่อนหน้าจะสิ้นสุดที่วันนี้
+      </span>
+      {err && (
+        <span className="w-full text-neg" role="alert">
+          {err}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function describeRule(
+  t: Pick<
+    ThresholdLite,
+    | "ruleType"
+    | "greenBound"
+    | "yellowBound"
+    | "greenMin"
+    | "greenMax"
+    | "yellowMin"
+    | "yellowMax"
+  >,
+  unit: string,
+) {
+  if (t.ruleType === "lower_is_better")
+    return `เขียว ≤ ${t.greenBound} · เหลือง ≤ ${t.yellowBound} · แดง > ${t.yellowBound} ${unit}`;
+  if (t.ruleType === "higher_is_better")
+    return `เขียว ≥ ${t.greenBound} · เหลือง ≥ ${t.yellowBound} · แดง < ${t.yellowBound} ${unit}`;
   return `เขียว ${t.greenMin}–${t.greenMax} · เหลือง ${t.yellowMin}–${t.yellowMax} · นอกนั้นแดง (${unit})`;
 }
 
-export function ThresholdForm({ assetId, metric, versions, today, onDone }: { assetId: number; metric: { id: number; name: string; unit: string }; versions: ThresholdLite[]; today: string; onDone: () => void }) {
+export function ThresholdForm({
+  assetId,
+  metric,
+  versions,
+  today,
+  onDone,
+}: {
+  assetId: number;
+  metric: { id: number; name: string; unit: string };
+  versions: ThresholdLite[];
+  today: string;
+  onDone: () => void;
+}) {
   const latest = versions[versions.length - 1];
   const [f, setF] = useState({
     ruleType: (latest?.ruleType ?? "lower_is_better") as RuleType,
-    effectiveFrom: latest && latest.effectiveFrom >= today ? latest.effectiveFrom : today,
+    effectiveFrom:
+      latest && latest.effectiveFrom >= today ? latest.effectiveFrom : today,
     greenBound: latest?.greenBound ?? "",
     yellowBound: latest?.yellowBound ?? "",
     greenMin: latest?.greenMin ?? "",
@@ -298,7 +614,16 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
     source: "",
   });
   const [res, setRes] = useState<MetricActionResult | null>(null);
-  const [preview, setPreview] = useState<{ affected: number; changed: number; rows: { observedOn: string; value: number; before: MetricStatus; after: MetricStatus }[] } | null>(null);
+  const [preview, setPreview] = useState<{
+    affected: number;
+    changed: number;
+    rows: {
+      observedOn: string;
+      value: number;
+      before: MetricStatus;
+      after: MetricStatus;
+    }[];
+  } | null>(null);
   const [pending, start] = useTransition();
   const set = (k: keyof typeof f, v: string) => {
     setF((x) => ({ ...x, [k]: v }));
@@ -307,22 +632,44 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
   const payload = () => ({
     ruleType: f.ruleType,
     effectiveFrom: f.effectiveFrom,
-    ...(f.ruleType === "target_range" ? { greenMin: f.greenMin, greenMax: f.greenMax, yellowMin: f.yellowMin, yellowMax: f.yellowMax } : { greenBound: f.greenBound, yellowBound: f.yellowBound }),
+    ...(f.ruleType === "target_range"
+      ? {
+          greenMin: f.greenMin,
+          greenMax: f.greenMax,
+          yellowMin: f.yellowMin,
+          yellowMax: f.yellowMax,
+        }
+      : { greenBound: f.greenBound, yellowBound: f.yellowBound }),
     reason: f.reason || null,
     source: f.source || null,
   });
-  const errs = validateRule({ ruleType: f.ruleType, greenBound: f.greenBound, yellowBound: f.yellowBound, greenMin: f.greenMin, greenMax: f.greenMax, yellowMin: f.yellowMin, yellowMax: f.yellowMax });
+  const errs = validateRule({
+    ruleType: f.ruleType,
+    greenBound: f.greenBound,
+    yellowBound: f.yellowBound,
+    greenMin: f.greenMin,
+    greenMax: f.greenMax,
+    yellowMin: f.yellowMin,
+    yellowMax: f.yellowMax,
+  });
   const num = (k: keyof typeof f, label: string) => (
     <Field label={`${label} (${metric.unit})`}>
-      <input className="input" inputMode="decimal" value={f[k]} onChange={(e) => set(k, e.target.value)} />
+      <input
+        className="input"
+        inputMode="decimal"
+        value={f[k]}
+        onChange={(e) => set(k, e.target.value)}
+      />
     </Field>
   );
   const backdated = latest && f.effectiveFrom < latest.effectiveFrom;
   return (
     <div className="space-y-4 text-sm">
       {versions.length > 0 && (
-        <details>
-          <summary className="cursor-pointer text-xs font-medium text-accent">ประวัติเกณฑ์ ({versions.length} ฉบับ)</summary>
+        <details open>
+          <summary className="cursor-pointer text-xs font-medium text-accent">
+            ประวัติเกณฑ์ ({versions.length} ฉบับ) — แก้วันเริ่มได้
+          </summary>
           <ul className="mt-2 space-y-1 text-xs">
             {versions.map((v) => (
               <li key={v.id} className="rounded border border-border px-2 py-1">
@@ -330,7 +677,15 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
                   {v.effectiveFrom} → {v.effectiveTo ?? "ปัจจุบัน"}
                 </b>{" "}
                 · {RULE_LABEL[v.ruleType]} · {describeRule(v, metric.unit)}
-                {v.reason && <span className="block text-muted">เหตุผล: {v.reason}</span>}
+                {v.reason && (
+                  <span className="block text-muted">เหตุผล: {v.reason}</span>
+                )}
+                <StartDateEditor
+                  assetId={assetId}
+                  metricId={metric.id}
+                  version={v}
+                  onDone={onDone}
+                />
               </li>
             ))}
           </ul>
@@ -349,7 +704,11 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
       >
         <div className="grid grid-cols-2 gap-3">
           <Field label="รูปแบบเกณฑ์">
-            <select className="input" value={f.ruleType} onChange={(e) => set("ruleType", e.target.value)}>
+            <select
+              className="input"
+              value={f.ruleType}
+              onChange={(e) => set("ruleType", e.target.value)}
+            >
               {(Object.keys(RULE_LABEL) as RuleType[]).map((r) => (
                 <option key={r} value={r}>
                   {RULE_LABEL[r]}
@@ -357,8 +716,21 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
               ))}
             </select>
           </Field>
-          <Field label="มีผลตั้งแต่ *" hint={latest ? `ต้องไม่ก่อน ${latest.effectiveFrom} (เกณฑ์ล่าสุด)` : "ค่าที่บันทึกก่อนวันนี้จะไม่มีเกณฑ์"}>
-            <input className="input" type="date" required value={f.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} />
+          <Field
+            label="มีผลตั้งแต่ *"
+            hint={
+              latest
+                ? `ต้องไม่ก่อน ${latest.effectiveFrom} (เกณฑ์ล่าสุด)`
+                : "ค่าที่บันทึกก่อนวันนี้จะไม่มีเกณฑ์"
+            }
+          >
+            <input
+              className="input"
+              type="date"
+              required
+              value={f.effectiveFrom}
+              onChange={(e) => set("effectiveFrom", e.target.value)}
+            />
           </Field>
           {f.ruleType === "target_range" ? (
             <>
@@ -381,10 +753,20 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="เหตุผล">
-            <input className="input" maxLength={500} value={f.reason} onChange={(e) => set("reason", e.target.value)} />
+            <input
+              className="input"
+              maxLength={500}
+              value={f.reason}
+              onChange={(e) => set("reason", e.target.value)}
+            />
           </Field>
           <Field label="แหล่งอ้างอิง">
-            <input className="input" maxLength={200} value={f.source} onChange={(e) => set("source", e.target.value)} />
+            <input
+              className="input"
+              maxLength={200}
+              value={f.source}
+              onChange={(e) => set("source", e.target.value)}
+            />
           </Field>
         </div>
         {errs.length > 0 && (f.greenBound || f.yellowBound || f.greenMin) && (
@@ -394,7 +776,8 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
         )}
         {backdated && (
           <p className="text-xs text-neg" role="alert">
-            วันเริ่มต้องไม่ก่อน {latest.effectiveFrom} — ระบบไม่ย้อนแก้สถานะของค่าในอดีต
+            วันเริ่มต้องไม่ก่อน {latest.effectiveFrom} —
+            ระบบไม่ย้อนแก้สถานะของค่าในอดีต
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -404,7 +787,11 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
             disabled={pending || errs.length > 0 || !!backdated}
             onClick={() =>
               start(async () => {
-                const r = await previewThresholdAction(assetId, metric.id, payload());
+                const r = await previewThresholdAction(
+                  assetId,
+                  metric.id,
+                  payload(),
+                );
                 if (r.ok) setPreview(r.data as typeof preview);
                 else setRes(r);
               })
@@ -414,7 +801,9 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
           </button>
           {preview && (
             <span className="text-xs text-muted" role="status">
-              ค่าตั้งแต่ {f.effectiveFrom}: {preview.affected} รายการ · เปลี่ยนสถานะ {preview.changed} รายการ · ค่าก่อนหน้านั้นคงใช้เกณฑ์เดิม
+              ค่าตั้งแต่ {f.effectiveFrom}: {preview.affected} รายการ ·
+              เปลี่ยนสถานะ {preview.changed} รายการ ·
+              ค่าก่อนหน้านั้นคงใช้เกณฑ์เดิม
             </span>
           )}
         </div>
@@ -431,7 +820,10 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
               </thead>
               <tbody>
                 {preview.rows.map((r) => (
-                  <tr key={r.observedOn} className={clsx(r.before !== r.after && "font-medium")}>
+                  <tr
+                    key={r.observedOn}
+                    className={clsx(r.before !== r.after && "font-medium")}
+                  >
                     <td>{r.observedOn}</td>
                     <td className="text-right tabular-nums">{r.value}</td>
                     <td>{STATUS_LABEL[r.before]}</td>
@@ -447,7 +839,11 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
           <button type="button" className="btn-ghost" onClick={onDone}>
             ยกเลิก
           </button>
-          <button type="submit" className="btn" disabled={pending || errs.length > 0 || !!backdated}>
+          <button
+            type="submit"
+            className="btn"
+            disabled={pending || errs.length > 0 || !!backdated}
+          >
             {pending ? "กำลังบันทึก…" : "บันทึกเกณฑ์"}
           </button>
         </div>
@@ -456,17 +852,32 @@ export function ThresholdForm({ assetId, metric, versions, today, onDone }: { as
   );
 }
 
-export function DeleteMetricForm({ assetId, metric, onDone }: { assetId: number; metric: { id: number; name: string; observationCount: number }; onDone: () => void }) {
+export function DeleteMetricForm({
+  assetId,
+  metric,
+  onDone,
+}: {
+  assetId: number;
+  metric: { id: number; name: string; observationCount: number };
+  onDone: () => void;
+}) {
   const [confirm, setConfirm] = useState("");
   const [res, setRes] = useState<MetricActionResult | null>(null);
   const [pending, start] = useTransition();
   return (
     <div className="space-y-3 text-sm">
       <p className="text-xs text-muted">
-        ลบตัวชี้วัด <b>{metric.name}</b> พร้อมค่าที่บันทึก {metric.observationCount} รายการและเกณฑ์ทั้งหมด (บันทึกใน audit) — ถ้าแค่ไม่อยากเห็น ให้ใช้ “เก็บถาวร” แทน
+        ลบตัวชี้วัด <b>{metric.name}</b> พร้อมค่าที่บันทึก{" "}
+        {metric.observationCount} รายการและเกณฑ์ทั้งหมด (บันทึกใน audit) —
+        ถ้าแค่ไม่อยากเห็น ให้ใช้ “เก็บถาวร” แทน
       </p>
       <Field label={`พิมพ์ ${metric.name} เพื่อยืนยัน`}>
-        <input className="input" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+        <input
+          className="input"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="off"
+        />
       </Field>
       <Msg r={res} />
       <div className="flex justify-end gap-2">
