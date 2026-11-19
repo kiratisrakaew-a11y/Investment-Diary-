@@ -69,17 +69,15 @@ async function audit(
   after: unknown,
   source = "web",
 ) {
-  await db
-    .insert(schema.assetMetricEvents)
-    .values({
-      assetId,
-      objectType,
-      objectId,
-      action,
-      before: before ?? null,
-      after: after ?? null,
-      source,
-    });
+  await db.insert(schema.assetMetricEvents).values({
+    assetId,
+    objectType,
+    objectId,
+    action,
+    before: before ?? null,
+    after: after ?? null,
+    source,
+  });
 }
 
 async function requireAsset(db: Db | Tx, assetId: number) {
@@ -651,8 +649,12 @@ export async function updateThresholdStart(
       throw new MetricError(
         409,
         "THRESHOLD_OVERLAP",
-        `วันเริ่มต้องอยู่หลัง ${prev.effectiveFrom} (วันเริ่มของเกณฑ์ฉบับก่อนหน้า)`,
-        { previousFrom: prev.effectiveFrom },
+        `วันเริ่มต้องอยู่หลัง ${prev.effectiveFrom} (วันเริ่มของเกณฑ์ฉบับก่อนหน้า) — ถ้าต้องการให้เกณฑ์มีผลตั้งแต่ ${from} ให้แก้วันเริ่มของฉบับที่เริ่ม ${versions.find((x) => x.effectiveFrom > from)?.effectiveFrom ?? prev.effectiveFrom} แทน`,
+        {
+          previousFrom: prev.effectiveFrom,
+          suggestedVersionFrom:
+            versions.find((x) => x.effectiveFrom > from)?.effectiveFrom ?? null,
+        },
       );
     if (next && from >= next.effectiveFrom)
       throw new MetricError(

@@ -663,6 +663,11 @@ export function ThresholdForm({
     </Field>
   );
   const backdated = latest && f.effectiveFrom < latest.effectiveFrom;
+  // Which existing version a backdated date belongs to: the first one starting after it (the earliest
+  // version for a date before every version), so its start is pulled back without crossing another.
+  const moveTarget = backdated
+    ? (versions.find((v) => v.effectiveFrom > f.effectiveFrom) ?? latest)
+    : null;
   return (
     <div className="space-y-4 text-sm">
       {versions.length > 0 && (
@@ -782,7 +787,7 @@ export function ThresholdForm({
             <p>
               เกณฑ์<b>ฉบับใหม่</b>ต้องเริ่มหลัง {latest.effectiveFrom} —
               ถ้าต้องการ<b>เลื่อนวันเริ่มของเกณฑ์เดิม</b> (ฉบับที่เริ่ม{" "}
-              {latest.effectiveFrom}) มาเป็น {f.effectiveFrom} กดปุ่มนี้
+              {moveTarget?.effectiveFrom}) มาเป็น {f.effectiveFrom} กดปุ่มนี้
               (ค่าเกณฑ์ไม่เปลี่ยน เปลี่ยนเฉพาะวันเริ่ม)
             </p>
             <button
@@ -794,7 +799,7 @@ export function ThresholdForm({
                   const r = await updateThresholdStartAction(
                     assetId,
                     metric.id,
-                    latest.id,
+                    moveTarget!.id,
                     f.effectiveFrom,
                   );
                   setRes(r);
@@ -802,7 +807,8 @@ export function ThresholdForm({
                 })
               }
             >
-              เลื่อนวันเริ่มของเกณฑ์เดิมเป็น {f.effectiveFrom}
+              เลื่อนวันเริ่มของเกณฑ์ฉบับ {moveTarget?.effectiveFrom} เป็น{" "}
+              {f.effectiveFrom}
             </button>
           </div>
         )}
