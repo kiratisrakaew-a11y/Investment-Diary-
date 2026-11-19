@@ -506,7 +506,7 @@ function StartDateEditor({
     return (
       <button
         type="button"
-        className="mt-1 text-accent hover:underline"
+        className="btn-ghost mt-1 px-2 py-0.5 text-xs"
         onClick={() => setOpen(true)}
       >
         แก้วันเริ่ม
@@ -720,7 +720,7 @@ export function ThresholdForm({
             label="มีผลตั้งแต่ *"
             hint={
               latest
-                ? `ต้องไม่ก่อน ${latest.effectiveFrom} (เกณฑ์ล่าสุด)`
+                ? `เกณฑ์ใหม่เริ่มหลัง ${latest.effectiveFrom} · ใส่วันก่อนหน้านั้นเพื่อเลื่อนวันเริ่มของเกณฑ์เดิม`
                 : "ค่าที่บันทึกก่อนวันนี้จะไม่มีเกณฑ์"
             }
           >
@@ -775,10 +775,36 @@ export function ThresholdForm({
           </p>
         )}
         {backdated && (
-          <p className="text-xs text-neg" role="alert">
-            วันเริ่มต้องไม่ก่อน {latest.effectiveFrom} —
-            ระบบไม่ย้อนแก้สถานะของค่าในอดีต
-          </p>
+          <div
+            className="space-y-2 rounded-lg border border-warn/40 p-2 text-xs"
+            role="alert"
+          >
+            <p>
+              เกณฑ์<b>ฉบับใหม่</b>ต้องเริ่มหลัง {latest.effectiveFrom} —
+              ถ้าต้องการ<b>เลื่อนวันเริ่มของเกณฑ์เดิม</b> (ฉบับที่เริ่ม{" "}
+              {latest.effectiveFrom}) มาเป็น {f.effectiveFrom} กดปุ่มนี้
+              (ค่าเกณฑ์ไม่เปลี่ยน เปลี่ยนเฉพาะวันเริ่ม)
+            </p>
+            <button
+              type="button"
+              className="btn-ghost px-2 py-0.5"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await updateThresholdStartAction(
+                    assetId,
+                    metric.id,
+                    latest.id,
+                    f.effectiveFrom,
+                  );
+                  setRes(r);
+                  if (r.ok) onDone();
+                })
+              }
+            >
+              เลื่อนวันเริ่มของเกณฑ์เดิมเป็น {f.effectiveFrom}
+            </button>
+          </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <button
