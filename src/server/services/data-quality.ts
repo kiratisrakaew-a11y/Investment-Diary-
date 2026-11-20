@@ -19,6 +19,7 @@ import { listValuations, valueChangedSinceSave } from "./valuations";
 import { abnormalDataQuality } from "@/lib/finance/abnormal/quality";
 import { adjReadiness } from "@/lib/finance/adj-check";
 import { loadAdjCheckInput } from "./prices";
+import { listBenchmarks } from "./benchmarks";
 import { DEFAULT_TRI_SYMBOL } from "./abnormal";
 import { sql } from "drizzle-orm";
 
@@ -123,15 +124,37 @@ export async function dataQualityReport() {
   const adjFrom = new Date(Date.now() - 365 * 3 * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  const adjClose = adjReadiness(
-    await loadAdjCheckInput(
-      assets.filter((a) => !a.archivedAt && a.assetClass !== "cash"),
-      adjFrom,
-    ),
+  const adjInput = await loadAdjCheckInput(
+    assets.filter((a) => !a.archivedAt && a.assetClass !== "cash"),
+    adjFrom,
   );
+  const adjClose = adjReadiness(adjInput);
   const held = new Set(
     summary.positions.filter((p) => p.quantity > 0).map((p) => p.assetId),
   );
+  // F10: every index with its kind and range; adj_close coverage per asset (3-year window).
+  const benchmarks = await listBenchmarks();
+  const adjCoverage = adjInput.map((a) => {
+    const withAdj = a.obs.filter((o) => o.adjClose != null && o.adjClose > 0).length;
+    return {
+      symbol: a.symbol,
+      assetClass: a.assetClass,
+      held: assets.some((x) => x.symbol === a.symbol && held.has(x.id)),
+      days: a.obs.length,
+      withAdjClose: withAdj,
+      ratio: a.obs.length ? withAdj / a.obs.length : 0,
+    };
+  });
+  const defaultBench = settings.defaultBenchmark;
+  const priceBasisDefaults = {
+    defaultReturnBasis: settings.defaultReturnBasis,
+    heldWithoutAdj: adjCoverage
+      .filter((a) => a.held && (a.assetClass === "thai_stock" || a.assetClass === "us_stock") && a.ratio < 1)
+      .map((a) => a.symbol),
+    defaultBenchmark: defaultBench,
+    defaultBenchmarkLastDate:
+      benchmarks.find((b) => b.symbol === defaultBench.toUpperCase())?.to ?? null,
+  };
   const report = assessDataQuality({
     provenance: marketInputProvenance(settings),
     positions: summary.positions
@@ -176,6 +199,7 @@ export async function dataQualityReport() {
       ),
     abnormal,
     adjClose,
+    priceBasisDefaults,
     history: assets
       .filter((a) => held.has(a.id) && a.assetClass !== "cash")
       .map((a) => ({
@@ -186,5 +210,12 @@ export async function dataQualityReport() {
       })),
   });
   // Per-stock detail behind the abnormal-trading check (MCP / REST readers).
-  return { ...report, abnormalTrading: abnormal, adjClose };
+  return {
+    ...report,
+    abnormalTrading: abnormal,
+    adjClose,
+    benchmarks,
+    adjCoverage,
+    priceBasisDefaults,
+  };
 }

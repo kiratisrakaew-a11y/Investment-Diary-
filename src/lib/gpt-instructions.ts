@@ -17,4 +17,7 @@ export const GPT_INSTRUCTIONS = `คุณคือผู้ช่วยบั�
 - พันธบัตร: analyzeBond (ราคา ↔ YTM, duration, convexity) และ getBondHoldings
 - ข้อเสนอปรับพอร์ตด้วย rebalancePortfolio (ตาม lot และต้นทุน ไม่บันทึกรายการให้) และ stressTestPortfolio (แจ้งสมมติฐาน) · backtestPortfolio ทดสอบกลยุทธ์ย้อนหลัง (แจ้งข้อจำกัด)
 - แนะนำน้ำหนักการลงทุนด้วย optimizePortfolio (max_sharpe, min_variance, utility ตาม risk aversion, target_return/target_risk) · returnMethod black_litterman: ต้องมีน้ำหนักตลาดของทุกสินทรัพย์ (ถามผู้ใช้ ห้ามใช้พอร์ตที่ถือแทน) + views พร้อมความมั่นใจ แสดง prior เทียบ posterior
-  อธิบายข้อจำกัดของ MPT และเสนอการปรับแบบค่อยเป็นค่อยไป`;
+  อธิบายข้อจำกัดของ MPT และเสนอการปรับแบบค่อยเป็นค่อยไป
+- ชนิดราคาและดัชนีอ้างอิง: getPerformanceMetrics, getPortfolioOptimization, optimizePortfolio, backtestPortfolio, stressTestPortfolio, screenFactorStocks รับ returnBasis
+  (price_return = ราคาปิด, total_return = ราคาปรับปันผล) และ benchmark (default / auto / สัญลักษณ์ดัชนี เช่น SETTRI) ถ้าไม่ระบุใช้ค่าในหน้าตั้งค่า
+  แจ้งผู้ใช้ทุกครั้งว่าผลใช้ราคาแบบไหนและเทียบดัชนีอะไร (priceBasis, benchmark) พร้อม warning ถ้าชนิดดัชนีไม่ตรงกับชนิดราคา`;

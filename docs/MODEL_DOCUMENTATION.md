@@ -49,6 +49,57 @@ All rates in the engine are decimals (7% = 0.07). UI percentage fields take perc
 - Stored bond prices are treated as clean.
 - See `docs/roadmap-v3/01_RETURN_CONVENTIONS.md`.
 
+## 1d. Price basis and benchmark choice — `price-basis.ts`, `benchmark-resolve.ts`, `services/benchmarks.ts`
+
+Every return-based feature (performance F1, portfolio MPT F2, optimizer / rebalance / universe F3, model comparison F4, backtest F5, stress F6, momentum F7, abnormal trading F8, valuation β F9) takes two optional inputs, on the web (picker), REST and MCP:
+
+- `returnBasis`: `price_return` (closes, split-adjusted, no dividends) or `total_return` (adjusted closes).
+- `benchmark`: `default` (the feature's previous rule), `auto` (an index whose kind matches the basis) or a stored index symbol.
+
+Resolution order: request → Settings (`defaultReturnBasis`, `defaultBenchmark`) → the feature's own default. Two exceptions:
+
+- Abnormal trading ignores Settings' basis. Its `auto` rule is unchanged: adjusted close vs a TRI when the stock has adjusted closes on ≥ 95% of the index's days, else close vs the price index. An explicit `total_return` below 95% is an `ADJ_COVERAGE` error, never a silent fallback.
+- Dividend strategies and `dividendCashflows` always use closes plus cash dividends.
+
+With no new option, every result is unchanged digit for digit (checked before / after for each phase).
+
+**Benchmark registry (`benchmark_meta`).** Each index is a `price_index` or a `total_return` index. Settings' own benchmark keeps Settings' kind; SETTRI defaults to total return; anything else defaults to a price index. `import_prices target "benchmark"` accepts `kind`. A kind that does not match the basis is computed with a warning. Errors:
+
+- `BENCHMARK_NOT_FOUND`: no data. The error lists the indexes the app has.
+- `BENCHMARK_COVERAGE`: the series starts more than 7 days after the period starts.
+
+**Per-asset total return** follows MPT A3:
+
+- adj_close when complete;
+- gold, accumulating funds and stocks with no dividend or split in the period use their close, listed in `priceBasis.fallback`;
+- a dividend payer without adj_close is excluded with the reason in `priceBasis.excluded`. It is never measured on closes silently.
+
+**Real portfolio (F1, D5) — no double counting.**
+
+- Values, cash, flows, XIRR and P&L always use closes and real cash.
+- For holdings with full adjusted closes over the dates they were held, each period's return uses `adjₜ/adjₜ₋₁` instead of closes (`ValuePoint.returnValue`). Their recorded dividend cash is an internal transfer on the payment date.
+- Holdings without adjusted closes stay on closes plus recorded dividends (`fallback`).
+- Identities (unit tests):
+  - with no dividends, both bases give identical TWR, σ, VaR and β;
+  - with a recorded dividend and an unchanged price between ex-date and payment, cumulative TWR is equal;
+  - a price move in between only changes the reinvestment timing (exact identity tested);
+  - an unrecorded dividend makes total return higher by about D/P and is listed in `unrecordedDividends`.
+- The portfolio includes dividends under both bases, so `auto` picks a total-return index.
+
+**Momentum (F7).** On `total_return`, a stock needs adj_close on every close date of its 12–1 window. Otherwise its momentum is unavailable and it is counted in coverage and exclusions. Closes and adjusted closes are never mixed in one ranking. The screen and backtest momentum strategies share this rule.
+
+**Limitations.**
+
+- Yahoo adjusted closes are gross of dividend withholding tax.
+- No blended benchmarks (e.g. 60/40).
+- SET TRI is imported manually; it is not fetched automatically.
+- Not offered, by design:
+  - dividend yield and the dividend screen / income, which use real prices;
+  - bonds, which use dirty price plus the coupon schedule;
+  - price charts;
+  - `get_abnormal_volume`;
+  - the current price on the valuation page.
+
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`
 
 | Measure | Formula / rule |
@@ -290,4 +341,5 @@ Valuation roadmap checks:
 - Staged DCF (`valuation-staged.test.ts`) and RIM horizons, scenarios and snapshots (`rim-horizon.test.ts`).
 - `valuation-phase5.test.ts`: SOTP with staged DCF and multi-stage RIM segments, plus RIM at 2/5/10 years against an independent closed form for every continuing-value method.
 - `npm run check:valuation-roundtrip` (needs the database): save → read → evaluate and JSON export → import for staged/legacy DCF, RIM with scenarios and a horizon snapshot. It removes its own rows.
+- `e2e/price-basis-smoke.mjs` (needs a running app and Playwright): price basis / benchmark pickers change the URL or request body and the summary line; Adjusted Close is disabled with a reason for dividend backtests; no horizontal scroll at 375 px. `npm run check:price-basis` covers the services (local database, TEST-LOCAL data). Read-only.
 - `e2e/valuation-smoke.mjs` (needs a running app and Playwright): 375/720/768/1440 px in both themes. It checks for horizontal scroll, console errors and a visible keyboard focus, and that the staged switch works. Read-only.

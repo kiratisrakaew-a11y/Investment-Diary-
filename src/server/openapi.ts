@@ -242,6 +242,18 @@ export function buildOpenApi(origin: string) {
           operationId: "getPerformanceMetrics",
           summary:
             "Cumulative/annualized TWR, XIRR (with root status), volatility, drawdown, periodic-excess Sharpe/Sortino, OLS beta/alpha with standard errors, Treynor, IR, data-quality warnings",
+          description:
+            "returnBasis total_return: holdings with full adjusted closes earn the adj chain (dividends counted from the ex-date, recorded dividend cash of those holdings is an internal transfer — never counted twice); values, cash, XIRR and P&L stay on closes. Response: priceBasis { requested, used, source, fallback, excluded }, benchmark { …, kind, basis, source, warning }, unrecordedDividends (total_return).",
+          parameters: [
+            q(
+              "returnBasis",
+              "price_return (closes) | total_return (adjusted closes). Omit = Settings default",
+            ),
+            q(
+              "benchmark",
+              'default (this endpoint\'s usual index) | auto (index kind matches the basis) | a stored index symbol such as SETTRI. Omit = Settings default',
+            ),
+          ],
           responses: { "200": ok("Metrics (decimals, 0.05 = 5%)") },
         },
       },
@@ -348,6 +360,14 @@ export function buildOpenApi(origin: string) {
             q("to", "YYYY-MM-DD"),
             q("notable", "Threshold, default 2"),
             q("abnormal", "Threshold, default 3"),
+            q(
+              "returnBasis",
+              "auto (default: adjusted close vs a TRI when ≥95% covered, else close vs the price index) | price_return | total_return (adjusted closes required — ADJ_COVERAGE error otherwise). Settings' default is not used here",
+            ),
+            q(
+              "benchmark",
+              "default | an index symbol (a kind mismatch is reported in benchmark.warning). triSymbol is a deprecated alias",
+            ),
           ],
           responses: {
             "200": ok(
@@ -366,6 +386,14 @@ export function buildOpenApi(origin: string) {
             q("eventDate", "YYYY-MM-DD"),
             q("eventId", "Event id from /api/v1/stock-events"),
             q("model", "market | dimson | market_adjusted"),
+            q(
+              "returnBasis",
+              "auto (default: adjusted close vs a TRI when ≥95% covered, else close vs the price index) | price_return | total_return (adjusted closes required — ADJ_COVERAGE error otherwise). Settings' default is not used here",
+            ),
+            q(
+              "benchmark",
+              "default | an index symbol (a kind mismatch is reported in benchmark.warning). triSymbol is a deprecated alias",
+            ),
           ],
           responses: {
             "200": ok(
@@ -460,7 +488,7 @@ export function buildOpenApi(origin: string) {
           operationId: "optimizePortfolio",
           summary: "Recommend portfolio weights with Modern Portfolio Theory",
           description:
-            "Objectives: max_sharpe, min_variance, target_return, target_risk, utility (risk aversion A). Returns weights and THB trades.",
+            "Objectives: max_sharpe, min_variance, target_return, target_risk, utility (risk aversion A). Returns weights and THB trades. returnBasis / benchmark choose the price basis and the β / CAPM index; the response's priceBasis and benchmark say what was used.",
           requestBody: body("OptimizeInput"),
           responses: { "200": ok("Recommendation") },
         },
@@ -569,7 +597,13 @@ export function buildOpenApi(origin: string) {
           operationId: "getPortfolioOptimization",
           summary:
             "Modern Portfolio Theory: min-variance and max-Sharpe weights, correlation, CML",
-          responses: { "200": ok("MPT analysis") },
+          parameters: [
+            q(
+              "returnBasis",
+              "price_return (closes) | total_return (adjusted closes). Omit = Settings default",
+            ),
+          ],
+          responses: { "200": ok("MPT analysis with priceBasis") },
         },
       },
     },

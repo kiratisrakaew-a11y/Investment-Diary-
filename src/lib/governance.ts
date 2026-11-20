@@ -359,7 +359,19 @@ export interface DataQualityInput {
   abnormal?: AbnormalDataQuality;
   /** adj_close coverage and consistency with dividends for total return (MPT A5). */
   adjClose?: AdjReadiness;
+  /** PRICE_BASIS_BENCHMARK_SPEC F10: the Settings defaults and what they depend on. */
+  priceBasisDefaults?: {
+    defaultReturnBasis: "price_return" | "total_return";
+    /** Held stocks without full adj_close (they fall back to closes under total_return). */
+    heldWithoutAdj: string[];
+    defaultBenchmark: string;
+    /** Last stored date of the default benchmark when it is a symbol (null = no data). */
+    defaultBenchmarkLastDate: string | null;
+  };
 }
+
+/** Days after which the default benchmark counts as stale (same threshold as Settings' benchmark). */
+export const BENCHMARK_STALE_DAYS = 7;
 
 const ABNORMAL_ISSUE_LABEL: Record<
   AbnormalDataQuality["stocks"][number]["issues"][number]["code"],
@@ -572,6 +584,35 @@ export function assessDataQuality(d: DataQualityInput) {
       "หุ้นไทยทุกตัวมี volume, จำนวนหุ้น, ประวัติพอ และมี TRI",
       "/holdings",
     );
+  }
+
+  if (d.priceBasisDefaults) {
+    const p = d.priceBasisDefaults;
+    add(
+      "ชนิดราคาเริ่มต้น",
+      p.defaultReturnBasis === "total_return" && p.heldWithoutAdj.length > 0,
+      "warn",
+      `ค่าเริ่มต้นเป็นราคาปรับปันผล แต่สินทรัพย์ที่ถืออยู่ไม่มี adj_close ครบ: ${p.heldWithoutAdj.slice(0, 8).join(", ")}${p.heldWithoutAdj.length > 8 ? " …" : ""} — ผลการดำเนินงานใช้ราคาปิด + ปันผลที่บันทึกแทนสำหรับตัวเหล่านี้ และหน้าจัดพอร์ตจะตัดหุ้นปันผลที่ไม่มี adj_close · sync_historical_prices priceType:"adjusted_close"`,
+      p.defaultReturnBasis === "total_return"
+        ? "ค่าเริ่มต้นเป็นราคาปรับปันผล และสินทรัพย์ที่ถืออยู่มี adj_close ครบ"
+        : "ค่าเริ่มต้นเป็นราคาปิด (เปลี่ยนได้ที่หน้าตั้งค่าหรือรายหน้า)",
+      "/settings",
+    );
+    if (p.defaultBenchmark !== "default" && p.defaultBenchmark !== "auto") {
+      const age = p.defaultBenchmarkLastDate
+        ? (Date.parse(d.today) - Date.parse(p.defaultBenchmarkLastDate)) / 86_400_000
+        : Infinity;
+      add(
+        "ดัชนีเริ่มต้น",
+        age > BENCHMARK_STALE_DAYS,
+        "warn",
+        p.defaultBenchmarkLastDate
+          ? `ดัชนีเริ่มต้น ${p.defaultBenchmark} ข้อมูลล่าสุด ${p.defaultBenchmarkLastDate} (เก่ากว่า ${BENCHMARK_STALE_DAYS} วัน) — นำเข้าข้อมูลใหม่ด้วย import_prices target "benchmark"`
+          : `ไม่มีข้อมูลดัชนีเริ่มต้น ${p.defaultBenchmark} — ทุกหน้าที่ใช้ค่าเริ่มต้นจะขึ้น BENCHMARK_NOT_FOUND`,
+        `ดัชนีเริ่มต้น ${p.defaultBenchmark} เป็นปัจจุบัน (${p.defaultBenchmarkLastDate})`,
+        "/settings",
+      );
+    }
   }
 
   if (d.adjClose) {

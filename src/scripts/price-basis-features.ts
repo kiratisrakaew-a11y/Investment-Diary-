@@ -15,6 +15,8 @@ import { backtestPortfolio } from "../server/services/backtest";
 import { summarizeBacktest } from "../server/services/backtest-summary";
 import { comparePortfolioModels, summarizeModelComparison } from "../server/services/model-comparison";
 import { screenFactorStocks } from "../server/services/strategies";
+import { runEventStudy, scanAbnormalTrading } from "../server/services/abnormal";
+import { dataQualityReport } from "../server/services/data-quality";
 import { getDb, schema } from "../db";
 import { eq } from "drizzle-orm";
 
@@ -332,6 +334,50 @@ export async function featureChecks(check: Check, days: string[]) {
     const sc0 = await screenFactorStocks({ strategy: "momentum", symbols: syms, settings: { topN: 1 } });
     const diffKeys = Object.keys({ ...sc0, ...scP }).filter((k) => !same(noSource((sc0 as Record<string, unknown>)[k]), noSource((scP as Record<string, unknown>)[k])));
     check("6.1 F7 screen: no option == price_return", diffKeys.length === 0, diffKeys.join(","));
+
+    // ---------------------------------------------------------------- F8 abnormal trading
+    const evDate = days[days.length - 40];
+    const e0 = await runEventStudy({ symbol: "PTT", eventDate: evDate });
+    const e1 = await runEventStudy({ symbol: "PTT", eventDate: evDate, returnBasis: "auto", benchmark: "default" });
+    check("6.1 F8 event study: no option == auto + default", same(stable(e0), stable(e1)) && e0.priceBasis.requested === "auto");
+    const eNo = await runEventStudy({ symbol: "PTT", eventDate: evDate, returnBasis: "total_return", benchmark: "PBT-NOPE" }).catch((e) => e as Error & { code?: string });
+    check("F8 unknown index → BENCHMARK_NOT_FOUND listing the indexes", eNo instanceof Error && eNo.code === "BENCHMARK_NOT_FOUND" && /PBT-TRI3/.test(eNo.message));
+    const eTr = await runEventStudy({ symbol: "PTT", eventDate: evDate, returnBasis: "total_return", benchmark: "PBT-TRI3" }).catch((e) => e as Error & { code?: string });
+    check(
+      "F8 explicit total_return without adjusted closes → ADJ_COVERAGE with the day counts (no silent close)",
+      eTr instanceof Error && eTr.code === "ADJ_COVERAGE" && /\d+\/\d+ วัน/.test(eTr.message),
+      eTr instanceof Error ? eTr.message : "no error",
+    );
+    const eMis = await runEventStudy({ symbol: "PTT", eventDate: evDate, returnBasis: "price_return", benchmark: "PBT-TRI3" });
+    check(
+      "F8 close vs a total-return index → computed with a kind-mismatch warning",
+      eMis.benchmark.symbol === "PBT-TRI3" && eMis.benchmark.source === "explicit" && !!eMis.benchmark.warning,
+    );
+    const eM = await mcp("run_event_study", { symbol: "PTT", eventDate: evDate, returnBasis: "price_return", benchmark: "PBT-TRI3" });
+    const eR = await rest(`abnormal/event-study?symbol=PTT&eventDate=${evDate}&returnBasis=price_return&benchmark=PBT-TRI3`);
+    check("6.5 run_event_study: MCP == REST == service", eM.ok && same(stable(eM.data), stable(eMis)) && same(stable(eR.data), stable(eMis)));
+    const scTr = await scanAbnormalTrading({ symbols: ["PTT"], returnBasis: "total_return", benchmark: "PBT-TRI3" });
+    check(
+      "F8 scan: a stock that cannot meet an explicit total_return is listed in skipped with the reason",
+      scTr.stocks.length === 0 && scTr.skipped.some((x) => x.symbol === "PTT" && /ADJ_COVERAGE/.test(x.reason)),
+    );
+
+    // ---------------------------------------------------------------- F10 data quality
+    await saveSettings({ riskFreeRate: settings.riskFreeRate, benchmarkSymbol: settings.benchmarkSymbol, defaultReturnBasis: "total_return", defaultBenchmark: "PBT-OLD" });
+    await importPrices({ target: "benchmark", kind: "price_index", rows: days.slice(0, 30).map((d, i) => ({ symbol: "PBT-OLD", date: d, close: 100 + i })) });
+    const dq = await dataQualityReport();
+    await saveSettings({ riskFreeRate: settings.riskFreeRate, benchmarkSymbol: settings.benchmarkSymbol, defaultReturnBasis: settings.defaultReturnBasis, defaultBenchmark: settings.defaultBenchmark });
+    const area = (a: string) => dq.checks.find((c) => c.area === a);
+    check(
+      "F10 lists every index with kind and range; adj_close coverage per asset",
+      dq.benchmarks.some((b) => b.symbol === "PBT-TRI3" && b.kind === "total_return" && b.days === days.length) &&
+        dq.adjCoverage.some((a) => a.symbol === "PBT-E" && a.ratio === 1),
+    );
+    check(
+      "F10 warns: total_return default with held stocks lacking adj_close; stale default index",
+      area("ชนิดราคาเริ่มต้น")?.status === "warn" && area("ดัชนีเริ่มต้น")?.status === "warn",
+      `${area("ชนิดราคาเริ่มต้น")?.message?.slice(0, 80)} | ${area("ดัชนีเริ่มต้น")?.message?.slice(0, 80)}`,
+    );
 
     // ---------------------------------------------------------------- F9 valuation β
     const held = u0.assets.find((x) => x.beta != null)?.symbol;

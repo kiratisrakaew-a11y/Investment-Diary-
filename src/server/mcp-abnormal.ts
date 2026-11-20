@@ -6,6 +6,8 @@
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { benchmarkField } from "./basis-schema";
+
 import { isCalendarDate } from "@/lib/finance/abnormal/scan";
 import {
   getAbnormalVolume,
@@ -23,6 +25,14 @@ import {
   sharesOutstandingInput,
 } from "./services/stock-data";
 import { DISCLAIMER } from "@/lib/finance/abnormal/returns";
+
+/** F8: "auto" (default) keeps the automatic rule; an explicit basis never falls back silently. */
+const abnormalBasisField = z
+  .enum(["auto", "price_return", "total_return"])
+  .optional()
+  .describe(
+    'auto (default) = adjusted close vs a total-return index when the stock has adjusted closes on ≥95% of its days, else close vs the price index. total_return = adjusted close required (error ADJ_COVERAGE with the day counts otherwise — never a silent fallback); price_return = close vs a price index. Settings\' defaultReturnBasis is NOT used here',
+  );
 
 const isoDate = z.string().refine(isCalendarDate, "A real date in YYYY-MM-DD");
 const symbol = z
@@ -99,8 +109,10 @@ export function registerAbnormalTools(server: McpServer, safe: Safe) {
           .max(40)
           .optional()
           .describe(
-            "Total return index symbol in benchmark data (default SETTRI)",
+            "Deprecated alias — use benchmark. Total return index symbol in benchmark data (default SETTRI)",
           ),
+        returnBasis: abnormalBasisField,
+        benchmark: benchmarkField,
       },
       annotations: { readOnlyHint: true },
     },
@@ -171,7 +183,15 @@ export function registerAbnormalTools(server: McpServer, safe: Safe) {
           .describe(
             "Trading days after a flag to look for an event (default 10)",
           ),
-        triSymbol: z.string().trim().min(1).max(40).optional(),
+        triSymbol: z
+          .string()
+          .trim()
+          .min(1)
+          .max(40)
+          .optional()
+          .describe("Deprecated alias — use benchmark"),
+        returnBasis: abnormalBasisField,
+        benchmark: benchmarkField,
       },
       annotations: { readOnlyHint: true },
     },

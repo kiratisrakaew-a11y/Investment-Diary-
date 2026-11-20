@@ -17,6 +17,9 @@ import {
 import { MetricError } from "./asset-metrics";
 import { getAssetBySymbol } from "./assets";
 import { getSettings } from "./settings";
+import { benchmarkContext, listBenchmarks } from "./benchmarks";
+import { benchmarkKindOf } from "@/lib/finance/benchmark-resolve";
+import { basisMismatchWarning } from "@/lib/finance/benchmark-basis";
 import { listEvents, sharesHistory } from "./stock-data";
 import { scanStock } from "@/lib/finance/abnormal/scan";
 import {
@@ -83,7 +86,39 @@ export interface BenchmarkChoice {
   stock: [string, number][];
   bench: [string, number][];
   warnings: string[];
+  /** PRICE_BASIS_BENCHMARK_SPEC F8: the index's registered kind, how it was chosen and a kind-mismatch warning. */
+  kind?: "price_index" | "total_return";
+  source?: "default" | "auto" | "explicit";
+  mismatch?: string | null;
+  requestedBasis?: AbnormalBasis;
 }
+
+export type AbnormalBasis = "auto" | "price_return" | "total_return";
+
+/** The spec §5 blocks for an abnormal-trading response. */
+export function abnormalBasisReport(c: BenchmarkChoice) {
+  const requested = c.requestedBasis ?? "auto";
+  return {
+    priceBasis: {
+      requested,
+      used: c.basis === "total_return" ? ("total_return" as const) : ("price_return" as const),
+      source: requested === "auto" ? ("feature_default" as const) : ("request" as const),
+      fallback: [] as { symbol: string; reason: string }[],
+      excluded: [] as { symbol: string; reason: string }[],
+    },
+    benchmark: {
+      symbol: c.symbol,
+      kind: c.kind ?? (c.basis === "total_return" ? ("total_return" as const) : ("price_index" as const)),
+      basis: c.basis,
+      wanted: c.basis,
+      source: c.source ?? ("auto" as const),
+      warning: c.mismatch ?? null,
+      label: c.label,
+    },
+  };
+}
+
+const ADJ_MIN_SHARE = 0.95;
 
 /**
  * TRI is used only when it exists AND the stock has an adjusted close on (almost) every day of it;
@@ -91,7 +126,83 @@ export interface BenchmarkChoice {
  */
 export async function chooseBenchmark(
   days: StockDay[],
-  opts: { triSymbol?: string } = {},
+  opts: {
+    triSymbol?: string;
+    /** "auto" (default) = the rule below, unchanged; an explicit basis never falls back silently. */
+    returnBasis?: AbnormalBasis;
+    /** "default" / "auto" / omitted = the rule below; a symbol = that index (kind mismatch -> warning). */
+    benchmark?: string;
+  } = {},
+): Promise<BenchmarkChoice> {
+  const requestedBasis = opts.returnBasis ?? "auto";
+  const req = opts.benchmark?.trim().toUpperCase();
+  const explicitBench = req && req !== "DEFAULT" && req !== "AUTO" ? req : null;
+  if (requestedBasis !== "auto" || explicitBench)
+    return { ...(await chooseExplicit(days, requestedBasis, explicitBench, opts.triSymbol)), requestedBasis };
+  return { ...(await chooseAuto(days, opts)), source: "auto", requestedBasis, mismatch: null };
+}
+
+/** Share of the index's dates on which the stock has an adjusted close. */
+function adjCoverage(days: StockDay[], bench: [string, number][]) {
+  const dates = new Set(bench.map(([d]) => d));
+  const on = days.filter((d) => dates.has(d.date));
+  const withAdj = on.filter((d) => d.adjClose != null && d.adjClose > 0);
+  return { on: on.length, withAdj, share: on.length ? withAdj.length / on.length : 0 };
+}
+
+async function chooseExplicit(
+  days: StockDay[],
+  basis: AbnormalBasis,
+  explicitBench: string | null,
+  triSymbol?: string,
+): Promise<BenchmarkChoice> {
+  const settings = await getSettings();
+  const ctx = await benchmarkContext();
+  const symbol =
+    explicitBench ??
+    (basis === "total_return" ? (triSymbol ?? DEFAULT_TRI_SYMBOL).toUpperCase() : settings.benchmarkSymbol);
+  const bench = await benchSeries(symbol);
+  if (!bench.length)
+    throw new MetricError(
+      400,
+      "BENCHMARK_NOT_FOUND",
+      `ไม่มีข้อมูลดัชนี ${symbol} ในระบบ — ดัชนีที่มี: ${ctx.list.filter((b) => b.days > 0).map((b) => b.symbol).join(", ") || "ไม่มี"}`,
+    );
+  const kind = benchmarkKindOf(symbol, ctx);
+  const cov = adjCoverage(days, bench);
+  // An explicit total_return needs adjusted closes on >= 95% of the index's days — never a silent close.
+  if (basis === "total_return" && cov.share < ADJ_MIN_SHARE)
+    throw new MetricError(
+      400,
+      "ADJ_COVERAGE",
+      `เลือกราคาปรับปันผล แต่หุ้นมี adjusted close เพียง ${cov.withAdj.length}/${cov.on} วันของดัชนี ${symbol} (ต้อง ≥ ${ADJ_MIN_SHARE * 100}%) — sync ด้วย priceType adjusted_close หรือเลือกราคาปิด`,
+    );
+  const useAdj =
+    basis === "total_return" || (basis === "auto" && kind === "total_return" && cov.share >= ADJ_MIN_SHARE);
+  const mismatch = (kind === "total_return") === useAdj ? null : basisMismatchWarning(useAdj ? "total_return" : "price", symbol);
+  const warnings: string[] = [];
+  if (basis === "auto" && kind === "total_return" && !useAdj)
+    warnings.push(
+      `${symbol} เป็นดัชนีผลตอบแทนรวม แต่หุ้นยังไม่มี adjusted close ครบ (${cov.withAdj.length}/${cov.on} วัน) — ใช้ราคาปิด`,
+    );
+  if (mismatch) warnings.push(mismatch);
+  return {
+    basis: useAdj ? "total_return" : "price",
+    symbol,
+    label: `${symbol} (${kind === "total_return" ? "Total Return Index" : "ดัชนีราคา"}) เทียบ${useAdj ? " adjusted close" : "ราคาปิด"}`,
+    stock: useAdj ? cov.withAdj.map((d) => [d.date, d.adjClose!] as [string, number]) : days.map((d) => [d.date, d.close] as [string, number]),
+    bench,
+    warnings,
+    kind,
+    source: explicitBench ? "explicit" : "default",
+    mismatch,
+  };
+}
+
+/** The rule used before the spec (and still the default): TRI when the stock has adjusted closes, else close vs Settings. */
+async function chooseAuto(
+  days: StockDay[],
+  opts: { triSymbol?: string },
 ): Promise<BenchmarkChoice> {
   const settings = await getSettings();
   const triSymbol = (opts.triSymbol ?? DEFAULT_TRI_SYMBOL).toUpperCase();
@@ -151,6 +262,8 @@ export async function runEventStudy(input: {
   estimationWindow?: [number, number];
   eventWindow?: [number, number];
   triSymbol?: string;
+  returnBasis?: AbnormalBasis;
+  benchmark?: string;
 }) {
   const { asset, days } = await loadStock(input.symbol);
   let eventDate = input.eventDate;
@@ -181,7 +294,11 @@ export async function runEventStudy(input: {
       "VALIDATION_ERROR",
       "ต้องระบุ eventDate หรือ eventId",
     );
-  const choice = await chooseBenchmark(days, { triSymbol: input.triSymbol });
+  const choice = await chooseBenchmark(days, {
+    triSymbol: input.triSymbol,
+    returnBasis: input.returnBasis,
+    benchmark: input.benchmark,
+  });
   const x = alignReturns(choice.stock, choice.bench);
   const xd = (await listEvents({ symbol: asset.symbol, types: ["xd"] })).map(
     (e) => e.eventDate,
@@ -200,11 +317,7 @@ export async function runEventStudy(input: {
     symbol: asset.symbol,
     model,
     modelLabel: MODEL_LABEL[model],
-    benchmark: {
-      basis: choice.basis,
-      symbol: choice.symbol,
-      label: choice.label,
-    },
+    ...abnormalBasisReport(choice),
     coverage: {
       ...benchmarkCoverage(choice, days),
       commonReturns: x.dates.length,
@@ -336,6 +449,8 @@ type ScanInput = {
   estimationWindow?: [number, number];
   triSymbol?: string;
   eventHorizon?: number;
+  returnBasis?: AbnormalBasis;
+  benchmark?: string;
 };
 async function scanOneStock(
   loaded: Awaited<ReturnType<typeof loadStock>>,
@@ -343,7 +458,11 @@ async function scanOneStock(
   th: Thresholds,
 ) {
   const { asset, days } = loaded;
-  const choice = await chooseBenchmark(days, { triSymbol: input.triSymbol });
+  const choice = await chooseBenchmark(days, {
+    triSymbol: input.triSymbol,
+    returnBasis: input.returnBasis,
+    benchmark: input.benchmark,
+  });
   const x = alignReturns(choice.stock, choice.bench);
   const vs = volumeSeries(days, await sharesHistory(asset.symbol));
   const evs = await listEvents({ symbol: asset.symbol });
@@ -391,11 +510,7 @@ async function scanOneStock(
   return {
     symbol: asset.symbol,
     level: top,
-    benchmark: {
-      basis: choice.basis,
-      symbol: choice.symbol,
-      label: choice.label,
-    },
+    ...abnormalBasisReport(choice),
     volumeBasis: vs.basis,
     coverage: r.coverage,
     flagged: r.flagged.map(({ fit, missing: _m, ...d }) => ({
@@ -435,6 +550,8 @@ export async function scanAbnormalTrading(input: {
   estimationWindow?: [number, number];
   triSymbol?: string;
   eventHorizon?: number;
+  returnBasis?: AbnormalBasis;
+  benchmark?: string;
 }) {
   const th = { ...DEFAULT_THRESHOLDS, ...(input.thresholds ?? {}) };
   if (!(th.notable > 0 && th.abnormal >= th.notable))
@@ -472,7 +589,13 @@ export async function scanAbnormalTrading(input: {
       });
       continue;
     }
-    stocks.push(await scanOneStock(loaded, input, th));
+    try {
+      stocks.push(await scanOneStock(loaded, input, th));
+    } catch (e) {
+      // An explicit basis / index the stock cannot meet is listed with the reason (other stocks still scan).
+      if (!(e instanceof MetricError) || !["ADJ_COVERAGE", "BENCHMARK_NOT_FOUND"].includes(e.code)) throw e;
+      skipped.push({ symbol: sym, reason: `${e.message} [${e.code}]` });
+    }
   }
   const RANK = { ผิดปกติ: 2, น่าสังเกต: 1, ปกติ: 0 } as const;
   const best = (s: (typeof stocks)[number]) =>
@@ -514,7 +637,13 @@ export async function scanAbnormalTrading(input: {
 /** Everything the asset page section needs, from the same services as the MCP tools. */
 export async function abnormalOverview(
   assetId: number,
-  input: { from?: string; to?: string; thresholds?: Partial<Thresholds> },
+  input: {
+    from?: string;
+    to?: string;
+    thresholds?: Partial<Thresholds>;
+    returnBasis?: AbnormalBasis;
+    benchmark?: string;
+  },
 ) {
   const [a] = await getDb()
     .select({
@@ -537,10 +666,13 @@ export async function abnormalOverview(
     to: input.to,
     thresholds: input.thresholds,
     includeDays: true,
+    returnBasis: input.returnBasis,
+    benchmark: input.benchmark,
   });
-  const [events, shares] = await Promise.all([
+  const [events, shares, benchmarks] = await Promise.all([
     listEvents({ symbol: a.symbol }),
     sharesHistory(a.symbol),
+    listBenchmarks(),
   ]);
   const { stocks, skipped, summary: _s, ...meta } = scan;
   if (!stocks.length)
@@ -549,7 +681,11 @@ export async function abnormalOverview(
       "SCAN_FAILED",
       skipped[0]?.reason ?? "สแกนไม่ได้",
     );
+  const availableBenchmarks = benchmarks
+    .filter((b) => b.days > 0)
+    .map((b) => ({ symbol: b.symbol, kind: b.kind }));
   return {
+    availableBenchmarks,
     ...meta,
     assetId,
     stock: stocks[0],

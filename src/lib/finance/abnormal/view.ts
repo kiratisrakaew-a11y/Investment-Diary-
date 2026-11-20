@@ -48,6 +48,8 @@ export interface AbnormalOverview {
       basis: "total_return" | "price";
       symbol: string;
       label: string;
+      kind?: "price_index" | "total_return";
+      warning?: string | null;
     };
     volumeBasis: "turnover" | "raw_volume";
     coverage: { days: number; withAR: number; withVolumeZ: number };
@@ -63,6 +65,21 @@ export interface AbnormalOverview {
     source: string;
   }[];
   disclaimer: string;
+  /** Indexes with data, for the benchmark choice in the settings panel (PRICE_BASIS_BENCHMARK_SPEC F8). */
+  availableBenchmarks?: { symbol: string; kind: "price_index" | "total_return" }[];
+}
+
+/** F8 request: "auto" / "default" keep the automatic rule. */
+export interface AbnormalBasisChoice {
+  basis: "auto" | "price_return" | "total_return";
+  bench: string;
+}
+
+export function abnormalBasisQuery(c: AbnormalBasisChoice): string {
+  const q: string[] = [];
+  if (c.basis !== "auto") q.push(`returnBasis=${c.basis}`);
+  if (c.bench !== "default") q.push(`benchmark=${encodeURIComponent(c.bench)}`);
+  return q.join("&");
 }
 
 export type ViewState =

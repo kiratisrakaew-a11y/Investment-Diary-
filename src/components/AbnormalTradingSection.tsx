@@ -37,6 +37,8 @@ import {
   statusBadge,
   viewState,
   type AbnormalOverview,
+  type AbnormalBasisChoice,
+  abnormalBasisQuery,
   type ChartRow,
   type RangeKey,
 } from "@/lib/finance/abnormal/view";
@@ -110,6 +112,8 @@ export function AssetPriceWithAbnormal({
   const [data, setData] = useState<AbnormalOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isThaiStock);
+  // F8: price basis / index for AR (auto = the automatic rule; Settings' default is not used here).
+  const [basisChoice, setBasisChoice] = useState<AbnormalBasisChoice>({ basis: "auto", bench: "default" });
   const [thresholds, setThresholds] = useState<{
     notable: number;
     abnormal: number;
@@ -120,9 +124,11 @@ export function AssetPriceWithAbnormal({
     setLoading(true);
     setError(null);
     try {
-      const q = thresholds
-        ? `?notable=${thresholds.notable}&abnormal=${thresholds.abnormal}`
-        : "";
+      const parts = [
+        thresholds ? `notable=${thresholds.notable}&abnormal=${thresholds.abnormal}` : "",
+        abnormalBasisQuery(basisChoice),
+      ].filter(Boolean);
+      const q = parts.length ? `?${parts.join("&")}` : "";
       const r = await fetch(`/api/v1/assets/${assetId}/abnormal${q}`, {
         cache: "no-store",
       });
@@ -134,7 +140,7 @@ export function AssetPriceWithAbnormal({
     } finally {
       setLoading(false);
     }
-  }, [assetId, isThaiStock, thresholds]);
+  }, [assetId, isThaiStock, thresholds, basisChoice]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -238,6 +244,8 @@ export function AssetPriceWithAbnormal({
           highlight={highlight}
           onPick={pick}
           onThresholds={setThresholds}
+          basisChoice={basisChoice}
+          onBasis={setBasisChoice}
           reload={load}
         />
       )}
@@ -326,6 +334,8 @@ function AbnormalTradingSection({
   highlight,
   onPick,
   onThresholds,
+  basisChoice,
+  onBasis,
   reload,
 }: {
   symbol: string;
@@ -338,6 +348,8 @@ function AbnormalTradingSection({
   highlight: string | null;
   onPick: (date: string) => void;
   onThresholds: (t: { notable: number; abnormal: number }) => void;
+  basisChoice: AbnormalBasisChoice;
+  onBasis: (c: AbnormalBasisChoice) => void;
   reload: () => void;
 }) {
   const state = viewState(data, error, loading);
@@ -374,6 +386,15 @@ function AbnormalTradingSection({
             <button type="button" className="btn-ghost mt-2" onClick={reload}>
               ลองอีกครั้ง
             </button>
+            {(basisChoice.basis !== "auto" || basisChoice.bench !== "default") && (
+              <button
+                type="button"
+                className="btn-ghost mt-2 ml-2"
+                onClick={() => onBasis({ basis: "auto", bench: "default" })}
+              >
+                กลับไปใช้ราคา/ดัชนีอัตโนมัติ
+              </button>
+            )}
           </div>
         )}
         {state.kind === "insufficient" && (
@@ -543,8 +564,8 @@ function AbnormalTradingSection({
         )}
         {data && state.kind !== "error" && (
           <>
-            <EventStudyPanel symbol={symbol} data={data} onRecorded={reload} />
-            <SettingsPanel data={data} onApply={onThresholds} />
+            <EventStudyPanel symbol={symbol} data={data} onRecorded={reload} basisChoice={basisChoice} />
+            <SettingsPanel data={data} onApply={onThresholds} basisChoice={basisChoice} onBasis={onBasis} />
           </>
         )}
         <p className="text-[11px] text-muted">
@@ -721,10 +742,12 @@ function EventStudyPanel({
   symbol,
   data,
   onRecorded,
+  basisChoice,
 }: {
   symbol: string;
   data: AbnormalOverview;
   onRecorded: () => void;
+  basisChoice: AbnormalBasisChoice;
 }) {
   const [date, setDate] = useState(data.events[0]?.eventDate ?? "");
   const [model, setModel] = useState("market");
@@ -736,7 +759,7 @@ function EventStudyPanel({
     setBusy(true);
     try {
       const r = await fetch(
-        `/api/v1/abnormal/event-study?symbol=${encodeURIComponent(symbol)}&eventDate=${date}&model=${model}`,
+        `/api/v1/abnormal/event-study?symbol=${encodeURIComponent(symbol)}&eventDate=${date}&model=${model}${abnormalBasisQuery(basisChoice) ? `&${abnormalBasisQuery(basisChoice)}` : ""}`,
         { cache: "no-store" },
       );
       const j = (await r.json()) as EsResult;
@@ -991,9 +1014,13 @@ function EventStudyPanel({
 function SettingsPanel({
   data,
   onApply,
+  basisChoice,
+  onBasis,
 }: {
   data: AbnormalOverview;
   onApply: (t: { notable: number; abnormal: number }) => void;
+  basisChoice: AbnormalBasisChoice;
+  onBasis: (c: AbnormalBasisChoice) => void;
 }) {
   const notes = qualityNotes(data);
   const [n, setN] = useState(String(data.thresholds.notable));
@@ -1048,6 +1075,38 @@ function SettingsPanel({
             </span>
           )}
         </div>
+        <div className="flex flex-wrap items-end gap-2" data-testid="abnormal-basis">
+          <label className="grid gap-1">
+            <span className="text-muted">ชนิดราคา</span>
+            <select
+              className="input"
+              name="abnormalBasis"
+              value={basisChoice.basis}
+              onChange={(e) => onBasis({ ...basisChoice, basis: e.target.value as AbnormalBasisChoice["basis"] })}
+            >
+              <option value="auto">อัตโนมัติ (adjusted close ถ้ามีครบ ≥ 95%)</option>
+              <option value="price_return">ราคาปิด (Close)</option>
+              <option value="total_return">ราคาปรับปันผล (ต้องมีครบ ไม่ถอยไปราคาปิด)</option>
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className="text-muted">ดัชนีอ้างอิง</span>
+            <select
+              className="input"
+              name="abnormalBench"
+              value={basisChoice.bench}
+              onChange={(e) => onBasis({ ...basisChoice, bench: e.target.value })}
+            >
+              <option value="default">ตามค่าเดิม (อัตโนมัติ)</option>
+              {(data.availableBenchmarks ?? []).map((b) => (
+                <option key={b.symbol} value={b.symbol}>
+                  {b.symbol} ({b.kind === "total_return" ? "ผลตอบแทนรวม" : "ดัชนีราคา"})
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {data.stock.benchmark.warning && <p className="text-warn">{data.stock.benchmark.warning}</p>}
         <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]">
           <dt className="text-muted">Model</dt>
           <dd>

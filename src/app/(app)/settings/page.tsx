@@ -540,6 +540,13 @@ export default async function SettingsPage() {
             stress_test_portfolio, backtest_portfolio, sync_historical_prices,
             import_prices
           </p>
+          <p className="text-xs text-muted">
+            ชนิดราคาและดัชนี: เครื่องมือที่คำนวณผลตอบแทนรับ <code>returnBasis</code>{" "}
+            (price_return = ราคาปิด, total_return = ราคาปรับปันผล) และ{" "}
+            <code>benchmark</code> (default / auto / สัญลักษณ์ดัชนี) — ถ้าไม่ส่งจะใช้ค่าเริ่มต้นด้านบน
+            (ยกเว้น abnormal trading ที่เลือกอัตโนมัติ) · ผลลัพธ์บอกสิ่งที่ใช้จริงใน{" "}
+            <code>priceBasis</code> และ <code>benchmark</code>
+          </p>
         </div>
       </Section>
 

@@ -17,6 +17,8 @@ const q = rangeQuery.extend({
     ),
   eventHorizon: z.coerce.number().int().min(1).max(60).optional(),
   triSymbol: z.string().trim().min(1).max(40).optional(),
+  returnBasis: z.enum(["auto", "price_return", "total_return"]).optional(),
+  benchmark: z.string().trim().min(1).max(40).optional(),
 });
 
 /** GET ?symbols=PLANB,PTT&from=&to=&notable=&abnormal= — same as MCP scan_abnormal_trading. */

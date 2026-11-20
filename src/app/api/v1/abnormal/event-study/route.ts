@@ -11,6 +11,8 @@ const q = z.object({
   estimationWindow: windowParam.optional(),
   eventWindow: windowParam.optional(),
   triSymbol: z.string().trim().min(1).max(40).optional(),
+  returnBasis: z.enum(["auto", "price_return", "total_return"]).optional(),
+  benchmark: z.string().trim().min(1).max(40).optional(),
 });
 
 /** GET ?symbol=PLANB&eventDate=2026-05-01&model=market — same as MCP run_event_study. */

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-20 — Price basis & benchmark, phase P5 (F8 abnormal trading, F10 data quality, docs)
+- **F8 abnormal trading** (`run_event_study`, `scan_abnormal_trading`, `/abnormal/*`, `/assets/[id]/abnormal`, the asset page's settings panel):
+  - `returnBasis: "auto" | "price_return" | "total_return"` and `benchmark`. `auto` (default) is the previous rule exactly; Settings' default basis is deliberately not read here.
+  - An explicit `total_return` below 95% adjusted-close coverage is `ADJ_COVERAGE` with the day counts — never a silent fallback to closes. In a scan the stock is listed in `skipped` with that reason and the other stocks still scan.
+  - An explicit index whose kind does not match is computed with a warning (`benchmark.warning`).
+  - Responses add `priceBasis` and `benchmark { kind, source, warning }`. `triSymbol` is still accepted (deprecated alias).
+  - The asset page can switch back to automatic when an explicit choice fails.
+- **F10 data quality**:
+  - every index with kind, range and days;
+  - adj_close coverage per asset (3 years);
+  - "ชนิดราคาเริ่มต้น": warns when the default is total_return but held stocks lack adj_close;
+  - "ดัชนีเริ่มต้น": warns when a symbol default index has no data or is older than 7 days.
+- **Docs**: the MCP tool descriptions, OpenAPI query parameters (performance, MPT, abnormal), GPT instructions, the Settings "เชื่อมต่อ Claude" note and `docs/MODEL_DOCUMENTATION.md` §1d (rules, D5, limitations, features without a choice and why).
+- Formula version not bumped: no default result changed (before/after runs of every phase, F8 / F10 included).
+- Checks: `check:price-basis` adds F8 (6.1, ADJ_COVERAGE, BENCHMARK_NOT_FOUND, mismatch warning, scan skip, MCP == REST == service) and F10. New `e2e/price-basis-smoke.mjs` (spec 6.6): pickers change the URL or request body and the summary line; Adjusted Close disabled with the reason for dividend backtests; no horizontal scroll at 375 px.
+
 ## 2026-11-20 — Price basis & benchmark, phase P4 (F4 compare, F5 backtest, F7 momentum)
 - **F5 backtest** (`backtest_portfolio`, REST, page):
   - `returnBasis` now defaults to Settings (request → Settings → price_return), except dividend strategies and `dividendCashflows`, which always use closes + cash dividends (never the Settings default; an explicit total_return there or with `useLots` is still an error).
