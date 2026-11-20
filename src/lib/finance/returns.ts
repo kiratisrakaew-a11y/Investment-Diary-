@@ -85,6 +85,11 @@ export interface ValuePoint {
   value: number;
   /** External net flow into the portfolio on this day (deposit / buy funded externally = +). */
   flow: number;
+  /**
+   * End value used for the return of the period ending here, when it differs from `value` (total-return mode,
+   * PRICE_BASIS_BENCHMARK_SPEC D5). The next period still starts from `value`. Absent = `value`.
+   */
+  returnValue?: number;
 }
 
 /** How external flows are timed within a valuation period. */
@@ -109,7 +114,7 @@ export function periodReturns(points: ValuePoint[], timing: FlowTiming = "start_
   const issues: string[] = [];
   for (let i = 1; i < points.length; i++) {
     const v0 = points[i - 1].value;
-    const v1 = points[i].value;
+    const v1 = points[i].returnValue ?? points[i].value;
     const cf = points[i].flow;
     let base: number;
     let r: number;

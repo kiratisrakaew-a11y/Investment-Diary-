@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-20 — Price basis & benchmark, phase P3 (F1 real portfolio, D5)
+- **F1 `getPerformance(end, data, { returnBasis, benchmark })`** — overview and analytics pages (shared `?basis=…&bench=…` picker with the D5 note), `GET /portfolio/performance?returnBasis=&benchmark=`, MCP `get_performance_metrics` (had no parameters).
+- **D5 — total return without counting dividends twice** (`buildValueSeries(…, { adj, assetIds })`, `ValuePoint.returnValue`):
+  - values, cash, flows, XIRR and P&L stay on closes and real cash (identical between the two bases);
+  - each period's return uses, for holdings with full adjusted closes over the dates they were held, the adj chain (adjₜ/adjₜ₋₁) instead of closes; their recorded dividend cash is an internal transfer on the payment date;
+  - holdings without full adjusted closes stay on closes + recorded dividends and are listed in `priceBasis.fallback` with the reason (never dropped);
+  - dividends the adj chain counted but the ledger lacks are listed in `unrecordedDividends` and warned about (TWR on Adjusted Close is then higher by about D/P).
+- **B2 fixed by choice**: the real portfolio includes dividends under both bases, so `benchmark: "auto"` picks a total-return index; `default` keeps Settings' index and its kind-mismatch warning. The benchmark block adds `basis / wanted / source / warning`; the growth chart names the index and its kind.
+- Numbers: identical with no new option (byte-identical before/after run of `getPerformance()` for two end dates).
+- Tests: spec 6.2 (ก) no dividends, adj = close × c → TWR / σ / VaR / β equal to 1e-12; (ข) recorded dividend → same cumulative TWR, path differs only between ex-date and payment; (ค) unrecorded → higher by ≈ D/P with the warning; plus the exact reinvestment-timing identity when the price moves between ex-date and payment, and values / XIRR unchanged. `check:price-basis` adds the real-ledger version (TEST holding), B2 auto, and MCP == REST == service.
+
 ## 2026-11-20 — Price basis & benchmark, phase P2 (F3, F6, F9, F2)
 - **F3 optimizer / `optimize_portfolio` / `rebalance_portfolio` / `get_investment_universe`.**
   - `loadUniverse` takes `returnBasis` and `benchmark` (request → Settings → price_return / Settings' index).

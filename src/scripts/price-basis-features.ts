@@ -7,7 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createMcpServer } from "../server/mcp";
 import { loadUniverse, optimizePortfolio } from "../server/services/optimizer";
 import { stressTestPortfolio } from "../server/services/stress";
-import { getMptAnalysis } from "../server/services/portfolio";
+import { getMptAnalysis, getPerformance } from "../server/services/portfolio";
 import { editorDefaults } from "../server/services/valuation-defaults";
 import { importPrices } from "../server/services/price-sync";
 import { getSettings, saveSettings } from "../server/services/settings";
@@ -181,6 +181,65 @@ export async function featureChecks(check: Check, days: string[]) {
     check(
       "6.4 F2 total_return: every excluded holding has a reason and is in skipped",
       mT.priceBasis.excluded.every((x) => x.reason && mT.skipped.includes(x.symbol)),
+    );
+
+    // ---------------------------------------------------------------- F1 real portfolio (D5)
+    const f0 = await getPerformance();
+    const f1 = await getPerformance(undefined, undefined, { returnBasis: "price_return", benchmark: "default" });
+    check("6.1 F1 performance: no option == explicit defaults", same(noSource(f0), noSource(f1)));
+    // A TEST holding with full adj_close that goes ex-dividend (1 THB on 50) with no dividend recorded.
+    const n = days.length;
+    const xd = n - 60;
+    const [E] = await db
+      .insert(schema.assets)
+      .values({ symbol: "PBT-E", name: "TEST-LOCAL PBT-E (sample)", assetClass: "thai_stock", priceSource: "manual" })
+      .returning();
+    await db.insert(schema.prices).values(
+      days.map((d, i) => ({ assetId: E.id, date: d, close: i < xd ? 50 : 49, adjClose: i < xd ? 49 : 49 })),
+    );
+    await db.insert(schema.transactions).values([
+      { date: days[n - 200], assetId: null, type: "deposit", price: 5000, memo: "PBT-TEST" },
+      { date: days[n - 200], assetId: E.id, type: "buy", quantity: 100, price: 50, memo: "PBT-TEST" },
+    ]);
+    const fc = await getPerformance(undefined, undefined, { returnBasis: "price_return" });
+    const ft = await getPerformance(undefined, undefined, { returnBasis: "total_return" });
+    check(
+      "F1 total_return: PBT-E on the adj chain; holdings without adj_close fall back to closes with a reason (none dropped)",
+      ft.priceBasis.used === "total_return" &&
+        !ft.priceBasis.fallback.some((x) => x.symbol === "PBT-E") &&
+        ft.priceBasis.fallback.every((x) => x.reason.length > 0) &&
+        ft.priceBasis.excluded.length === 0,
+      JSON.stringify(ft.priceBasis.fallback.map((x) => x.symbol)),
+    );
+    check(
+      "6.2(ค) on the real ledger: unrecorded dividend → listed + warning, TWR(adj) > TWR(close)",
+      (ft.unrecordedDividends ?? []).some((u) => u.symbol === "PBT-E" && u.exDate === days[xd]) &&
+        ft.dataQuality.warnings.some((w) => w.includes("PBT-E")) &&
+        ft.cumulativeReturn > fc.cumulativeReturn,
+    );
+    check(
+      "D5 values / XIRR identical between the two bases",
+      same(ft.valueSeries, fc.valueSeries) && same(ft.xirr, fc.xirr),
+    );
+    await db.insert(schema.transactions).values({ date: days[xd + 15], assetId: E.id, type: "dividend", price: 100, memo: "PBT-TEST" });
+    const ft2 = await getPerformance(undefined, undefined, { returnBasis: "total_return" });
+    check(
+      "6.2(ข) dividend recorded → no longer reported",
+      !(ft2.unrecordedDividends ?? []).some((u) => u.symbol === "PBT-E"),
+    );
+    const fa = await getPerformance(undefined, undefined, { benchmark: "auto" });
+    check(
+      "B2: auto → a total-return index for the real portfolio (no mismatch warning)",
+      fa.benchmark?.symbol === "PBT-TRI3" && fa.benchmark.warning === null && fa.benchmark.kind === "total_return",
+      JSON.stringify(fa.benchmark && { s: fa.benchmark.symbol, w: fa.benchmark.warning }),
+    );
+    const noSeries = (m: Record<string, unknown>) => stable({ ...m, growth: undefined, valueSeries: undefined });
+    const pm = await mcp("get_performance_metrics", { returnBasis: "total_return", benchmark: "auto" });
+    const pr = await rest("portfolio/performance?returnBasis=total_return&benchmark=auto");
+    const ps = await getPerformance(undefined, undefined, { returnBasis: "total_return", benchmark: "auto" });
+    check(
+      "6.5 get_performance_metrics: MCP == REST == service",
+      pm.ok && pr.status === 200 && same(noSeries(pm.data), noSeries(ps as never)) && same(noSeries(pr.data), noSeries(ps as never)),
     );
 
     // ---------------------------------------------------------------- F9 valuation β

@@ -155,7 +155,7 @@ export function BasisSummary({
   benchmark?: {
     symbol: string;
     kind: "price_index" | "total_return";
-    warning: string | null;
+    warning?: string | null;
   } | null;
 }) {
   if (!priceBasis && !benchmark) return null;

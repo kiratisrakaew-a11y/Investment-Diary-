@@ -9,14 +9,16 @@ import {
 } from "@/lib/finance/mpt";
 import { constrainedFrontier } from "@/lib/finance/optimizer";
 import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
-import { asOf, buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TxInput } from "@/lib/finance/portfolio";
+import { asOf, buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TotalReturnMode, type TxInput } from "@/lib/finance/portfolio";
+import { adjAssetsForPortfolio, unrecordedDividends } from "@/lib/finance/total-return-portfolio";
+import { benchmarkReportOf, normalizeBenchmarkRequest } from "@/lib/finance/benchmark-resolve";
+import { resolveBenchmark } from "./benchmarks";
 import { simpleReturns } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import {
   loadAdjPriceHistory,
-  loadBenchmark,
   loadCorporateActionDates,
   loadFxHistory,
   loadPriceHistory,
@@ -98,11 +100,41 @@ function valuationDates(txs: TxInput[], prices: Map<number, [string, number][]>,
   return [...set].filter((d) => d >= start && d <= end).sort();
 }
 
-export async function getPerformance(end = today(), data?: PortfolioData) {
-  const { assetInputs, txs, prices, fx, settings } = data ?? (await loadAll());
-  const bench = await loadBenchmark(settings.benchmarkSymbol);
+export async function getPerformance(
+  end = today(),
+  data?: PortfolioData,
+  opts: { returnBasis?: ReturnBasis; benchmark?: string } = {},
+) {
+  const { assets, assetInputs, txs, prices, fx, settings } = data ?? (await loadAll());
+  // PRICE_BASIS_BENCHMARK_SPEC F1: request → Settings → price_return; benchmark request → Settings → Settings' index.
+  const basisInfo = resolveReturnBasis(opts.returnBasis, settings.defaultReturnBasis ?? null, "price_return");
+  const start = txs.length ? txs.reduce((m, t) => (t.date < m ? t.date : m), txs[0].date) : undefined;
+  const benchRequest = normalizeBenchmarkRequest(opts.benchmark ?? settings.defaultBenchmark);
+  // D5: the real portfolio includes dividends either way, so the matching index is a total-return one (fixes B2
+  // with "auto"); "default" keeps Settings' index, whose kind mismatch metrics.ts already reports.
+  const resolved = await resolveBenchmark({
+    request: benchRequest,
+    wanted: "total_return",
+    from: benchRequest === "default" ? undefined : start,
+    featureDefault: "settings",
+  });
+  const bench = resolved?.series ?? [];
   const dates = valuationDates(txs, prices, bench, end);
-  const series = buildValueSeries(assetInputs, txs, prices, fx, dates);
+
+  let tr: { mode: TotalReturnMode; fallback: { symbol: string; reason: string }[] } | null = null;
+  if (basisInfo.used === "total_return") {
+    const [adj, actions] = await Promise.all([loadAdjPriceHistory(), loadCorporateActionDates()]);
+    const sel = adjAssetsForPortfolio(
+      assets.map((a) => ({ ...assetInputs.find((x) => x.id === a.id)!, assetClass: a.assetClass })),
+      txs,
+      prices,
+      adj,
+      end,
+      (a) => actions.for(a),
+    );
+    tr = { mode: { adj, assetIds: sel.assetIds }, fallback: sel.fallback };
+  }
+  const series = buildValueSeries(assetInputs, txs, prices, fx, dates, tr?.mode);
   const last = series[series.length - 1];
   const metrics = computeMetrics({
     values: series,
@@ -113,7 +145,7 @@ export async function getPerformance(end = today(), data?: PortfolioData) {
     sortinoMar: settings.sortinoMarPct != null ? settings.sortinoMarPct / 100 : null,
     flowTiming: settings.twrFlowTiming,
     riskDates: series.filter((p) => p.carriedPositions === 0).map((p) => p.date),
-    benchmark: bench.length ? { symbol: settings.benchmarkSymbol, series: bench, kind: settings.benchmarkKind } : null,
+    benchmark: bench.length && resolved ? { symbol: resolved.symbol, series: bench, kind: resolved.kind } : null,
   });
   const inferredFlows = series.filter((p) => p.inferredFlow > 0).map((p) => ({ date: p.date, amount: p.inferredFlow }));
   if (inferredFlows.length) {
@@ -121,10 +153,35 @@ export async function getPerformance(end = today(), data?: PortfolioData) {
       `มีเงินฝากที่ระบบอนุมาน ${inferredFlows.length} ครั้ง (รวม ${Math.round(inferredFlows.reduce((a, f) => a + f.amount, 0)).toLocaleString()} บาท) เพราะบันทึกซื้อโดยไม่มีเงินสด — TWR/XIRR ถือเป็นเงินลงทุนจากภายนอก`,
     );
   }
+  let unrecorded: ReturnType<typeof unrecordedDividends> = [];
+  if (tr) {
+    const symbolOf = new Map(assetInputs.map((a) => [a.id, a.symbol]));
+    unrecorded = unrecordedDividends(series, txs, (id) => symbolOf.get(id) ?? String(id), end);
+    if (unrecorded.length)
+      metrics.dataQuality.warnings.push(
+        `ราคาปรับปันผลนับปันผลที่ไม่ได้บันทึก ${unrecorded.length} ครั้ง (${unrecorded
+          .slice(0, 6)
+          .map((u) => `${u.symbol} XD ${u.exDate}${u.pending ? " ยังไม่ถึงกำหนดจ่าย?" : ""}`)
+          .join(", ")}${unrecorded.length > 6 ? " …" : ""}) — TWR แบบ Adjusted Close จึงสูงกว่าแบบ Close ราวปันผลนั้น · บันทึกเงินปันผลที่ได้รับเพื่อให้สองแบบตรงกัน`,
+      );
+  }
+  const info = benchmarkReportOf(resolved);
   return {
     ...metrics,
+    // The §5 benchmark block (basis / wanted / source / warning) merged into the statistics block.
+    benchmark: metrics.benchmark
+      ? {
+          ...metrics.benchmark,
+          basis: info?.basis ?? (metrics.benchmark.kind === "total_return" ? ("total_return" as const) : ("price" as const)),
+          wanted: "total_return" as const,
+          source: info?.source ?? ("default" as const),
+          warning: info?.warning ?? null,
+        }
+      : null,
     inferredFlows,
     valueSeries: series.map((p) => ({ date: p.date, value: p.value, contributed: p.contributed })),
+    priceBasis: priceBasisReport(basisInfo, tr?.fallback ?? [], []),
+    ...(tr ? { unrecordedDividends: unrecorded } : {}),
   };
 }
 

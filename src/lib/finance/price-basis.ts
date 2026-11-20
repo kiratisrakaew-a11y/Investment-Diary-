@@ -19,6 +19,10 @@ export const RETURN_BASIS_SHORT: Record<ReturnBasis, string> = {
   total_return: "Adjusted Close",
 };
 
+/** Shown under the F1 picker (D5): what each basis means for the real portfolio. */
+export const PERF_BASIS_NOTE =
+  "Close = ปันผลเข้าเงินสดตามวันจ่ายจริง · Adjusted = ปันผลถูกนับตั้งแต่วัน XD และปันผลที่ไม่ได้บันทึกจะถูกนับด้วย";
+
 export type BasisSource = "request" | "settings" | "feature_default";
 
 export interface ResolvedReturnBasis {

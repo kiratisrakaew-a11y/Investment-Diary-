@@ -6,8 +6,9 @@ import { compact, downsample } from "@/lib/explain-data";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { StressPanel } from "@/components/StressPanel";
 import { listBenchmarks } from "@/server/services/benchmarks";
-import { BasisSummary } from "@/components/BasisBenchmarkPicker";
-import { isReturnBasis } from "@/lib/finance/price-basis";
+import { BasisBenchmarkPicker, BasisSummary } from "@/components/BasisBenchmarkPicker";
+import { BENCHMARK_KIND_LABEL, isReturnBasis, PERF_BASIS_NOTE } from "@/lib/finance/price-basis";
+import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
 
 const TIMING_LABEL = {
   start_of_day: "เงินเข้า/ออกต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1",
@@ -40,7 +41,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   // PRICE_BASIS_BENCHMARK_SPEC: ?basis / ?bench override Settings for this page.
   const returnBasis = isReturnBasis(q.basis) ? q.basis : data.settings.defaultReturnBasis;
   const benchmark = q.bench?.trim() || data.settings.defaultBenchmark;
-  const [perf, mpt] = await Promise.all([getPerformance(undefined, data), getMptAnalysis(undefined, data, { returnBasis })]);
+  let benchError: BenchmarkError | null = null;
+  const [perf, mpt] = await Promise.all([
+    getPerformance(undefined, data, { returnBasis, benchmark }).catch((e) => {
+      if (!(e instanceof BenchmarkError)) throw e;
+      benchError = e;
+      return getPerformance(undefined, data, { returnBasis, benchmark: "default" });
+    }),
+    getMptAnalysis(undefined, data, { returnBasis }),
+  ]);
+  const be = benchError as BenchmarkError | null;
   const navNow = perf.valueSeries[perf.valueSeries.length - 1]?.value ?? 0;
 
   // Values sent to the "อธิบาย" buttons — the same figures each section renders.
@@ -72,6 +82,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             : "ยังไม่มีข้อมูล"
         }
       />
+
+      <div className="card space-y-2">
+        <BasisBenchmarkPicker mode="query" value={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} note={PERF_BASIS_NOTE} />
+        {be && <p className="text-xs text-neg">{`${be.message} [${be.code}] — ${be.issue.suggestion} · แสดงผลกับดัชนีตามค่าเดิมแทน`}</p>}
+        <BasisSummary priceBasis={perf.priceBasis} benchmark={perf.benchmark} />
+      </div>
 
       <p className="text-xs text-muted">
         สมมติฐานการคำนวณ: TWR — {TIMING_LABEL[perf.flowTiming]} · XIRR ใช้ ACT/365 · ความผันผวน/Sharpe ใช้ผลตอบแทนส่วนเกินรายงวด × √N โดย N มาจากข้อมูลจริง (ไม่ใช่ 252 ตายตัว) ·
@@ -223,7 +239,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       </div>
 
       <Section title="ผลตอบแทนสะสม (TWR) เทียบดัชนี" explain={{ data: compact({ ดัชนี: perf.benchmark?.symbol, การเติบโตของเงิน1บาท: downsample(perf.growth, 16) }) }}>
-        <GrowthChart data={perf.growth} benchmark={b?.symbol} />
+        <GrowthChart data={perf.growth} benchmark={b ? `${b.symbol} (${BENCHMARK_KIND_LABEL[b.kind]})` : undefined} />
       </Section>
 
       <Section

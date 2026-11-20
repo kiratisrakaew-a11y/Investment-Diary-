@@ -520,21 +520,56 @@ export type SeriesPoint = ValuePoint & {
   inferredFlow: number;
   /** Held positions valued with a price dated earlier than this date (carried / stale in the series). */
   carriedPositions: number;
+  /** Total-return mode only: per-asset dividend accrued on this date by the adj_close chain (THB). */
+  trAccruals?: { assetId: number; amount: number; base: number }[];
+  /** Total-return mode only: recorded dividend cash of adj-measured assets treated as an internal transfer (THB). */
+  trDividends?: { assetId: number; amount: number }[];
 };
+
+/**
+ * PRICE_BASIS_BENCHMARK_SPEC D5 — total return of the real portfolio without counting dividends twice.
+ * Values, cash, flows, XIRR and P&L stay on closes and real cash. Only the end value used for each period's
+ * return changes (`returnValue`): for assets in `assetIds`, over (d₋₁, d] the held quantity earns
+ * adjₜ/adjₜ₋₁ − 1 instead of closeₜ/closeₜ₋₁ − 1, and their recorded dividend cash on its payment date is an
+ * internal transfer (the adj chain already counted it on the ex-date).
+ */
+export interface TotalReturnMode {
+  adj: PriceHistory;
+  assetIds: Set<number>;
+}
 
 /**
  * Daily valuation series (THB) on each date in `dates` (ascending), with the
  * external flow that occurred that day — the input for TWR. Inferred flows are
  * included in `flow` and also reported separately.
  */
-export function buildValueSeries(assets: AssetInput[], txs: TxInput[], prices: PriceHistory, fx: FxHistory, dates: string[]): SeriesPoint[] {
+export function buildValueSeries(assets: AssetInput[], txs: TxInput[], prices: PriceHistory, fx: FxHistory, dates: string[], tr?: TotalReturnMode): SeriesPoint[] {
   const state = newState();
   const sorted = sortTx(dedupe(txs, state.issues));
   const byId = new Map(assets.map((a) => [a.id, a]));
   const symbols = new Map(assets.map((a) => [a.id, a.symbol]));
   let i = 0;
   const out: SeriesPoint[] = [];
+  let prev: string | null = null;
   for (const d of dates) {
+    // D5: accrual on positions held at the end of the previous date (before today's trades).
+    const accruals: { assetId: number; amount: number; base: number }[] = [];
+    if (tr && prev) {
+      for (const [id, l] of state.lots) {
+        if (!(l.qty > 0) || !tr.assetIds.has(id)) continue;
+        const a = byId.get(id);
+        const p0 = asOf(prices.get(id), prev);
+        const p1 = asOf(prices.get(id), d);
+        const a0 = asOf(tr.adj.get(id), prev);
+        const a1 = asOf(tr.adj.get(id), d);
+        if (!a || p0 == null || p1 == null || a0 == null || a1 == null || !(p0 > 0) || !(a0 > 0)) continue;
+        const fxRate = a.currency === "USD" ? (asOf(fx, d) ?? l.lastTxFx) : 1;
+        const base = l.qty * fxRate * p0;
+        const amount = base * (a1 / a0 - p1 / p0);
+        if (amount !== 0) accruals.push({ assetId: id, amount, base });
+      }
+    }
+    const dividends: { assetId: number; amount: number }[] = [];
     let flow = 0;
     let inferred = 0;
     while (i < sorted.length && sorted[i].date <= d) {
@@ -543,6 +578,8 @@ export function buildValueSeries(assets: AssetInput[], txs: TxInput[], prices: P
       const r = apply(state, tx, symbols);
       flow += r.flow;
       inferred += r.inferred;
+      if (tr && tx.type === "dividend" && tx.assetId != null && tr.assetIds.has(tx.assetId))
+        dividends.push({ assetId: tx.assetId, amount: tx.price * tx.fxRate });
     }
     let value = state.cash;
     let carried = 0;
@@ -554,7 +591,15 @@ export function buildValueSeries(assets: AssetInput[], txs: TxInput[], prices: P
         if (a.assetClass !== "cash" && info.priceDate !== d) carried++;
       }
     }
-    out.push({ date: d, value, flow, contributed: state.netContributed, inferredFlow: inferred, carriedPositions: carried });
+    const point: SeriesPoint = { date: d, value, flow, contributed: state.netContributed, inferredFlow: inferred, carriedPositions: carried };
+    if (tr) {
+      const adjust = accruals.reduce((x, y) => x + y.amount, 0) - dividends.reduce((x, y) => x + y.amount, 0);
+      point.returnValue = value + adjust;
+      point.trAccruals = accruals;
+      point.trDividends = dividends;
+    }
+    out.push(point);
+    prev = d;
   }
   return out;
 }

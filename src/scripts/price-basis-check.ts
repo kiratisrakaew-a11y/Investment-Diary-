@@ -63,6 +63,8 @@ async function cleanup() {
     await db.delete(schema.assets).where(eq(schema.assets.id, id));
   }
   await db.delete(schema.dividendEvents).where(like(schema.dividendEvents.symbol, "PBT-%"));
+  // Cash movements of the TEST holdings (asset rows cascade; deposits have no asset).
+  await db.delete(schema.transactions).where(like(schema.transactions.memo, "PBT-%"));
   await db.delete(schema.benchmarkPrices).where(like(schema.benchmarkPrices.symbol, "PBT-%"));
   await db.delete(schema.benchmarkMeta).where(like(schema.benchmarkMeta.symbol, "PBT-%"));
   return ids.length;

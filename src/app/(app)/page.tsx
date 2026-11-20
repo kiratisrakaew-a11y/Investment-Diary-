@@ -8,12 +8,47 @@ import { NoteCard } from "@/components/NoteCard";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { compact, downsample } from "@/lib/explain-data";
+import { BasisBenchmarkPicker, BasisSummary } from "@/components/BasisBenchmarkPicker";
+import { listBenchmarks } from "@/server/services/benchmarks";
+import { BENCHMARK_KIND_LABEL, isReturnBasis, PERF_BASIS_NOTE } from "@/lib/finance/price-basis";
+import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ basis?: string; bench?: string }> }) {
+  const q = await searchParams;
   // One load of prices / ledger / FX shared by the three calculations (was loaded three times).
   const data = await loadPortfolioData();
-  const [summary, allocation, perf, notes] = await Promise.all([getPortfolioSummary(undefined, data), getAllocation(undefined, data), getPerformance(undefined, data), listNotes({ limit: 4 })]);
   const settings = data.settings;
+  // PRICE_BASIS_BENCHMARK_SPEC F1: ?basis / ?bench override Settings (same values as the analytics page).
+  const returnBasis = isReturnBasis(q.basis) ? q.basis : settings.defaultReturnBasis;
+  const benchmark = q.bench?.trim() || settings.defaultBenchmark;
+  const [summary, allocation, perfOrError, notes, benchmarks] = await Promise.all([
+    getPortfolioSummary(undefined, data),
+    getAllocation(undefined, data),
+    getPerformance(undefined, data, { returnBasis, benchmark }).catch((e) => {
+      if (e instanceof BenchmarkError) return e;
+      throw e;
+    }),
+    listNotes({ limit: 4 }),
+    listBenchmarks(),
+  ]);
+  const picker = (
+    <div className="card space-y-2">
+      <BasisBenchmarkPicker mode="query" value={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} note={PERF_BASIS_NOTE} />
+      {perfOrError instanceof BenchmarkError ? (
+        <p className="text-xs text-neg">{`${perfOrError.message} [${perfOrError.code}] — ${perfOrError.issue.suggestion}`}</p>
+      ) : (
+        <BasisSummary priceBasis={perfOrError.priceBasis} benchmark={perfOrError.benchmark} />
+      )}
+    </div>
+  );
+  if (perfOrError instanceof BenchmarkError)
+    return (
+      <>
+        <PageHeader title="ภาพรวมพอร์ต" />
+        {picker}
+      </>
+    );
+  const perf = perfOrError;
 
   if (summary.positions.length === 0 && summary.cashThb === 0) {
     return (
@@ -52,10 +87,11 @@ export default async function Dashboard() {
     <>
       <PageHeader
         title="ภาพรวมพอร์ต"
-        subtitle={perf.startDate ? `ตั้งแต่ ${perf.startDate} · Rf ${settings.riskFreeRate}%${settings.rfSource ? ` (${settings.rfSource})` : " (ค่าตัวอย่าง)"} · เทียบ ${settings.benchmarkSymbol}` : undefined}
+        subtitle={perf.startDate ? `ตั้งแต่ ${perf.startDate} · Rf ${settings.riskFreeRate}%${settings.rfSource ? ` (${settings.rfSource})` : " (ค่าตัวอย่าง)"} · เทียบ ${perf.benchmark?.symbol ?? settings.benchmarkSymbol}` : undefined}
         explain={{ topic: "ตัวเลขสรุปพอร์ต", data: kpiData, hint: "TWR วัดฝีมือการลงทุนตัดผลฝาก/ถอน; XIRR คือผลตอบแทนจริงของเงินที่รวมจังหวะเติมเงิน; Sharpe = ผลตอบแทนส่วนเกินต่อความผันผวน" }}
         action={<Link href="/data-quality" className="btn-ghost text-xs">คุณภาพข้อมูล →</Link>}
       />
+      {picker}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Stat
@@ -147,7 +183,7 @@ export default async function Dashboard() {
             hint: "Beta = พอร์ตขยับแรงแค่ไหนเมื่อตลาดขยับ 1%; Alpha = ผลตอบแทนส่วนเกินที่อธิบายด้วยตลาดไม่ได้ (มี standard error)",
           }}
           action={<Link href="/analytics" className="text-xs text-accent">วิเคราะห์เพิ่ม →</Link>}>
-          <GrowthChart data={perf.growth} benchmark={perf.benchmark?.symbol} />
+          <GrowthChart data={perf.growth} benchmark={perf.benchmark ? `${perf.benchmark.symbol} (${BENCHMARK_KIND_LABEL[perf.benchmark.kind]})` : undefined} />
           {perf.benchmark && (
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
               <div>
@@ -168,7 +204,7 @@ export default async function Dashboard() {
             </div>
           )}
           {perf.benchmark?.kind === "price_index" && (
-            <p className="mt-2 text-xs text-muted">{perf.benchmark.symbol} เป็นดัชนีราคา (ไม่รวมปันผล) แต่พอร์ตรวมปันผล — การเทียบจึงเอียงเข้าข้างพอร์ต</p>
+            <p className="mt-2 text-xs text-muted">เลือกดัชนี “อัตโนมัติ” ที่หัวหน้าเพื่อเทียบกับดัชนีผลตอบแทนรวม (ต้องนำเข้า SET TRI ก่อน)</p>
           )}
         </Section>
         <Section title="บันทึกล่าสุด" className="lg:col-span-2" action={<Link href="/journal" className="text-xs text-accent">ทั้งหมด →</Link>}>

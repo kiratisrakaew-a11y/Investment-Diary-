@@ -543,11 +543,14 @@ export function createMcpServer() {
       title: "Performance metrics",
       description:
         "Time-weighted and money-weighted (XIRR) returns, volatility, max drawdown, historical VaR/ES at 95% and 99% (varTable) with Kupiec/Christoffersen coverage backtests (varBacktest), risk premium, Sharpe, " +
-        "Sortino, and vs. benchmark: beta, CAPM expected return, Jensen's alpha, Treynor, information ratio.",
+        "Sortino, and vs. benchmark: beta, CAPM expected return, Jensen's alpha, Treynor, information ratio. " +
+        "returnBasis total_return: holdings with full adjusted closes earn the adj chain (dividends counted from the ex-date; recorded dividend cash of those holdings is an internal transfer, never counted twice); values, cash, XIRR and P&L stay on closes; holdings without adjusted closes stay on closes + recorded dividends (priceBasis.fallback). Dividends the adj chain counted but the ledger lacks are listed in unrecordedDividends. " +
+        'benchmark "auto" picks a total-return index (the portfolio includes dividends under both bases).',
+      inputSchema: basisBenchmarkShape,
       annotations: { readOnlyHint: true },
     },
-    safe(async () => {
-      const { growth: _g, valueSeries: _v, ...m } = await getPerformance();
+    safe(async ({ returnBasis, benchmark }) => {
+      const { growth: _g, valueSeries: _v, ...m } = await getPerformance(undefined, undefined, { returnBasis, benchmark });
       return m;
     }),
   );
