@@ -60,6 +60,13 @@ export const blackLittermanInput = z.object({
     .optional()
     .describe("τ scaling the prior uncertainty (default 0.05)"),
   views: z.array(view).max(20).default([]),
+  viewsFromValuations: z
+    .boolean()
+    .optional()
+    .describe(
+      "Add absolute views from saved valuations (latest per method, median fair value; view = FV / latest price − 1, plus trailing dividend yield on total_return; confidence from the bear–bull scenario width or the spread between methods). Valuations older than valuationMaxAgeDays are skipped with a warning. In a backtest only valuations saved before each rebalance are used",
+    ),
+  valuationMaxAgeDays: z.number().int().min(1).max(730).optional().describe("Default 90"),
   posteriorCovariance: z
     .boolean()
     .optional()
@@ -120,10 +127,10 @@ export const optimizeInput = z
       'Index for β / CAPM expected returns: "default" = Settings\' index (as before; warns when its kind does not match the basis), "auto" = TRI for total_return / price index for price_return, or a stored index symbol (SETTRI, ^SET.BK …). Omit = Settings default. The result\'s benchmark says which index and kind were used',
     ),
     returnMethod: z
-      .enum(["historical", "capm", "blend", "black_litterman"])
+      .enum(["historical", "capm", "blend", "shrinkage", "black_litterman"])
       .optional()
       .describe(
-        "How expected returns are estimated (default blend). black_litterman needs blackLitterman.marketWeights",
+        "How expected returns are estimated (default blend). blend = w·historical + (1 − w)·CAPM with w = 0.5·min(1, years/3) — under 3 years of data CAPM weighs more (stated in warnings); shrinkage = Bayes–Stein toward CAPM; Settings muCapPct caps |μ − CAPM| for history-based methods (before / after in warnings). black_litterman needs blackLitterman.marketWeights (optionally viewsFromValuations)",
       ),
     blackLitterman: blackLittermanInput.optional(),
     constraints: constraintsInput.optional(),
@@ -220,6 +227,14 @@ export const optimizeInput = z
       .optional()
       .describe(
         "Return sampling on the common calendar: daily or the last actual observation per week / month (no fill); annualization uses the observed periods per year. Omitted = daily, or weekly when the universe mixes Thai-market closes with US-time closes (USD assets, world gold) — stated in a note",
+      ),
+    dividendWithholding: z
+      .number()
+      .min(0)
+      .max(0.5)
+      .optional()
+      .describe(
+        "With returnBasis total_return: measure stocks on closes + cash dividends × (1 − rate) — net of withholding tax (Thai individuals: 0.10) — instead of the provider's gross adjusted closes; an event's own withholdingTaxRate wins. returnBasisByAsset shows net_dividends",
       ),
     historyPolicy: z
       .enum(["common", "drop_short", "pairwise"])

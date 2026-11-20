@@ -1,4 +1,4 @@
-import { loadUniverse } from "@/server/services/optimizer";
+import { loadUniverse, universeYears } from "@/server/services/optimizer";
 import { OptimizerClient } from "@/components/OptimizerClient";
 import { OptimizerTabs } from "@/components/OptimizerTabs";
 import { ModelComparisonClient } from "@/components/ModelComparisonClient";
@@ -81,6 +81,8 @@ export default async function OptimizerPage({
                 rf={u.riskFree}
                 rfInfo={u.riskFreeInfo}
                 basis={basis}
+                years={universeYears(u)}
+                muCap={settings.muCapPct != null ? settings.muCapPct / 100 : null}
                 erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
             }
             comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} basis={basis} benchmarks={benchmarks} />}

@@ -34,6 +34,7 @@ export async function getSettings() {
       dividendPaymentLagDays: 21 as number | null,
       defaultReturnBasis: "price_return" as "price_return" | "total_return",
       defaultBenchmark: "default" as string,
+      muCapPct: null as number | null,
     }
   );
 }
@@ -54,6 +55,7 @@ export async function saveSettings(input: {
   dividendPaymentLagDays?: number | null;
   defaultReturnBasis?: "price_return" | "total_return";
   defaultBenchmark?: string;
+  muCapPct?: number | null;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
@@ -76,6 +78,7 @@ export async function saveSettings(input: {
     dividendPaymentLagDays: current.dividendPaymentLagDays ?? null,
     defaultReturnBasis: current.defaultReturnBasis,
     defaultBenchmark: current.defaultBenchmark,
+    muCapPct: current.muCapPct ?? null,
     ...defined,
   });
   await getDb()

@@ -303,6 +303,8 @@ export async function saveSettingsAction(
           | "total_return"
           | undefined) ?? undefined,
       defaultBenchmark: str(f, "defaultBenchmark") ?? undefined,
+      // Empty = no cap on |μ − CAPM|.
+      muCapPct: f.has("muCapPct") ? (num(f, "muCapPct") ?? null) : undefined,
     });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {

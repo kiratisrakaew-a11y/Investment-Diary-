@@ -6,6 +6,7 @@ import { z } from "zod";
 import { benchmarkField } from "@/server/basis-schema";
 import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
 import { getSettings } from "./settings";
+import { blendNote } from "@/lib/finance/mu-estimate";
 import {
   COMPARISON_MODELS,
   compareModels,
@@ -63,7 +64,7 @@ export const modelComparisonInput = z.object({
   minWeight: z.number().min(0).max(1).default(0),
   maxWeight: z.number().min(0).max(1).default(1),
   returnMethod: z
-    .enum(["historical", "capm", "blend"])
+    .enum(["historical", "capm", "blend", "shrinkage"])
     .default(DEFAULT_RETURN_METHOD)
     .describe(
       "μ estimate (used by max_sharpe and by the ex-ante numbers of every model)",
@@ -141,6 +142,7 @@ export async function comparePortfolioModels(
     bounds: { min: x.minWeight, max: x.maxWeight },
     covMethod: x.covMethod,
     returnMethod: x.returnMethod,
+    muCap: d.settings.muCapPct != null ? d.settings.muCapPct / 100 : null,
     costs: d.costs,
     lots: Object.fromEntries(
       d.pool.map((a) => [a.symbol, lotFor(d.costs, a.assetClass, a.lotSize)]),
@@ -179,7 +181,12 @@ export async function comparePortfolioModels(
         }
       : null,
     priceBasis: priceBasisReport(basisInfo, d.basisFallback, d.basisExcluded),
-    warnings: [...d.dataWarnings, ...r.warnings],
+    warnings: [
+      ...d.dataWarnings,
+      // P1-7: the walk-forward / split windows are short — say how much blend leans on CAPM.
+      ...(x.returnMethod === "blend" ? [blendNote(x.windowDays / d.obsPerYear)].filter((n): n is string => !!n) : []),
+      ...r.warnings,
+    ],
     limitations: [
       "Survivorship bias: ใช้เฉพาะสินทรัพย์ที่อยู่ในแอปวันนี้ — ผลอาจดีกว่าความเป็นจริง",
       x.returnBasis === "total_return"

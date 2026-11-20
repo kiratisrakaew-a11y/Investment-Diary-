@@ -67,6 +67,14 @@ import {
 import { getSettings, getYieldCurve } from "./settings";
 import { THAI_GOLD_SYMBOL } from "@/lib/prices/gold";
 import { resolveBenchmark } from "./benchmarks";
+import { loadSavedValuations, trailingDividends, viewsAt } from "./bl-views";
+import {
+  bayesSteinMu,
+  blendMu,
+  blendNote,
+  capMu,
+  shrinkageNote,
+} from "@/lib/finance/mu-estimate";
 import {
   benchmarkReportOf,
   normalizeBenchmarkRequest,
@@ -148,6 +156,45 @@ export interface OptimizerUniverse {
  * and the covariance matrix. Default basis: price return (closes); total_return uses the
  * provider's adjusted closes and excludes assets without full coverage.
  */
+/** Cash dividend events per symbol on the latest share basis, with their own withholding rate (A6). */
+async function netDividendEvents() {
+  const { listDividendEvents, splitsBySymbol, toEventInput } = await import("./dividends");
+  const { dpsLatestBasis } = await import("@/lib/finance/dividend-metrics");
+  const [rows, splits] = await Promise.all([listDividendEvents(), splitsBySymbol()]);
+  const events = new Map<string, { exDate: string; dps: number; withholding: number | null }[]>();
+  for (const r of rows) {
+    const e = toEventInput(r);
+    if (!e.exDate || e.cashOrStock === "stock" || e.kind === "indicated_annual") continue;
+    const list = events.get(r.symbol) ?? [];
+    list.push({
+      exDate: e.exDate,
+      dps: dpsLatestBasis(e, splits[r.symbol] ?? []),
+      withholding: (r as { withholdingTaxRate?: number | null }).withholdingTaxRate ?? null,
+    });
+    events.set(r.symbol, list);
+  }
+  return { events };
+}
+
+/** Views from valuations saved up to today, priced at the latest stored close (P1-7). */
+async function valuationViewsNow(symbols: string[], totalReturn: boolean, maxAgeDays?: number) {
+  const [saved, prices, assets] = await Promise.all([loadSavedValuations(symbols), loadPriceHistory(), listAssets()]);
+  const today_ = today();
+  const divs = await trailingDividends(symbols, new Date(Date.parse(today_) - 366 * 86_400_000).toISOString().slice(0, 10), today_);
+  const idOf = new Map(assets.map((a) => [a.symbol, a.id]));
+  const priceAt = (s: string, d: string) => {
+    const series = prices.get(idOf.get(s) ?? -1);
+    if (!series?.length) return null;
+    let v: number | null = null;
+    for (const [pd, p] of series) {
+      if (pd > d) break;
+      v = p;
+    }
+    return v;
+  };
+  return viewsAt(symbols, saved, divs, priceAt, today_, { totalReturn, maxAgeDays });
+}
+
 /** Where an asset's close is struck: the Thai market or a US-time price (USD assets, world gold). */
 function marketOf(a: { currency: string; assetClass: string; providerSymbol?: string | null }): "TH" | "US" {
   if (a.currency === "USD") return "US";
@@ -213,6 +260,11 @@ export async function loadUniverse(
      * and μ from each asset's own window, still aligned on the common calendar for scenarios and β.
      */
     historyPolicy?: "common" | "drop_short" | "pairwise";
+    /**
+     * MPT_FIX_SPEC P0-A6 (total_return only): measure stocks on closes + cash dividends × (1 − tax) instead of
+     * adjusted closes; an event's own withholdingTaxRate wins. Omitted = gross adjusted closes (as before).
+     */
+    dividendWithholding?: number;
     riskFree?: RiskFreeRequest;
     frequency?: SampleFrequency;
     bond?: { horizonYears?: number; rateShiftBp?: number };
@@ -240,6 +292,8 @@ export async function loadUniverse(
   ]);
   const actions =
     basis === "total_return" ? await loadCorporateActionDates() : null;
+  const wht = basis === "total_return" ? opts.dividendWithholding : undefined;
+  const netDivs = wht != null ? await netDividendEvents() : null;
   const returnBasisByAsset: Record<string, AssetReturnBasis> = {};
   const basisNotes: string[] = [];
   const basisById = new Map<number, AssetReturnBasis>();
@@ -340,6 +394,24 @@ export async function loadUniverse(
             close,
             adjClose: adjMap?.get(date) ?? null,
           }));
+          // A6: stocks on closes + cash dividends net of withholding tax.
+          if (netDivs && (a.assetClass === "thai_stock" || a.assetClass === "us_stock")) {
+            const evs = (netDivs.events.get(a.symbol) ?? []).filter((e) => e.exDate > window[0][0] && e.exDate <= window[window.length - 1][0]);
+            basisById.set(a.id, evs.length ? "net_dividends" : "close_no_dividend");
+            return buildLevelSeries({
+              label: a.symbol,
+              observations,
+              basis: "total_return",
+              totalReturnSource: "distributions",
+              distributions: evs.map((e) => ({
+                exDate: e.exDate,
+                amount: e.dps * (1 - (e.withholding ?? wht!)),
+              })),
+              source: "close + dividend events",
+              currency: a.currency,
+              fx,
+            });
+          }
           // Total return per asset class (MPT A3): adj_close, or the close where it already is the total return.
           const src =
             basis === "total_return"
@@ -406,6 +478,10 @@ export async function loadUniverse(
     return true;
   });
 
+  if (netDivs)
+    basisNotes.push(
+      `ผลตอบแทนรวมสุทธิภาษีปันผล: หุ้นใช้ราคาปิด + เงินปันผล × (1 − ${(wht! * 100).toFixed(0)}%) (event ที่ระบุอัตราภาษีใช้อัตรานั้น) แทนราคาปรับปันผล (gross)`,
+    );
   const empty: OptimizerUniverse = {
     ok: false,
     from: null,
@@ -649,7 +725,7 @@ function bondDuration(
   }
 }
 
-export type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
+export type ReturnMethod = "historical" | "capm" | "blend" | "shrinkage" | "black_litterman";
 
 export type BondReturnMethod = "same_as_other" | "yield_horizon";
 
@@ -659,20 +735,61 @@ export function expectedReturns(
   overrides: Record<string, number> = {},
   bondMethod: BondReturnMethod = "same_as_other",
 ) {
-  return u.assets.map((a) => {
+  return expectedReturnsDetailed(u, method, overrides, bondMethod).mu;
+}
+
+/** Years of data behind the universe's μ (common calendar). */
+export const universeYears = (u: Pick<OptimizerUniverse, "from" | "to">) =>
+  u.from && u.to ? (Date.parse(u.to) - Date.parse(u.from)) / (365 * 86_400_000) : 0;
+
+/**
+ * μ per asset (MPT_FIX_SPEC P1-7): overrides and bond yield-horizon returns win; otherwise
+ * historical / CAPM / blend (CAPM-heavier under 3 years) / shrinkage (Bayes–Stein toward CAPM), then the
+ * optional |μ − CAPM| cap (Settings muCapPct) on the history-based methods.
+ */
+export function expectedReturnsDetailed(
+  u: OptimizerUniverse,
+  method: ReturnMethod,
+  overrides: Record<string, number> = {},
+  bondMethod: BondReturnMethod = "same_as_other",
+  muCap: number | null = null,
+) {
+  const years = universeYears(u);
+  const hist = u.assets.map((a) => a.historicalReturn);
+  const capm = u.assets.map((a) => a.capmReturn ?? a.historicalReturn);
+  const notes: string[] = [];
+  let base: number[];
+  if (method === "capm" || method === "black_litterman") base = capm;
+  else if (method === "blend") {
+    base = blendMu(hist, capm, years);
+    const n = blendNote(years);
+    if (n) notes.push(n);
+  } else if (method === "shrinkage") {
+    const bs = bayesSteinMu(hist, capm, u.cov, years);
+    base = bs.mu;
+    notes.push(shrinkageNote(bs.delta));
+  } else base = hist;
+  const fixed = u.assets.map(
+    (a) =>
+      overrides[a.symbol] != null ||
+      (bondMethod === "yield_horizon" && a.assetClass === "bond" && !!a.bondExpected?.ok),
+  );
+  const capped =
+    method === "capm" || method === "black_litterman"
+      ? { mu: base, adjustments: [] }
+      : capMu(u.assets.map((a) => a.symbol), base, capm, muCap, fixed);
+  if (capped.adjustments.length)
+    notes.push(
+      `μ ถูกจำกัดไม่ให้ห่าง CAPM เกิน ${((muCap ?? 0) * 100).toFixed(1)}% ต่อปี: ${capped.adjustments.map((x) => `${x.symbol} ${(x.before * 100).toFixed(1)}% → ${(x.after * 100).toFixed(1)}%`).join(", ")}`,
+    );
+  const mu = u.assets.map((a, i) => {
     const o = overrides[a.symbol];
     if (o != null) return o;
-    if (
-      bondMethod === "yield_horizon" &&
-      a.assetClass === "bond" &&
-      a.bondExpected?.ok
-    )
+    if (bondMethod === "yield_horizon" && a.assetClass === "bond" && a.bondExpected?.ok)
       return a.bondExpected.expectedReturn;
-    const capm = a.capmReturn ?? a.historicalReturn;
-    if (method === "capm" || method === "black_litterman") return capm;
-    if (method === "blend") return 0.5 * a.historicalReturn + 0.5 * capm;
-    return a.historicalReturn;
+    return capped.mu[i];
   });
+  return { mu, notes, adjustments: capped.adjustments };
 }
 
 export interface OptimizeParams {
@@ -693,6 +810,8 @@ export interface OptimizeParams {
   covMethod?: "sample" | "ledoit_wolf";
   blackLitterman?: {
     marketWeights: Record<string, number>;
+    viewsFromValuations?: boolean;
+    valuationMaxAgeDays?: number;
     marketRiskAversion?: number;
     tau?: number;
     views?: BlView[];
@@ -703,6 +822,7 @@ export interface OptimizeParams {
   /** β / CAPM index: "default" | "auto" | symbol (PRICE_BASIS_BENCHMARK_SPEC D2). */
   benchmark?: string;
   historyPolicy?: "common" | "drop_short" | "pairwise";
+  dividendWithholding?: number;
   constraints?: ConstraintsInput;
   /** risk_parity: budget by symbol (normalized; default equal). */
   riskBudgets?: Record<string, number>;
@@ -727,6 +847,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     returnBasis: p.returnBasis,
     benchmark: p.benchmark,
     historyPolicy: p.historyPolicy,
+    dividendWithholding: p.dividendWithholding,
     riskFree: p.riskFree,
     frequency: p.frequency,
     bond: { horizonYears: p.bondHorizonYears, rateShiftBp: p.bondRateShiftBp },
@@ -737,9 +858,17 @@ export async function optimizePortfolio(p: OptimizeRequest) {
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
   const method = p.returnMethod ?? DEFAULT_RETURN_METHOD;
   const bondMethod = p.bondReturnMethod ?? "same_as_other";
-  let mu = expectedReturns(u, method, p.overrides, bondMethod);
+  const settings = await getSettings();
+  const muCap = settings.muCapPct != null ? settings.muCapPct / 100 : null;
+  const est = expectedReturnsDetailed(u, method, p.overrides, bondMethod, muCap);
+  let mu = est.mu;
   let cov = baseCov;
-  const extraWarnings: string[] = [];
+  const extraWarnings: string[] = [...est.notes];
+  // MPT_FIX_SPEC P1-8: CAPM-based μ with an illustrative ERP must say so.
+  if (method !== "historical" && !settings.erpSource)
+    extraWarnings.push(
+      `ERP ${(u.equityRiskPremium * 100).toFixed(1)}% เป็นค่าตัวอย่าง (ไม่มีแหล่งอ้างอิงในหน้าตั้งค่า) — μ แบบ ${method} และ CAPM ใช้ค่านี้ · บันทึกแหล่งที่มา (เช่น Damodaran) และวันที่ในหน้าตั้งค่า`,
+    );
   if (bondMethod === "yield_horizon")
     for (const a of u.assets.filter(
       (x) =>
@@ -757,6 +886,13 @@ export async function optimizePortfolio(p: OptimizeRequest) {
         code: "INVALID_INPUT",
         message: "Black–Litterman ต้องระบุ marketWeights",
       });
+    // MPT_FIX_SPEC P1-7 (4): views from saved valuations (≤ maxAge days old) added to the given views.
+    let autoViews: Awaited<ReturnType<typeof valuationViewsNow>> | null = null;
+    if (p.blackLitterman.viewsFromValuations) {
+      autoViews = await valuationViewsNow(symbols, u.returnBasis === "total_return", p.blackLitterman.valuationMaxAgeDays);
+      for (const s of autoViews.skipped) extraWarnings.push(`${s.symbol}: ${s.reason}`);
+      if (!autoViews.views.length) extraWarnings.push("ไม่มี valuation ที่ใช้เป็น view ได้ — Black–Litterman ใช้ equilibrium (prior) และ views ที่ส่งมาเท่านั้น");
+    }
     const b = blackLitterman({
       symbols,
       cov: baseCov,
@@ -765,7 +901,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
       riskAversion: p.blackLitterman.marketRiskAversion,
       marketPremium: u.equityRiskPremium,
       tau: p.blackLitterman.tau ?? 0.05,
-      views: p.blackLitterman.views ?? [],
+      views: [...(p.blackLitterman.views ?? []), ...(autoViews?.views ?? [])],
     });
     if (!b.ok)
       throw new OptimizerError({
@@ -777,7 +913,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
       extraWarnings.push("ใช้ overrides แทน posterior ของสินทรัพย์ที่ระบุ");
     if (p.blackLitterman.posteriorCovariance) cov = b.posteriorCov!;
     extraWarnings.push(...b.warnings);
-    bl = blackLittermanSummary(b, symbols);
+    bl = { ...blackLittermanSummary(b, symbols), ...(autoViews ? { valuationViews: autoViews.used } : {}) };
   }
   const currentValues = u.assets.map((a) => a.currentValue);
   const wealth = currentValues.reduce((a, b) => a + b, 0) + (p.extraCash ?? 0);

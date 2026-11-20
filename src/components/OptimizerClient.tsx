@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { bayesSteinMu, blendMu, blendNote, capMu } from "@/lib/finance/mu-estimate";
 import clsx from "clsx";
 import { recommend, type Objective, type RecommendOutcome } from "@/lib/finance/recommend";
 import { blackLitterman, type BlResult, type BlView } from "@/lib/finance/black-litterman";
@@ -17,7 +18,7 @@ import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/fo
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
-type ReturnMethod = "historical" | "capm" | "blend" | "black_litterman";
+type ReturnMethod = "historical" | "capm" | "blend" | "shrinkage" | "black_litterman";
 
 const OBJECTIVES: { value: Objective; label: string }[] = [
   { value: "max_sharpe", label: "Max Sharpe (tangency)" },
@@ -42,7 +43,13 @@ export function OptimizerClient({
   scenarios,
   rfInfo,
   basis,
+  years = 3,
+  muCap = null,
 }: {
+  /** Years of data behind μ (blend leans on CAPM under 3 years — MPT_FIX_SPEC P1-7). */
+  years?: number;
+  /** Settings' cap on |μ − CAPM| (annual decimal) or null. */
+  muCap?: number | null;
   /** Price basis / benchmark of the page, passed on to the rebalancing proposal. */
   basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
   /** Risk-free resolver output (source, tenor, date, warnings). */
@@ -120,12 +127,22 @@ export function OptimizerClient({
   }, [isBl, included, cov, rf, erp, mktW, delta, tau, views]);
   const blPos = new Map(idxIncluded.map((i, k) => [i, k]));
 
+  // Same rules as optimize_portfolio (lib/finance/mu-estimate.ts).
+  const histMu = assets.map((a) => a.historicalReturn);
+  const capmMu = assets.map((a) => a.capmReturn ?? a.historicalReturn);
+  const methodMu = useMemo(() => {
+    if (method === "capm" || method === "black_litterman") return capmMu;
+    const raw = method === "blend" ? blendMu(histMu, capmMu, years) : method === "shrinkage" ? bayesSteinMu(histMu, capmMu, covSample, years).mu : histMu;
+    return capMu(assets.map((a) => a.symbol), raw, capmMu, muCap).mu;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method, assets, covSample, years, muCap]);
   const baseReturn = (a: UniverseAsset, i: number) => {
     const capm = a.capmReturn ?? a.historicalReturn;
     if (isBl) return bl?.ok && blPos.has(i) ? bl.posterior[blPos.get(i)!] : capm;
-    return method === "historical" ? a.historicalReturn : method === "capm" ? capm : 0.5 * a.historicalReturn + 0.5 * capm;
+    return methodMu[i];
   };
   const mu = assets.map((a, i) => overrides[a.symbol] ?? baseReturn(a, i));
+  const muNote = method === "blend" ? blendNote(years) : null;
 
   const params = useMemo(
     () => ({ included, mu: mu.join(), objective, cvarConf, riskAversion, targetReturn, targetRisk, minW, maxW, useRiskFree, extraCash, covMethod, bl, postCov, maxIssuer, maxSector, maxDuration, allowShort, maxShort, maxGross, allowBondShorts, allowBorrow, borrowRate, maxLev }),
@@ -325,13 +342,17 @@ export function OptimizerClient({
 
         <section className="card min-w-0 space-y-3 lg:col-span-2">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-[15px] font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
+            <div>
+              <h2 className="text-[15px] font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
+              {muNote && <p className="mt-1 max-w-md text-xs text-muted" data-testid="mu-note">{muNote}</p>}
+            </div>
             <div className="w-56">
               <SelectField
                 label="วิธีตั้งต้น"
                 value={method}
                 options={[
-                  { value: "blend", label: "ผสม 50/50 (heuristic)" },
+                  { value: "blend", label: years < 3 ? "ผสม (CAPM หนักขึ้นเมื่อข้อมูล < 3 ปี)" : "ผสม 50/50" },
+                  { value: "shrinkage", label: "Shrinkage เข้าหา CAPM (Bayes–Stein)" },
                   { value: "capm", label: "CAPM: Rf + β·ERP" },
                   { value: "historical", label: "ค่าเฉลี่ยในอดีต" },
                   { value: "black_litterman", label: "Black–Litterman (ดุลยภาพ + views)" },

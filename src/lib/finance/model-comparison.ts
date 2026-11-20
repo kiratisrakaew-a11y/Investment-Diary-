@@ -51,7 +51,8 @@ export interface ModelComparisonInput {
   erp: number;
   bounds: BacktestInput["bounds"];
   covMethod: "sample" | "ledoit_wolf";
-  returnMethod: "historical" | "capm" | "blend";
+  returnMethod: "historical" | "capm" | "blend" | "shrinkage";
+  muCap?: number | null;
   costs: TradingCosts;
   lots: Record<string, number>;
   useLots: boolean;
@@ -241,6 +242,7 @@ export function compareModels(x: ModelComparisonInput): ModelComparisonResult {
     prices: x.prices,
     benchmark: x.benchmark,
     returnMethod: x.returnMethod,
+    muCap: x.muCap,
     covMethod: x.covMethod,
     bounds: x.bounds,
     rf: x.rf,

@@ -192,6 +192,23 @@ export default async function SettingsPage() {
             </div>
             <div>
               <label className="label">
+                เพดาน |μ − CAPM| ของผลตอบแทนคาดหวัง (% ต่อปี, ว่าง = ไม่จำกัด)
+              </label>
+              <input
+                name="muCapPct"
+                type="number"
+                step="0.5"
+                min={0}
+                className="input"
+                defaultValue={settings.muCapPct ?? ""}
+                placeholder="เช่น 10"
+              />
+              <p className="mt-1 text-xs text-muted">
+                ใช้กับ μ ที่อิงผลตอบแทนในอดีต (historical / blend / shrinkage) — ผลลัพธ์แสดงค่าก่อนและหลังปรับ
+              </p>
+            </div>
+            <div>
+              <label className="label">
                 นโยบายเงินสด — เมื่อบันทึกซื้อแต่เงินสดในพอร์ตไม่พอ
               </label>
               <select

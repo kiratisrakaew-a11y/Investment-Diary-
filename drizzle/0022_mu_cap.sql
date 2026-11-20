@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "mu_cap_pct" double precision;

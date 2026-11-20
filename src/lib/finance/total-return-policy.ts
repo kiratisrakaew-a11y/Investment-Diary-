@@ -13,7 +13,9 @@ export type AssetReturnBasis =
   | "adj_close"
   | "close_no_dividend"
   | "nav"
-  | "bond_schedule";
+  | "bond_schedule"
+  /** MPT_FIX_SPEC P0-A6: closes + cash dividends net of withholding tax (dividendWithholding). */
+  | "net_dividends";
 
 export type TotalReturnSource =
   | {

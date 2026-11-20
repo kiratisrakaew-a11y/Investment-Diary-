@@ -294,6 +294,13 @@ export const settingsInput = z.object({
     .describe(
       "Default price basis of return-based features: price_return = closes, total_return = adjusted closes",
     ),
+  muCapPct: z
+    .number()
+    .min(0)
+    .max(100)
+    .nullable()
+    .default(null)
+    .describe("Cap on |μ − CAPM| in % per year for history-based expected returns; null = no cap"),
   defaultBenchmark: z
     .string()
     .trim()

@@ -17,6 +17,7 @@ import {
   type RiskObjective,
 } from "./recommend";
 import { blackLitterman, type BlView } from "./black-litterman";
+import { bayesSteinMu, blendMu, capMu } from "./mu-estimate";
 import { rebalance, type CostBreakdown, type TradingCosts } from "./rebalance";
 import { beta as calcBeta } from "./risk";
 import type { Bounds } from "./optimizer";
@@ -93,8 +94,12 @@ export interface BacktestInput {
     views?: BlView[];
     tau?: number;
     marketRiskAversion?: number;
+    /** BT-6: extra views known at each decision (valuations saved before the cutoff — point in time). */
+    viewsAt?: (cutoff: string) => BlView[];
   };
-  returnMethod: "historical" | "capm" | "blend";
+  returnMethod: "historical" | "capm" | "blend" | "shrinkage";
+  /** P1-7: cap on |μ − CAPM| (annual decimal) for history-based μ; null / undefined = none. */
+  muCap?: number | null;
   covMethod: "sample" | "ledoit_wolf";
   /** Training window in return observations. */
   window: number;
@@ -213,6 +218,7 @@ export function estimateWindow(
     | "covMethod"
     | "rf"
     | "erp"
+    | "muCap"
   >,
   k0: number,
   k1: number,
@@ -242,11 +248,17 @@ export function estimateWindow(
       const be = al.dates.length > 2 ? calcBeta(al.asset, al.benchmark) : null;
       return be != null ? x.rf + be * x.erp : hist[i];
     });
+    // Same rules as optimize_portfolio (lib/finance/mu-estimate.ts): blend leans on CAPM under 3 years.
     mu =
       x.returnMethod === "capm"
         ? capm
-        : hist.map((h, i) => 0.5 * h + 0.5 * capm[i]);
+        : x.returnMethod === "shrinkage"
+          ? bayesSteinMu(hist, capm, cov, years).mu
+          : blendMu(hist, capm, years);
+    if (x.returnMethod !== "capm")
+      mu = capMu(x.prices.map((_, i) => String(i)), mu, capm, x.muCap).mu;
   }
+  // Without a benchmark there is no CAPM anchor: μ stays historical (the cap needs CAPM).
   return { mu, cov, win, periodsPerYear: N };
 }
 
@@ -337,7 +349,10 @@ export function backtest(x: BacktestInput): BacktestResult {
         riskAversion: x.blackLitterman.marketRiskAversion,
         marketPremium: x.erp,
         tau: x.blackLitterman.tau ?? 0.05,
-        views: x.blackLitterman.views ?? [],
+        views: [
+          ...(x.blackLitterman.views ?? []),
+          ...(x.blackLitterman.viewsAt?.(x.dates[t - 1]) ?? []),
+        ],
       });
       if (!bl.ok) return { error: bl.errors.join(" · ") };
       mu = bl.posterior;

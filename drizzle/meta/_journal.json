@@ -155,6 +155,13 @@
       "when": 1795183714601,
       "tag": "0021_price_basis_benchmark",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795186758726,
+      "tag": "0022_mu_cap",
+      "breakpoints": true
     }
   ]
 }

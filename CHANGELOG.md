@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-20 — MPT fix, phase 4 (MPT_FIX_SPEC: P1-7, P1-8, P0-A6; BACKTEST_SPEC BT-6 point in time)
+- **P1-7 — μ that does not chase last year's return** (`lib/finance/mu-estimate.ts`, shared by optimize, compare, backtest and the optimizer page):
+  - `blend` = w·historical + (1 − w)·CAPM with w = 0.5·min(1, years / 3). Under 3 years of data CAPM weighs more, and the result says how much. **Numbers change**: with 3 years or more it is the previous 50/50, so results with shorter data move toward CAPM (the default method in every tool). In backtests / comparisons the training window sets the years (252 days → w ≈ 0.17).
+  - New `returnMethod: "shrinkage"`: Bayes–Stein toward CAPM, δ = (n + 2) / ((n + 2) + years·(μ − μ₀)ᵀΣ⁻¹(μ − μ₀)).
+  - Settings `muCapPct` (migration 0022, additive, rollback file): caps |μ − CAPM| for history-based μ. Before / after is reported in the warnings.
+  - Black–Litterman `viewsFromValuations` (`lib/finance/valuation-views.ts`):
+    - absolute views from saved valuations: latest per method, median fair value;
+    - view = FV / price − 1, plus the trailing dividend yield on total_return;
+    - confidence from the bear–bull scenario width or the spread between methods, 1 / (1 + 2·width) clamped to [0.05, 0.8]; one method without scenarios = 0.25;
+    - valuations older than `valuationMaxAgeDays` (90) are skipped with a warning; the views used are returned in `blackLitterman.valuationViews`.
+- **BT-6 — Black–Litterman views in a backtest are point in time**:
+  - at each rebalance only valuations saved strictly before the decision date are used, priced at that day's close;
+  - if no valuation was saved before the test ends → `NOT_BACKTESTABLE_NO_ASOF_DATA`;
+  - the warnings say in how many rounds views were used.
+- **P1-8**: CAPM-based μ with an ERP that has no source in Settings → an optimizer warning. Rf already comes from the resolver (curve when imported).
+- **P0-A6 — total return net of withholding tax**:
+  - `dividendWithholding` (with `returnBasis: total_return`) measures stocks on closes + split-adjusted cash dividends × (1 − rate), instead of the provider's gross adjusted closes; an event's own `withholdingTaxRate` wins;
+  - `returnBasisByAsset` shows `net_dividends`;
+  - at rate 0 it agrees with adjusted closes (checked ≤ 0.1%/yr); at 10% it is lower by about 10% of the dividend yield.
+- **P0-A7 — not changed, superseded.** PRICE_BASIS_BENCHMARK_SPEC D3 (written later) makes the default basis a Settings choice (`defaultReturnBasis`, default `price_return`). Setting it to `total_return` gives A7's behaviour, and assets without adj_close are listed in `priceBasis.excluded` / `fallback`. The double-count guard (total_return + dividend cash flows) stays.
+- Checks: `check:mpt` adds the blend rule, shrinkage dispersion, the cap, the ERP warning, BL views (FV / price, confidence, stale skip), backtest point in time (refusal, later rounds only), and A6 at 0% and 10%. Unit tests for the estimators and the views.
+
 ## 2026-11-20 — MPT fix, phase 3 (MPT_FIX_SPEC: P0-B2, B3, B4, P2)
 - **B4 — mixed time zones.**
   - Root cause: Thai closes and US-time closes (USD assets, world gold `GC=F`) are struck hours apart, which understates daily correlation.

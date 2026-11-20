@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { benchmarkField } from "@/server/basis-schema";
 import { resolveBenchmark } from "./benchmarks";
+import { loadSavedValuations, trailingDividends, viewsAt } from "./bl-views";
+import { blendNote } from "@/lib/finance/mu-estimate";
+import type { BlView } from "@/lib/finance/black-litterman";
 import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
 import { asOf, asOfEntry } from "@/lib/finance/portfolio";
 import {
@@ -95,7 +98,7 @@ export const backtestInput = z
       ),
     blackLitterman: blackLittermanInput.optional(),
     returnMethod: z
-      .enum(["historical", "capm", "blend"])
+      .enum(["historical", "capm", "blend", "shrinkage"])
       .default(DEFAULT_RETURN_METHOD)
       .describe("μ estimate in each training window (max_sharpe)"),
     covMethod: z.enum(["sample", "ledoit_wolf"]).default("ledoit_wolf"),
@@ -531,6 +534,46 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
       );
   }
 
+  let blSummary: () => string[] = () => [];
+  // BT-6 / P1-7: Black–Litterman views from valuations saved strictly before each decision (point in time).
+  let blViewsAt: ((cutoff: string) => BlView[]) | undefined;
+  const blWarnings: string[] = [];
+  if (x.strategy === "black_litterman" && x.blackLitterman?.viewsFromValuations) {
+    const saved = await loadSavedValuations(symbols);
+    const lastCutoff = dates[dates.length - 2] ?? dates[0];
+    if (!saved.some((v) => v.createdTs < Date.parse(`${lastCutoff}T00:00:00Z`)))
+      throw new Error(
+        "NOT_BACKTESTABLE_NO_ASOF_DATA: viewsFromValuations ใช้ valuation ที่บันทึกก่อนวันปรับพอร์ตเท่านั้น แต่ไม่มี valuation ใดบันทึกก่อนช่วงทดสอบจบ — ทดสอบย้อนหลังไม่ได้ (ใช้ optimize_portfolio สำหรับวันนี้)",
+      );
+    const divs = await trailingDividends(symbols, dates[0], dates[dates.length - 1]);
+    const idx = new Map(dates.map((d, i) => [d, i]));
+    const priceAt = (s: string, d: string) => {
+      const i = symbols.indexOf(s);
+      const k = idx.get(d);
+      return i < 0 || k == null ? null : px[i][k] / (pool[i].currency === "USD" ? (asOf(fx, d) ?? NaN) : 1);
+    };
+    let rounds = 0;
+    let withViews = 0;
+    const skippedOld = new Set<string>();
+    blViewsAt = (cutoff) => {
+      const r = viewsAt(symbols, saved, divs, priceAt, cutoff, {
+        totalReturn: x.returnBasis === "total_return",
+        maxAgeDays: x.blackLitterman!.valuationMaxAgeDays,
+        strictlyBefore: true,
+      });
+      rounds++;
+      if (r.views.length) withViews++;
+      for (const s of r.skipped) skippedOld.add(s.symbol);
+      return r.views;
+    };
+    blWarnings.push(
+      "Black–Litterman views จาก valuation: ใช้เฉพาะ valuation ที่บันทึกก่อนวันปรับพอร์ตแต่ละรอบ (point-in-time) · ราคาที่ใช้คำนวณ view คือราคาปิดวันก่อนซื้อขาย",
+    );
+    // Summarised after the run (closure counters).
+    blSummary = () => [
+      `views จาก valuation ถูกใช้ ${withViews} จาก ${rounds} รอบปรับพอร์ต${skippedOld.size ? ` · ข้าม valuation เก่าเกินเกณฑ์ของ ${[...skippedOld].join(", ")}` : ""}`,
+    ];
+  }
   let decisionProvider: DecisionProvider | undefined;
   const isFactor = (FACTOR_STRATEGY_IDS as readonly string[]).includes(
     x.strategy,
@@ -780,8 +823,12 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
       Object.fromEntries(
         symbols.map((s) => [s, weights[s.toUpperCase()] ?? 0]),
       ),
-    blackLitterman: x.blackLitterman,
+    blackLitterman: x.blackLitterman && {
+      ...x.blackLitterman,
+      ...(blViewsAt ? { viewsAt: blViewsAt } : {}),
+    },
     returnMethod: x.returnMethod,
+    muCap: settings.muCapPct != null ? settings.muCapPct / 100 : null,
     covMethod: x.covMethod,
     window: x.windowDays,
     rebalanceEvery: every,
@@ -808,7 +855,15 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     );
   return {
     ...r,
-    warnings: [...dataWarnings, ...cashWarnings, ...r.warnings],
+    warnings: [
+      ...dataWarnings,
+      ...cashWarnings,
+      ...blWarnings,
+      ...blSummary(),
+      // P1-7: training windows are short — say how much blend leans on CAPM.
+      ...(x.returnMethod === "blend" && usesWindow ? [blendNote(x.windowDays / obsPerYear)].filter((n): n is string => !!n) : []),
+      ...r.warnings,
+    ],
     input: {
       ...x,
       rebalanceEveryObservations: every,

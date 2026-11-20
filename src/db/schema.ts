@@ -381,6 +381,8 @@ export const settings = pgTable("settings", {
     .default("price_return"),
   /** Default benchmark choice: "default" (each feature's own rule) | "auto" (kind matches the basis) | a symbol. */
   defaultBenchmark: text("default_benchmark").notNull().default("default"),
+  /** MPT_FIX_SPEC P1-7: cap on |μ − μ_CAPM| in % per year for history-based μ; null = no cap. */
+  muCapPct: doublePrecision("mu_cap_pct"),
 });
 
 /**
