@@ -34,6 +34,7 @@ import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import {
   loadAdjPriceHistory,
+  loadBenchmark,
   loadCorporateActionDates,
   loadFxHistory,
   loadPriceHistory,
@@ -64,6 +65,7 @@ import {
   type ReturnBasis,
 } from "@/lib/finance/return-series";
 import { getSettings, getYieldCurve } from "./settings";
+import { THAI_GOLD_SYMBOL } from "@/lib/prices/gold";
 import { resolveBenchmark } from "./benchmarks";
 import {
   benchmarkReportOf,
@@ -146,6 +148,57 @@ export interface OptimizerUniverse {
  * and the covariance matrix. Default basis: price return (closes); total_return uses the
  * provider's adjusted closes and excludes assets without full coverage.
  */
+/** Where an asset's close is struck: the Thai market or a US-time price (USD assets, world gold). */
+function marketOf(a: { currency: string; assetClass: string; providerSymbol?: string | null }): "TH" | "US" {
+  if (a.currency === "USD") return "US";
+  if (a.assetClass === "gold" && a.providerSymbol?.toUpperCase() !== THAI_GOLD_SYMBOL) return "US";
+  return "TH";
+}
+
+/**
+ * Pairwise inputs (annualized): Σᵢⱼ from the returns on the dates where both i and j have actual prints,
+ * μᵢ from asset i's own returns; each pair needs ≥ minObs common observations (else 0 covariance + note).
+ */
+function pairwiseInputs(levels: [string, number][][], minObs: number) {
+  const n = levels.length;
+  const own = levels.map((lv) => {
+    const d = lv.map(([x]) => x);
+    const r = returnsOn(lv, d);
+    const yrs = (Date.parse(d[d.length - 1]) - Date.parse(d[0])) / (365 * 86_400_000);
+    return { r, N: yrs > 0 ? (d.length - 1) / yrs : 252 };
+  });
+  const cov: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+  let minPairObs = Infinity;
+  let maxPairObs = 0;
+  for (let i = 0; i < n; i++)
+    for (let j = i; j < n; j++) {
+      const d = commonDates([levels[i], levels[j]]);
+      const ri = returnsOn(levels[i], d);
+      const rj = returnsOn(levels[j], d);
+      const keep = ri.map((x, k) => Number.isFinite(x) && Number.isFinite(rj[k]));
+      const a = ri.filter((_, k) => keep[k]);
+      const b = rj.filter((_, k) => keep[k]);
+      if (i !== j) {
+        minPairObs = Math.min(minPairObs, a.length);
+        maxPairObs = Math.max(maxPairObs, a.length);
+      }
+      if (a.length < Math.max(2, minObs)) continue;
+      const yrs = (Date.parse(d[d.length - 1]) - Date.parse(d[0])) / (365 * 86_400_000);
+      const Np = yrs > 0 ? (d.length - 1) / yrs : 252;
+      const ma = mean(a);
+      const mb = mean(b);
+      const c = (a.reduce((s, x, k) => s + (x - ma) * (b[k] - mb), 0) / (a.length - 1)) * Np;
+      cov[i][j] = c;
+      cov[j][i] = c;
+    }
+  return {
+    cov,
+    mean: own.map((o) => mean(o.r.filter(Number.isFinite)) * o.N),
+    minPairObs: Number.isFinite(minPairObs) ? minPairObs : 0,
+    maxPairObs,
+  };
+}
+
 export async function loadUniverse(
   lookbackDays = 365 * 3,
   symbols?: string[],
@@ -154,6 +207,12 @@ export async function loadUniverse(
     returnBasis?: ReturnBasis;
     /** "default" | "auto" | index symbol; omitted = Settings' defaultBenchmark. */
     benchmark?: string;
+    /**
+     * MPT_FIX_SPEC P0-B3: common (default) = one common calendar; drop_short = leave out the assets whose
+     * history starts after the look-back start; pairwise = covariance from each pair's own overlap (made PSD)
+     * and μ from each asset's own window, still aligned on the common calendar for scenarios and β.
+     */
+    historyPolicy?: "common" | "drop_short" | "pairwise";
     riskFree?: RiskFreeRequest;
     frequency?: SampleFrequency;
     bond?: { horizonYears?: number; rateShiftBp?: number };
@@ -171,8 +230,6 @@ export async function loadUniverse(
     opts.benchmark ?? settings.defaultBenchmark,
   );
   const wantedBench = basis === "total_return" ? "total_return" : "price";
-  const frequency = opts.frequency ?? "daily";
-  const minObs = MIN_OBS_BY_FREQUENCY[frequency];
   const [assets, txRows, prices, fx, adj, curve] = await Promise.all([
     listAssets(),
     allTransactions(),
@@ -225,9 +282,20 @@ export async function loadUniverse(
   );
 
   const { candidates, skipped } = selectCandidates(assets, symbols);
+  // MPT_FIX_SPEC P0-B4: closes from different time zones (Thai market vs US-priced gold / USD assets) understate
+  // daily correlation — without an explicit frequency such a universe is sampled weekly (stated in a note).
+  const markets = new Set(candidates.map(marketOf));
+  const autoWeekly = !opts.frequency && markets.size > 1;
+  const frequency: SampleFrequency = opts.frequency ?? (autoWeekly ? "weekly" : "daily");
+  const minObs = MIN_OBS_BY_FREQUENCY[frequency];
+  const frequencyNotes = autoWeekly
+    ? [
+        `ความถี่รายสัปดาห์อัตโนมัติ: สินทรัพย์ปิดราคาต่างเวลา (${[...markets].map((m) => (m === "US" ? "ตลาดสหรัฐ/ราคาทองโลก" : "ตลาดไทย")).join(" + ")}) — ผลตอบแทนรายวันจะทำให้ correlation ต่ำกว่าจริง · ส่ง frequency: "daily" เพื่อใช้รายวัน`,
+      ]
+    : [];
   const levelsById = new Map<number, [string, number][]>();
   const seriesWarnings: string[] = [];
-  const usable = candidates.filter((a) => {
+  let usable = candidates.filter((a) => {
     // Archived assets are already in `skipped` (selectCandidates); hidden-from-holdings does not matter.
     const window = prices.get(a.id)?.filter(([d]) => d >= from) ?? [];
     if (frequency === "daily" ? window.length < MIN_OBS : window.length < 2) {
@@ -356,6 +424,24 @@ export async function loadUniverse(
     periodsPerYear: 0,
     covarianceWarnings: [],
   };
+  // MPT_FIX_SPEC P0-B3: assets whose history starts after the look-back start shorten the common calendar.
+  const policy = opts.historyPolicy ?? "common";
+  const firstOf = (a: { id: number }) => levelsById.get(a.id)![0][0];
+  const late = (a: { id: number }) => Date.parse(firstOf(a)) > Date.parse(from) + 14 * 86_400_000;
+  const historyNotes: string[] = [];
+  if (policy === "drop_short") {
+    const short = usable.filter(late);
+    if (short.length && usable.length - short.length >= 2) {
+      for (const a of short)
+        skipped.push({
+          symbol: a.symbol,
+          reason: `ประวัติราคาเริ่ม ${firstOf(a)} หลังช่วงที่ขอ (${from}) — historyPolicy drop_short`,
+        });
+      usable = usable.filter((a) => !late(a));
+      historyNotes.push(`historyPolicy drop_short: ตัด ${short.map((a) => a.symbol).join(", ")} เพื่อให้ช่วงร่วมยาวขึ้น`);
+    } else if (short.length)
+      historyNotes.push(`historyPolicy drop_short: ตัด ${short.map((a) => a.symbol).join(", ")} แล้วจะเหลือไม่ถึง 2 สินทรัพย์ — ไม่ตัด`);
+  }
   if (usable.length < 2)
     return {
       ...empty,
@@ -371,6 +457,16 @@ export async function loadUniverse(
     };
 
   const series = usable.map((a) => returnsOn(levelsById.get(a.id)!, dates));
+  // The common calendar starts later than asked → name the assets that limit it (latest first).
+  if (Date.parse(dates[0]) > Date.parse(from) + 14 * 86_400_000) {
+    const limiting = usable
+      .filter(late)
+      .sort((a, b) => (firstOf(a) < firstOf(b) ? 1 : -1))
+      .map((a) => `${a.symbol} (เริ่ม ${firstOf(a)})`);
+    historyNotes.push(
+      `ขอข้อมูลตั้งแต่ ${from} แต่ช่วงร่วมเริ่ม ${dates[0]} (${dates.length} งวด)${limiting.length ? ` เพราะ ${limiting.join(", ")}` : ""} — historyPolicy "drop_short" ตัดตัวที่ประวัติสั้น หรือ "pairwise" ใช้ข้อมูลแต่ละคู่เต็มช่วง`,
+    );
+  }
   // Observations per year from the data, so daily, weekly or fund-NAV calendars annualize consistently.
   const years =
     (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) /
@@ -384,7 +480,13 @@ export async function loadUniverse(
       from: dates[0],
       featureDefault: "settings",
     }));
-  const bench = resolved?.series ?? [];
+  // auto / a symbol were resolved from the first common date (coverage check); use the same window as the
+  // default index (look-back start) so daily and weekly sampling treat every index alike.
+  const bench = resolved
+    ? resolved.source === "default"
+      ? resolved.series
+      : await loadBenchmark(resolved.symbol, from)
+    : [];
   // Benchmark on the asset calendar where it has actual prints at both ends (NaN otherwise) — never forward-filled.
   const benchWindow = resampleLevels(
     bench.filter(([d]) => d >= from),
@@ -393,10 +495,22 @@ export async function loadUniverse(
   const benchReturns = benchWindow.length
     ? returnsOn(benchWindow, dates)
     : null;
-  const { cov } = estimateInputs(series, N);
+  let { cov } = estimateInputs(series, N);
   const lw = ledoitWolf(series);
   const covShrunk = lw.cov.map((r) => r.map((x) => x * N));
-  const covarianceWarnings = covarianceDiagnostics(cov).warnings;
+  let covarianceWarnings = covarianceDiagnostics(cov).warnings;
+  // pairwise: Σ from each pair's own overlap and μ from each asset's own window, then projected to PSD.
+  let ownMean: number[] | null = null;
+  if (policy === "pairwise") {
+    const pw = pairwiseInputs(usable.map((a) => levelsById.get(a.id)!), minObs);
+    const diag = covarianceDiagnostics(pw.cov);
+    cov = diag.repaired;
+    ownMean = pw.mean;
+    covarianceWarnings = [
+      ...diag.warnings,
+      `historyPolicy pairwise: Σ จากช่วงที่แต่ละคู่มีราคาร่วมกัน (${pw.minPairObs}–${pw.maxPairObs} งวด) และ μ จากช่วงของแต่ละสินทรัพย์ — ปรับเป็น PSD แล้ว (eigenvalue ต่ำสุด ${Math.max(0, diag.minEigenvalue).toExponential(2)}) · CVaR / bootstrap / β ยังใช้ช่วงร่วม`,
+    ];
+  }
 
   return {
     ok: true,
@@ -415,6 +529,8 @@ export async function loadUniverse(
     periodsPerYear: N,
     covarianceWarnings: [
       ...covarianceWarnings,
+      ...frequencyNotes,
+      ...historyNotes,
       ...seriesWarnings,
       ...basisNotes,
       ...(resolved?.warning ? [`β / CAPM: ${resolved.warning}`] : []),
@@ -439,7 +555,7 @@ export async function loadUniverse(
         held: (valueOf.get(a.id) ?? 0) > 0,
         currentValue: valueOf.get(a.id) ?? 0,
         // Arithmetic mean × N: the expected-return input consistent with an annualized covariance.
-        historicalReturn: mean(series[i]) * N,
+        historicalReturn: ownMean ? ownMean[i] : mean(series[i]) * N,
         volatility: Math.sqrt(cov[i][i]),
         beta: b,
         capmReturn: b != null ? rf + b * erp : null,
@@ -586,6 +702,7 @@ export interface OptimizeParams {
   returnBasis?: ReturnBasis;
   /** β / CAPM index: "default" | "auto" | symbol (PRICE_BASIS_BENCHMARK_SPEC D2). */
   benchmark?: string;
+  historyPolicy?: "common" | "drop_short" | "pairwise";
   constraints?: ConstraintsInput;
   /** risk_parity: budget by symbol (normalized; default equal). */
   riskBudgets?: Record<string, number>;
@@ -609,6 +726,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     withSeries: true,
     returnBasis: p.returnBasis,
     benchmark: p.benchmark,
+    historyPolicy: p.historyPolicy,
     riskFree: p.riskFree,
     frequency: p.frequency,
     bond: { horizonYears: p.bondHorizonYears, rateShiftBp: p.bondRateShiftBp },

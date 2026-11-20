@@ -103,6 +103,9 @@ export function buildConstraints(meta: AssetRiskMeta[], base: { min: number; max
   if (c.maxPerSector != null) {
     for (const [k, members] of groupBy(meta, (m) => m.sector)) linear.push({ name: `หมวด ${k}`, a: row(members), hi: c.maxPerSector });
     unclassified.sector = meta.filter((m) => !m.sector).map((m) => m.symbol);
+    // MPT_FIX_SPEC P2: assets without a sector form one "unclassified" bucket under the same cap (never uncapped).
+    const none = meta.map((m, i) => (m.sector ? -1 : i)).filter((i) => i >= 0);
+    if (none.length) linear.push({ name: "หมวด (ยังไม่ระบุ)", a: row(none), hi: c.maxPerSector });
   }
   if (c.maxPerRating) {
     const bonds = groupBy(meta, (m) => (m.assetClass === "bond" ? (m.rating ?? "unrated") : null));
@@ -130,7 +133,7 @@ export function buildConstraints(meta: AssetRiskMeta[], base: { min: number; max
   }
   currencyAndMaturityRows(meta, c, linear, warnings);
   if (unclassified.issuer.length) warnings.push(`ยังไม่ระบุผู้ออก (ไม่อยู่ใต้ cap ผู้ออก): ${unclassified.issuer.join(", ")}`);
-  if (unclassified.sector.length) warnings.push(`ยังไม่ระบุหมวด (ไม่อยู่ใต้ cap หมวด): ${unclassified.sector.join(", ")}`);
+  if (unclassified.sector.length) warnings.push(`ยังไม่ระบุหมวด: ${unclassified.sector.join(", ")} — รวมเป็นกลุ่ม “ยังไม่ระบุ” ที่ใช้เพดานหมวดเดียวกัน · ใส่ sector ด้วย update_asset_profile`);
   if (linear.length) bounds.linear = linear;
   return { bounds, unclassified, warnings, unsupported, durations };
 }

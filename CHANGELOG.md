@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-20 — MPT fix, phase 3 (MPT_FIX_SPEC: P0-B2, B3, B4, P2)
+- **B4 — mixed time zones.**
+  - Root cause: Thai closes and US-time closes (USD assets, world gold `GC=F`) are struck hours apart, which understates daily correlation.
+  - A universe that mixes the two, with no `frequency`, is now sampled weekly, with a note in the warnings. `frequency: "daily"` keeps daily.
+  - Thai gold (`GOLD_TH`) counts as the Thai market.
+  - The stress test (worst-day replay) and the valuation β (stated as daily) pass `daily` explicitly.
+  - **Numbers change** for mixed universes in optimize_portfolio / get_investment_universe / the optimizer page / rebalance tracking error. Thai-only universes are unchanged.
+- **B3 — shorter data than asked is reported and selectable.**
+  - When the common calendar starts more than 14 days after the look-back start, a warning names the assets that limit it, latest first, with their first dates.
+  - New `historyPolicy` (optimize_portfolio, get_investment_universe):
+    - `common`: default, as before;
+    - `drop_short`: leaves those assets out and lists them in `skipped` (never below 2 assets);
+    - `pairwise`: Σ from each pair's own overlap, projected to positive semidefinite, and μ from each asset's own window. Scenarios and β still use the common calendar.
+  - Fix found while testing: an explicit or auto index was loaded from the first common date, but Settings' index from the look-back start. With weekly sampling the buckets differed, so β changed with the index's origin. Both now use the look-back window.
+- **B2 — FX gaps.**
+  - The optimizer already refused a USDTHB rate more than 5 days old (asset skipped with the reason); this is now covered by a check.
+  - Data quality now scans every price date of non-archived USD assets over 3 years, not only today's rate. It reports the number of gap days, a sample of dates, and dates with no earlier fixing at all.
+- **P2 — sector caps.** Assets without a sector form one "หมวด (ยังไม่ระบุ)" bucket under the same `maxPerSector` cap (they were uncapped). The warning says how to set the sector.
+- Checks: new `npm run check:mpt` (local DB, TEST-LOCAL PBM-* data): B4 daily vs weekly, B3 warning / drop_short / pairwise PSD / through optimize, P2 bucket in `constraintsApplied`, B2 data quality and optimizer. Unit tests: `fxGapsFor` and the capped unclassified bucket.
+
 ## 2026-11-20 — Price basis & benchmark, phase P5 (F8 abnormal trading, F10 data quality, docs)
 - **F8 abnormal trading** (`run_event_study`, `scan_abnormal_trading`, `/abnormal/*`, `/assets/[id]/abnormal`, the asset page's settings panel):
   - `returnBasis: "auto" | "price_return" | "total_return"` and `benchmark`. `auto` (default) is the previous rule exactly; Settings' default basis is deliberately not read here.

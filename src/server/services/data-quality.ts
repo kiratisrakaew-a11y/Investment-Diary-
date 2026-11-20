@@ -1,5 +1,6 @@
 import {
   assessDataQuality,
+  fxGapsFor,
   marketInputProvenance,
   priceDateAt,
   readTimestampPolicy,
@@ -18,7 +19,7 @@ import { getSettings } from "./settings";
 import { listValuations, valueChangedSinceSave } from "./valuations";
 import { abnormalDataQuality } from "@/lib/finance/abnormal/quality";
 import { adjReadiness } from "@/lib/finance/adj-check";
-import { loadAdjCheckInput } from "./prices";
+import { loadAdjCheckInput, loadFxHistory } from "./prices";
 import { listBenchmarks } from "./benchmarks";
 import { DEFAULT_TRI_SYMBOL } from "./abnormal";
 import { sql } from "drizzle-orm";
@@ -145,6 +146,17 @@ export async function dataQualityReport() {
       ratio: a.obs.length ? withAdj / a.obs.length : 0,
     };
   });
+  // MPT B2: USDTHB gaps over the 3-year price history of every non-archived USD asset.
+  const fxHist = await loadFxHistory();
+  const fxGaps = assets
+    .filter((a) => !a.archivedAt && a.currency === "USD" && a.assetClass !== "cash")
+    .map((a) =>
+      fxGapsFor(
+        a.symbol,
+        (prices.get(a.id) ?? []).filter(([d]) => d >= adjFrom).map(([d]) => d),
+        fxHist,
+      ),
+    );
   const defaultBench = settings.defaultBenchmark;
   const priceBasisDefaults = {
     defaultReturnBasis: settings.defaultReturnBasis,
@@ -200,6 +212,7 @@ export async function dataQualityReport() {
     abnormal,
     adjClose,
     priceBasisDefaults,
+    fxGaps,
     history: assets
       .filter((a) => held.has(a.id) && a.assetClass !== "cash")
       .map((a) => ({

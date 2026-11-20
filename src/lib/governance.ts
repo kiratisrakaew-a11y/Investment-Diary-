@@ -359,6 +359,8 @@ export interface DataQualityInput {
   abnormal?: AbnormalDataQuality;
   /** adj_close coverage and consistency with dividends for total return (MPT A5). */
   adjClose?: AdjReadiness;
+  /** USD assets: price dates whose latest USDTHB fixing is more than FX_MAX_GAP_DAYS old (MPT B2). */
+  fxGaps?: { symbol: string; days: number; maxGapDays: number; sample: string[] }[];
   /** PRICE_BASIS_BENCHMARK_SPEC F10: the Settings defaults and what they depend on. */
   priceBasisDefaults?: {
     defaultReturnBasis: "price_return" | "total_return";
@@ -368,6 +370,31 @@ export interface DataQualityInput {
     /** Last stored date of the default benchmark when it is a symbol (null = no data). */
     defaultBenchmarkLastDate: string | null;
   };
+}
+
+/** Same rule as return-series.ts: USDTHB on the date or at most this many days earlier. */
+export const FX_MAX_GAP_DAYS = 5;
+
+/** Price dates of a USD asset whose USDTHB fixing is too old or missing (pure). */
+export function fxGapsFor(
+  symbol: string,
+  priceDates: string[],
+  fx: [string, number][],
+): { symbol: string; days: number; maxGapDays: number; sample: string[] } {
+  let j = -1;
+  let days = 0;
+  let maxGapDays = 0;
+  const sample: string[] = [];
+  for (const d of priceDates) {
+    while (j + 1 < fx.length && fx[j + 1][0] <= d) j++;
+    const gap = j < 0 ? Infinity : (Date.parse(d) - Date.parse(fx[j][0])) / 86_400_000;
+    if (gap > FX_MAX_GAP_DAYS) {
+      days++;
+      maxGapDays = Math.max(maxGapDays, Number.isFinite(gap) ? gap : 9999);
+      if (sample.length < 3) sample.push(d);
+    }
+  }
+  return { symbol, days, maxGapDays, sample };
 }
 
 /** Days after which the default benchmark counts as stale (same threshold as Settings' benchmark). */
@@ -426,12 +453,22 @@ export function assessDataQuality(d: DataQualityInput) {
   const fx = d.positions.filter(
     (p) => p.fxStatus === "stale" || p.fxStatus === "tx_fallback",
   );
+  // MPT_FIX_SPEC P0-B2: gaps anywhere in the price history of USD assets, not only today's rate.
+  const gaps = (d.fxGaps ?? []).filter((g) => g.days > 0);
   add(
     "อัตราแลกเปลี่ยน",
-    fx.length > 0,
+    fx.length > 0 || gaps.length > 0,
     "warn",
-    `USDTHB ไม่ครบ/เก่า: ${fx.map((p) => p.symbol).join(", ")}`,
-    "USDTHB ครบ",
+    [
+      fx.length && `USDTHB ไม่ครบ/เก่า: ${fx.map((p) => p.symbol).join(", ")}`,
+      gaps.length &&
+        `USDTHB ห่างเกิน ${FX_MAX_GAP_DAYS} วันในประวัติราคา: ${gaps
+          .map((g) => `${g.symbol} ${g.days} วัน (${g.maxGapDays >= 9999 ? "บางวันไม่มีอัตราก่อนหน้าเลย" : `ห่างนานสุด ${Math.round(g.maxGapDays)} วัน`} เช่น ${g.sample.join(", ")})`)
+          .join(" · ")} — วันเหล่านี้ไม่ถูกใช้ในการคำนวณ · sync_historical_prices includeFx`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    d.fxGaps ? "USDTHB ครบทุกวันที่มีราคาสินทรัพย์ USD (3 ปี)" : "USDTHB ครบ",
     "/holdings",
   );
   const ill = [

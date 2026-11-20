@@ -36,7 +36,13 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
   const [snap, bonds] = await Promise.all([getPortfolioSummary(), bondHoldings()]);
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   const assetMeta = new Map((await listAssets()).map((a) => [a.id, a]));
-  const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), { withSeries: true, returnBasis: x.returnBasis, benchmark: x.benchmark }).catch((e) => {
+  const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), {
+    withSeries: true,
+    returnBasis: x.returnBasis,
+    benchmark: x.benchmark,
+    // The historical replay reports the worst day: keep daily returns (no automatic weekly sampling).
+    frequency: "daily",
+  }).catch((e) => {
     // A benchmark the user named but the app cannot use is an error; anything else = no β, as before.
     if (e instanceof BenchmarkError) throw e;
     return null;

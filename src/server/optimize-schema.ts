@@ -219,7 +219,13 @@ export const optimizeInput = z
       .enum(["daily", "weekly", "monthly"])
       .optional()
       .describe(
-        "Return sampling on the common calendar: daily (default) or the last actual observation per week / month (no fill); annualization uses the observed periods per year",
+        "Return sampling on the common calendar: daily or the last actual observation per week / month (no fill); annualization uses the observed periods per year. Omitted = daily, or weekly when the universe mixes Thai-market closes with US-time closes (USD assets, world gold) — stated in a note",
+      ),
+    historyPolicy: z
+      .enum(["common", "drop_short", "pairwise"])
+      .optional()
+      .describe(
+        "common (default) = one common calendar (a short-history asset shortens it — the warning names it and its first date); drop_short = leave out assets whose history starts after the look-back start (listed in skipped); pairwise = covariance from each pair's own overlap made positive semidefinite, μ from each asset's own window",
       ),
     bondReturnMethod: z
       .enum(["same_as_other", "yield_horizon"])

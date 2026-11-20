@@ -22,7 +22,8 @@ export async function editorDefaults(
     price = hist[hist.length - 1]?.close ?? 0;
     priceDate = hist[hist.length - 1]?.date ?? null;
     // Historical beta vs. the benchmark, when there is enough price history.
-    const u = await loadUniverse(365 * 2, undefined, opts).catch((e) => {
+    // β from daily returns (as its source text states), whatever the universe's markets.
+    const u = await loadUniverse(365 * 2, undefined, { ...opts, frequency: "daily" }).catch((e) => {
       if (e instanceof BenchmarkError) throw e;
       return null;
     });

@@ -41,6 +41,9 @@ describe("issuer / sector / rating / duration constraints", () => {
     expect(built.unclassified.sector).toEqual(["CPALL"]);
     expect(built.warnings.join(" ")).toContain("CPALL");
     if (r.ok) expect(r.risky.weights[0] + r.risky.weights[1]).toBeLessThanOrEqual(0.4 + 1e-9);
+    // MPT_FIX_SPEC P2: the unclassified bucket is capped like any sector.
+    expect(built.bounds.linear!.some((c) => c.name === "หมวด (ยังไม่ระบุ)" && c.hi === 0.4)).toBe(true);
+    if (r.ok) expect(r.risky.weights[2]).toBeLessThanOrEqual(0.4 + 1e-9);
   });
   it("unrated bonds form their own rating bucket", () => {
     const { r } = run({ maxPerRating: { unrated: 0.05 } });
