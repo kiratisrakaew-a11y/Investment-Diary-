@@ -5,6 +5,9 @@ import { fmtPct, fmtRatio, signClass } from "@/lib/format";
 import { compact, downsample } from "@/lib/explain-data";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { StressPanel } from "@/components/StressPanel";
+import { listBenchmarks } from "@/server/services/benchmarks";
+import { BasisSummary } from "@/components/BasisBenchmarkPicker";
+import { isReturnBasis } from "@/lib/finance/price-basis";
 
 const TIMING_LABEL = {
   start_of_day: "เงินเข้า/ออกต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1",
@@ -30,9 +33,14 @@ function corrColor(c: number) {
   return c >= 0 ? `color-mix(in oklab, var(--series-2) ${a * 70}%, var(--panel))` : `color-mix(in oklab, var(--series-1) ${a * 70}%, var(--panel))`;
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ basis?: string; bench?: string }> }) {
+  const q = await searchParams;
   const data = await loadPortfolioData();
-  const [perf, mpt] = await Promise.all([getPerformance(undefined, data), getMptAnalysis(undefined, data)]);
+  const benchmarks = await listBenchmarks();
+  // PRICE_BASIS_BENCHMARK_SPEC: ?basis / ?bench override Settings for this page.
+  const returnBasis = isReturnBasis(q.basis) ? q.basis : data.settings.defaultReturnBasis;
+  const benchmark = q.bench?.trim() || data.settings.defaultBenchmark;
+  const [perf, mpt] = await Promise.all([getPerformance(undefined, data), getMptAnalysis(undefined, data, { returnBasis })]);
   const navNow = perf.valueSeries[perf.valueSeries.length - 1]?.value ?? 0;
 
   // Values sent to the "อธิบาย" buttons — the same figures each section renders.
@@ -236,15 +244,26 @@ export default async function AnalyticsPage() {
         }
       >
         {!mpt.ok ? (
-          <Empty>{mpt.reason}</Empty>
+          <Empty>
+            {mpt.reason}
+            {mpt.priceBasis.excluded.length > 0 && (
+              <div className="mt-2 text-xs">{mpt.priceBasis.excluded.map((x) => `${x.symbol}: ${x.reason}`).join(" · ")}</div>
+            )}
+          </Empty>
         ) : (
           <>
             <p className="mb-3 text-xs text-muted">
-              ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — หน้าจัดพอร์ตเลือกแบบผลตอบแทนรวมได้) {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
+              {mpt.priceBasis.used === "total_return"
+                ? "ประมาณจากผลตอบแทนรวม (บาท, ราคาปรับปันผล — ปันผลรวมอยู่ในผลตอบแทน)"
+                : "ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — เลือกราคาปรับปันผลได้ที่หัวหน้า)"}{" "}
+              {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
               {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
               {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}
             </p>
+            <div className="mb-3">
+              <BasisSummary priceBasis={mpt.priceBasis} />
+            </div>
             <FrontierChart
               cloud={mpt.cloud}
               frontier={mpt.frontier}
@@ -378,7 +397,7 @@ export default async function AnalyticsPage() {
       )}
 
       <Section title="Stress test">
-        <StressPanel />
+        <StressPanel initialBasis={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} />
       </Section>
     </>
   );

@@ -12,7 +12,18 @@ type Objective = "track" | "after_cost" | "min_cost" | "min_turnover";
 type Response = RebalanceResult & { disclaimer: string; costModel: { commissionPct: number; minCommission: number; vatPct: number; slippageBps: number; sellTaxPct: number } };
 
 /** Optimizer weights → editable targets → whole-lot trade proposal (never recorded). */
-export function RebalancePanel({ suggested, extraCash, sourceLabel = "optimizer" }: { suggested: { symbol: string; weight: number }[]; extraCash: number; sourceLabel?: string }) {
+export function RebalancePanel({
+  suggested,
+  extraCash,
+  sourceLabel = "optimizer",
+  basis,
+}: {
+  suggested: { symbol: string; weight: number }[];
+  extraCash: number;
+  sourceLabel?: string;
+  /** Price basis / benchmark of the page (PRICE_BASIS_BENCHMARK_SPEC F3): used for the tracking-error covariance. */
+  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
+}) {
   const fromOptimizer = () => Object.fromEntries(suggested.map((s) => [s.symbol, s.weight]));
   const [weights, setWeights] = useState<Record<string, number | null>>(fromOptimizer);
   const [edited, setEdited] = useState(false);
@@ -42,7 +53,16 @@ export function RebalancePanel({ suggested, extraCash, sourceLabel = "optimizer"
       const r = await fetch("/api/v1/portfolio/rebalance", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ targets, objective, extraCash, cashReserve: reserve, noTradeBand: band, allowSell, ...(maxTurnover != null ? { maxTurnover } : {}) }),
+        body: JSON.stringify({
+          targets,
+          objective,
+          extraCash,
+          cashReserve: reserve,
+          noTradeBand: band,
+          allowSell,
+          ...(maxTurnover != null ? { maxTurnover } : {}),
+          ...(basis ? { optimizer: { returnBasis: basis.returnBasis, benchmark: basis.benchmark } } : {}),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);

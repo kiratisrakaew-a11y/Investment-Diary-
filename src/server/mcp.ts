@@ -5,6 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { basisBenchmarkShape, returnBasisField } from "./basis-schema";
 import { MODEL_VERSION } from "@/lib/governance";
 import {
   assetInput,
@@ -557,11 +558,13 @@ export function createMcpServer() {
       title: "Modern Portfolio Theory analysis",
       description:
         "Markowitz analysis of current holdings: expected returns, correlation, current portfolio risk/return, " +
-        "minimum-variance and maximum-Sharpe (tangency) weights, and the Capital Market Line.",
+        "minimum-variance and maximum-Sharpe (tangency) weights, and the Capital Market Line. " +
+        "returnBasis total_return uses adjusted closes per asset (gold / dividend-free stocks / accumulating funds on closes, listed in priceBasis.fallback; a dividend payer without adjusted closes is left out with the reason in priceBasis.excluded). Holdings are always valued on closes.",
+      inputSchema: { returnBasis: returnBasisField },
       annotations: { readOnlyHint: true },
     },
-    safe(async () => {
-      const r = await getMptAnalysis();
+    safe(async ({ returnBasis }) => {
+      const r = await getMptAnalysis(undefined, undefined, { returnBasis });
       if (!r.ok) return r;
       const { cloud: _c, frontier: _f, ...rest } = r;
       return rest;
@@ -802,14 +805,18 @@ export function createMcpServer() {
     {
       title: "Investment universe",
       description:
-        "Assets with enough history: historical return, volatility, beta and CAPM expected return (THB, annual).",
+        "Assets with enough history: historical return, volatility, beta and CAPM expected return (THB, annual). returnBasis / benchmark as in optimize_portfolio; priceBasis and benchmark say what was used.",
       inputSchema: {
         lookbackDays: z.number().int().min(90).max(3650).optional(),
+        ...basisBenchmarkShape,
       },
       annotations: { readOnlyHint: true },
     },
-    safe(async ({ lookbackDays }) => {
-      const { cov: _c, ...u } = await loadUniverse(lookbackDays);
+    safe(async ({ lookbackDays, returnBasis, benchmark }) => {
+      const { cov: _c, ...u } = await loadUniverse(lookbackDays, undefined, {
+        returnBasis,
+        benchmark,
+      });
       return u;
     }),
   );

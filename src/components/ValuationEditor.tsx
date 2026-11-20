@@ -18,7 +18,8 @@ import {
   type SensitivityAxis,
 } from "@/lib/finance/valuation";
 import { evaluate, riForecastRows, riHorizonSnapshot, type ValuationInput } from "@/lib/valuation-schemas";
-import { fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
+import { estimateBetaAction, fetchFundamentalsAction, saveValuationAction } from "@/app/(app)/valuation/actions";
+import { BasisBenchmarkPicker, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import { NumField, SelectField, Toggle } from "./fields";
 import { DcfStageEditor } from "./DcfStageEditor";
 import { RimHorizonPanel, ScenarioDisclaimer } from "./RimHorizonPanel";
@@ -50,6 +51,9 @@ export interface EditorDefaults {
   priceDate?: string | null;
   /** Date-consistency thresholds from Settings. */
   timestampPolicy?: TimestampPolicy;
+  /** Price basis / benchmark the default β was estimated with, and the indexes available (F9). */
+  betaBasis?: BasisBenchmarkValue;
+  benchmarks?: PickerBenchmark[];
 }
 
 const METHODS: { value: Method; label: string }[] = [
@@ -195,6 +199,19 @@ export function ValuationEditor({
     setDdm(patch);
     setRi(patch);
   };
+  const [betaBasis, setBetaBasis] = useState<BasisBenchmarkValue>(defaults.betaBasis ?? { basis: "price_return", bench: "default" });
+  const [betaMsg, setBetaMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [betaPending, startBeta] = useTransition();
+  /** Re-estimate β only: replaces β and its source, never other inputs the user edited. */
+  const recomputeBeta = () =>
+    startBeta(async () => {
+      setBetaMsg(null);
+      const r = await estimateBetaAction(symbol, betaBasis.basis, betaBasis.bench);
+      if (!r.ok) return setBetaMsg({ ok: false, text: r.error });
+      setShared("beta", r.beta);
+      setMeta("betaSource", r.betaSource);
+      setBetaMsg({ ok: true, text: `β = ${r.beta.toFixed(2)}` });
+    });
   const setShared = (k: "riskFree" | "beta" | "equityRiskPremium" | "extraPremium" | "currentPrice", v: number) => {
     setDcfA((a) => ({ ...a, [k]: v }));
     setDdm((a) => ({ ...a, [k]: v }));
@@ -398,6 +415,17 @@ export function ValuationEditor({
             <TextField label="ที่มา ERP" value={dcfA.inputMeta?.erpSource} placeholder="เช่น Damodaran ม.ค. 2026" onChange={(v) => setMeta("erpSource", v)} />
             <TextField label="ที่มา Beta" value={dcfA.inputMeta?.betaSource} placeholder="เช่น 2 ปีรายสัปดาห์ vs SET" onChange={(v) => setMeta("betaSource", v)} />
           </Group>
+          {method !== "multiples" && (
+            <div className="-mt-2 space-y-1 rounded-lg border border-border p-2" data-testid="beta-recompute">
+              <BasisBenchmarkPicker value={betaBasis} onChange={setBetaBasis} benchmarks={defaults.benchmarks ?? []} />
+              <div className="flex items-center gap-2">
+                <button type="button" className="btn-ghost text-xs" disabled={betaPending || !symbol} onClick={recomputeBeta}>
+                  {betaPending ? "กำลังคำนวณ…" : "คำนวณ β ใหม่"}
+                </button>
+                {betaMsg && <span className={`text-xs ${betaMsg.ok ? "text-pos" : "text-neg"}`}>{betaMsg.text}</span>}
+              </div>
+            </div>
+          )}
           {!(dcfA.inputMeta?.rfSource && dcfA.inputMeta?.erpSource) && method !== "multiples" && (
             <p className="-mt-2 text-xs text-muted">Rf / ERP ที่ไม่ได้ระบุที่มาถือเป็นค่าตัวอย่าง — ควรใช้อัตราสกุลเงินและอายุเดียวกับกระแสเงินสด (เช่น พันธบัตรไทยระยะยาวสำหรับ DCF เงินบาท) และ ERP แบบคาดการณ์ ไม่ใช่ผลตอบแทนในอดีต</p>
           )}

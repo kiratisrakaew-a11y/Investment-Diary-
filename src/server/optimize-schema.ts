@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { benchmarkField } from "./basis-schema";
 import { constraintsInput } from "@/lib/finance/exposure";
 import { shortPolicyInput } from "@/lib/finance/short-policy";
 
@@ -113,8 +114,11 @@ export const optimizeInput = z
       .enum(["price_return", "total_return"])
       .optional()
       .describe(
-        "Return series for μ/Σ: price_return (closes, default) or total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason",
+        "Return series for μ/Σ: price_return (closes) or total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason. Omit = Settings default (price_return unless changed). The result's priceBasis says what was used",
       ),
+    benchmark: benchmarkField.describe(
+      'Index for β / CAPM expected returns: "default" = Settings\' index (as before; warns when its kind does not match the basis), "auto" = TRI for total_return / price index for price_return, or a stored index symbol (SETTRI, ^SET.BK …). Omit = Settings default. The result\'s benchmark says which index and kind were used',
+    ),
     returnMethod: z
       .enum(["historical", "capm", "blend", "black_litterman"])
       .optional()

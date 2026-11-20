@@ -4,6 +4,9 @@ import { getPortfolioSummary } from "./portfolio";
 import { loadUniverse } from "./optimizer";
 import { bondHoldings } from "./bonds";
 import { listAssets } from "./assets";
+import { basisBenchmarkShape } from "@/server/basis-schema";
+import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
+import { BENCHMARK_KIND_LABEL, RETURN_BASIS_SHORT } from "@/lib/finance/price-basis";
 
 const scenario = z.object({
   name: z.string().optional(),
@@ -24,6 +27,7 @@ export const stressInput = z.object({
   scenarios: z.array(scenario).max(10).optional().describe("Custom scenarios; omit to run the presets"),
   presets: z.array(z.enum(Object.keys(PRESET_SCENARIOS) as [string, ...string[]])).optional().describe(`Preset names: ${Object.keys(PRESET_SCENARIOS).join(", ")}`),
   lookbackDays: z.number().int().min(90).max(3650).optional().describe("History for β, covariance and the historical replay (default 2 years)"),
+  ...basisBenchmarkShape,
 });
 
 /** Stress test of the current holdings. Read-only. */
@@ -32,7 +36,11 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
   const [snap, bonds] = await Promise.all([getPortfolioSummary(), bondHoldings()]);
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   const assetMeta = new Map((await listAssets()).map((a) => [a.id, a]));
-  const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), { withSeries: true }).catch(() => null);
+  const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), { withSeries: true, returnBasis: x.returnBasis, benchmark: x.benchmark }).catch((e) => {
+    // A benchmark the user named but the app cannot use is an error; anything else = no β, as before.
+    if (e instanceof BenchmarkError) throw e;
+    return null;
+  });
   const uAsset = (sym: string) => (u?.ok ? u.assets.find((a) => a.symbol === sym) : undefined);
   const bondOf = (sym: string) => bonds.bonds.find((b) => b.symbol === sym && b.analytics);
   const positions: StressPosition[] = held.map((p) => {
@@ -66,7 +74,11 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
     nav: snap.totalValueThb,
     cash: snap.cashThb,
     assumptions: {
-      beta: u?.ok ? `β เทียบ ${u.benchmark} จากผลตอบแทน ${u.from} → ${u.to} (${u.observations} วัน)` : "ไม่มี β (ประวัติราคาไม่พอ)",
+      beta: u?.ok
+        ? u.benchmark
+          ? `β เทียบ ${u.benchmark.symbol} (${BENCHMARK_KIND_LABEL[u.benchmark.kind]}) จาก ${RETURN_BASIS_SHORT[u.returnBasis ?? "price_return"]} ${u.from} → ${u.to} (${u.observations} วัน)${u.benchmark.warning ? ` · ${u.benchmark.warning}` : ""}`
+          : `ไม่มี β (ไม่มีข้อมูลดัชนีอ้างอิง) · ราคา ${RETURN_BASIS_SHORT[u.returnBasis ?? "price_return"]} ${u.from} → ${u.to}`
+        : "ไม่มี β (ประวัติราคาไม่พอ)",
       duration: "Modified duration / convexity ของพันธบัตรจากราคาล่าสุด (หน้าพันธบัตร); กองทุนต้องใส่ durationOverride",
       credit: "Credit spread: spread duration จาก Z-spread บน yield curve ที่ตั้งไว้ ถ้าไม่มีใช้ modified duration แทน (ระบุในผล); ดอกเบี้ย + spread คำนวณราคาใหม่ครั้งเดียวด้วย Δy + Δs (ประมาณอันดับสอง) ส่วนไขว้รวมอยู่ในบรรทัด credit; ไม่รวมการผิดนัด / rating transition",
       fx: "สินทรัพย์ USD: (1 + ผลจากราคา)(1 + ΔFX) − 1",
@@ -76,5 +88,7 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
     results,
     history,
     skipped: u?.ok ? u.skipped : [],
+    priceBasis: u?.priceBasis ?? null,
+    benchmark: u?.benchmark ?? null,
   };
 }

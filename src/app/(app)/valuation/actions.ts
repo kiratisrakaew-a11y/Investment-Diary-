@@ -44,6 +44,24 @@ export async function deleteValuationAction(id: number) {
   revalidatePath("/", "layout");
 }
 
+/** PRICE_BASIS_BENCHMARK_SPEC F9: re-estimate β (2 years, daily) with the chosen price basis and index. */
+export async function estimateBetaAction(
+  symbol: string,
+  returnBasis: "price_return" | "total_return",
+  benchmark: string,
+): Promise<{ ok: true; beta: number; betaSource: string } | { ok: false; error: string }> {
+  try {
+    const { editorDefaults } = await import("@/server/services/valuation-defaults");
+    const { defaults } = await editorDefaults(symbol, { returnBasis, benchmark });
+    const src = defaults.inputMeta?.betaSource;
+    if (!src) return { ok: false, error: `คำนวณ β ของ ${symbol} ไม่ได้ — ประวัติราคาไม่พอ ไม่มีราคาปรับปันผลครบ หรือไม่มีข้อมูลดัชนีในช่วงนี้` };
+    return { ok: true, beta: defaults.beta, betaSource: src };
+  } catch (e) {
+    const err = e as Error & { code?: string; issue?: { suggestion?: string } };
+    return { ok: false, error: `${err.message}${err.code ? ` [${err.code}]` : ""}${err.issue?.suggestion ? ` — ${err.issue.suggestion}` : ""}` };
+  }
+}
+
 export async function fetchFundamentalsAction(symbol: string): Promise<{ ok: true; data: Fundamentals; yahoo: string } | { ok: false; error: string }> {
   const yahoo = await yahooSymbolFor(symbol);
   try {

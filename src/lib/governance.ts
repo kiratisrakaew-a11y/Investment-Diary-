@@ -183,9 +183,41 @@ export function marketInputProvenance(s: ProvenanceSettings) {
 }
 
 /** Source notes copied into a new valuation's `inputMeta` (left empty when unsourced, so they show as illustrative). */
+function betaDetail(b: {
+  returnBasis?: "price_return" | "total_return";
+  benchmarkKind?: "price_index" | "total_return";
+  from?: string | null;
+  to?: string | null;
+  frequency?: string;
+}): string {
+  // Absent fields (older callers) keep the previous text exactly.
+  if (!b.returnBasis) return "";
+  const parts = [
+    b.returnBasis === "total_return" ? "ราคา Adjusted Close" : "ราคา Close",
+    b.benchmarkKind
+      ? b.benchmarkKind === "total_return"
+        ? "ดัชนีผลตอบแทนรวม"
+        : "ดัชนีราคา"
+      : null,
+    b.from && b.to ? `${b.from} → ${b.to}` : null,
+    b.frequency && b.frequency !== "daily" ? `ความถี่ ${b.frequency}` : null,
+  ].filter(Boolean);
+  return ` · ${parts.join(" · ")}`;
+}
+
 export function defaultInputMeta(
   s: ProvenanceSettings,
-  beta: { beta: number; observations: number; benchmark: string } | null,
+  beta: {
+    beta: number;
+    observations: number;
+    benchmark: string;
+    /** PRICE_BASIS_BENCHMARK_SPEC F9: basis, index kind, period and sampling, so a saved β can be re-checked. */
+    returnBasis?: "price_return" | "total_return";
+    benchmarkKind?: "price_index" | "total_return";
+    from?: string | null;
+    to?: string | null;
+    frequency?: string;
+  } | null,
 ): InputMeta {
   const p = marketInputProvenance(s);
   return {
@@ -195,7 +227,7 @@ export function defaultInputMeta(
       : `ตั้งค่า: ${p.riskFree.source}`,
     erpSource: p.erp.illustrative ? undefined : (s.erpSource ?? undefined),
     betaSource: beta
-      ? `ประมาณจากผลตอบแทนรายวัน ${beta.observations} วันเทียบ ${beta.benchmark} (β ${beta.beta.toFixed(2)})`
+      ? `ประมาณจากผลตอบแทนรายวัน ${beta.observations} วันเทียบ ${beta.benchmark} (β ${beta.beta.toFixed(2)})${betaDetail(beta)}`
       : undefined,
   };
 }

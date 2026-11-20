@@ -41,7 +41,10 @@ export function OptimizerClient({
   period,
   scenarios,
   rfInfo,
+  basis,
 }: {
+  /** Price basis / benchmark of the page, passed on to the rebalancing proposal. */
+  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
   /** Risk-free resolver output (source, tenor, date, warnings). */
   rfInfo?: ResolvedRiskFree;
   /** Historical per-period returns per asset (same order as assets), for min CVaR. */
@@ -608,7 +611,7 @@ export function OptimizerClient({
           {hasShortOrLeverage(r) ? (
             <section className="card text-sm text-muted">ข้อเสนอปรับพอร์ตไม่แสดงเมื่อผลลัพธ์มีการขายชอร์ตหรือกู้ยืม — ระบบไม่สร้างคำสั่งขายชอร์ตหรือกู้ยืม และไม่ส่งคำสั่งซื้อขายให้</section>
           ) : (
-            <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} />
+            <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} basis={basis} />
           )}
         </>
       )}

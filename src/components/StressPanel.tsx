@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { NumField } from "./fields";
 import { fmtPct, fmtThb, signClass } from "@/lib/format";
@@ -21,13 +22,23 @@ type Response = {
   nav: number;
   assumptions: Record<string, string>;
   results: Result[];
+  priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] } | null;
+  benchmark?: { symbol: string; kind: "price_index" | "total_return"; warning: string | null } | null;
   history: { worstDay: { date: string | null; return: number }; worst21d: { from: string | null; to: string | null; return: number } | null; coverage: number; note: string } | null;
 };
 
 const FACTOR: Record<string, string> = { equity: "หุ้น (β)", rate: "ดอกเบี้ย", fx: "ค่าเงิน", specific: "รายตัว/กลุ่ม", liquidity: "สภาพคล่อง" };
 
 /** Presets or a custom scenario against current holdings (read-only). */
-export function StressPanel() {
+export function StressPanel({
+  initialBasis,
+  benchmarks = [],
+}: {
+  /** Page / Settings defaults (PRICE_BASIS_BENCHMARK_SPEC F6); changed here for this run only. */
+  initialBasis?: BasisBenchmarkValue;
+  benchmarks?: PickerBenchmark[];
+}) {
+  const [basis, setBasis] = useState<BasisBenchmarkValue>(initialBasis ?? { basis: "price_return", bench: "default" });
   const [res, setRes] = useState<Response | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -48,9 +59,13 @@ export function StressPanel() {
           .filter((p) => p.length === 2 && p[0] && Number.isFinite(Number(p[1])))
           .map(([k, v]) => [k.toUpperCase(), Number(v) / 100]),
       );
-      const body = custom
-        ? { scenarios: [{ name: "กำหนดเอง", equityShock: eq ?? undefined, rateShock: rate ?? undefined, fxShock: fx ?? undefined, correlationShock: corr ?? undefined, specific: Object.keys(spec).length ? spec : undefined }] }
-        : {};
+      const body = {
+        ...(custom
+          ? { scenarios: [{ name: "กำหนดเอง", equityShock: eq ?? undefined, rateShock: rate ?? undefined, fxShock: fx ?? undefined, correlationShock: corr ?? undefined, specific: Object.keys(spec).length ? spec : undefined }] }
+          : {}),
+        returnBasis: basis.basis,
+        benchmark: basis.bench,
+      };
       const r = await fetch("/api/v1/portfolio/stress", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
@@ -64,6 +79,7 @@ export function StressPanel() {
 
   return (
     <div className="space-y-4">
+      <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={benchmarks} />
       <div className="grid gap-3 sm:grid-cols-5">
         <NumField label="หุ้นตลาด" pct nullable value={eq} onChange={setEq} />
         <NumField label="ดอกเบี้ย (Δy)" pct nullable value={rate} onChange={setRate} />
@@ -85,6 +101,7 @@ export function StressPanel() {
       {error && <p className="text-sm text-neg">{error}</p>}
       {res && (
         <div className="space-y-3">
+          <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <div className="flex justify-end">
             <ExplainButton
               topic="ผล Stress test"

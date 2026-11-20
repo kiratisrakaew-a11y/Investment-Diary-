@@ -175,13 +175,13 @@ export function BasisSummary({
       {priceBasis?.fallback?.length ? (
         <p className="text-muted">
           ใช้ราคาปิดแทน:{" "}
-          {priceBasis.fallback.map((f) => `${f.symbol} (${f.reason})`).join(" · ")}
+          {priceBasis.fallback.map((f) => `${f.symbol} (${f.reason.replace(`${f.symbol}: `, "")})`).join(" · ")}
         </p>
       ) : null}
       {priceBasis?.excluded?.length ? (
         <p className="text-neg">
           ไม่ได้นำมาคำนวณ:{" "}
-          {priceBasis.excluded.map((f) => `${f.symbol} (${f.reason})`).join(" · ")}
+          {priceBasis.excluded.map((f) => `${f.symbol} (${f.reason.replace(`${f.symbol}: `, "")})`).join(" · ")}
         </p>
       ) : null}
     </div>

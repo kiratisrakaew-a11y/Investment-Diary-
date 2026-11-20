@@ -14,7 +14,15 @@ import { simpleReturns } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
-import { loadBenchmark, loadFxHistory, loadPriceHistory } from "./prices";
+import {
+  loadAdjPriceHistory,
+  loadBenchmark,
+  loadCorporateActionDates,
+  loadFxHistory,
+  loadPriceHistory,
+} from "./prices";
+import { priceBasisReport, resolveReturnBasis, type ReturnBasis } from "@/lib/finance/price-basis";
+import { totalReturnSourceFor } from "@/lib/finance/total-return-policy";
 import { getSettings, getTargets } from "./settings";
 import { allTransactions } from "./transactions";
 
@@ -124,12 +132,42 @@ export async function getPerformance(end = today(), data?: PortfolioData) {
  * Markowitz analysis of the assets currently held: expected returns and
  * covariance from aligned daily THB returns over the look-back window.
  */
-export async function getMptAnalysis(lookbackDays = 365 * 2, data?: PortfolioData) {
-  const { assetInputs, txs, prices, fx, settings } = data ?? (await loadAll());
-  const snap = buildSnapshot(assetInputs, txs, prices, fx, today());
+export async function getMptAnalysis(
+  lookbackDays = 365 * 2,
+  data?: PortfolioData,
+  opts: { returnBasis?: ReturnBasis } = {},
+) {
+  const { assetInputs, txs, prices: closes, fx, settings } = data ?? (await loadAll());
+  const snap = buildSnapshot(assetInputs, txs, closes, fx, today());
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   const from = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
   const rf = settings.riskFreeRate / 100;
+  // PRICE_BASIS_BENCHMARK_SPEC F2: request → Settings → price_return. Holdings are valued on closes either way;
+  // only the return series switch to adjusted closes (per-asset policy as in the optimizer: MPT A3).
+  const basisInfo = resolveReturnBasis(opts.returnBasis, settings.defaultReturnBasis ?? null, "price_return");
+  const fallback: { symbol: string; reason: string }[] = [];
+  const excluded: { symbol: string; reason: string }[] = [];
+  let prices = closes;
+  if (basisInfo.used === "total_return") {
+    const [adj, actions] = await Promise.all([loadAdjPriceHistory(), loadCorporateActionDates()]);
+    prices = new Map(closes);
+    for (const p of held) {
+      const window = (closes.get(p.assetId) ?? []).filter(([d]) => d >= from);
+      const adjMap = new Map(adj.get(p.assetId) ?? []);
+      const src = totalReturnSourceFor(
+        { symbol: p.symbol, assetClass: p.assetClass },
+        window.map(([date, close]) => ({ date, close, adjClose: adjMap.get(date) ?? null })),
+        actions.for({ id: p.assetId, symbol: p.symbol }),
+      );
+      if (!src.ok) {
+        excluded.push({ symbol: p.symbol, reason: `${src.reason}${src.required ? ` — ต้องการ: ${src.required}` : ""}` });
+        prices.delete(p.assetId);
+      } else if (src.source === "adjusted_close") {
+        prices.set(p.assetId, window.map(([d]) => [d, adjMap.get(d)!] as [string, number]));
+      } else if (src.note) fallback.push({ symbol: p.symbol, reason: src.note });
+    }
+  }
+  const priceBasis = priceBasisReport(basisInfo, fallback, excluded);
 
   // USD assets need USDTHB for every date; never substitute FX = 1.
   const fxStart = fx[0]?.[0];
@@ -140,14 +178,14 @@ export async function getMptAnalysis(lookbackDays = 365 * 2, data?: PortfolioDat
   );
   const skipped = held.filter((p) => !usable.includes(p)).map((p) => p.symbol);
   if (usable.length < 2) {
-    return { ok: false as const, reason: "Need at least 2 held assets with 30+ days of price history.", skipped };
+    return { ok: false as const, reason: "Need at least 2 held assets with 30+ days of price history.", skipped, priceBasis };
   }
 
   // Dates on which every usable asset has a price.
   const dateSets = usable.map((p) => new Set(prices.get(p.assetId)!.filter(([d]) => d >= from).map(([d]) => d)));
   const common = [...dateSets[0]].filter((d) => dateSets.every((s) => s.has(d))).sort();
   if (common.length < 30) {
-    return { ok: false as const, reason: "Not enough overlapping price dates between holdings.", skipped };
+    return { ok: false as const, reason: "Not enough overlapping price dates between holdings.", skipped, priceBasis };
   }
   const series = usable.map((p) => {
     const hist = prices.get(p.assetId)!;
@@ -169,6 +207,7 @@ export async function getMptAnalysis(lookbackDays = 365 * 2, data?: PortfolioDat
     ok: true as const,
     symbols: usable.map((p) => p.symbol),
     skipped,
+    priceBasis,
     observations: common.length,
     periodsPerYear,
     covarianceWarnings: covWarnings,

@@ -35,7 +35,6 @@ import { listAssets } from "./assets";
 import {
   loadAdjPriceHistory,
   loadCorporateActionDates,
-  loadBenchmark,
   loadFxHistory,
   loadPriceHistory,
 } from "./prices";
@@ -65,6 +64,17 @@ import {
   type ReturnBasis,
 } from "@/lib/finance/return-series";
 import { getSettings, getYieldCurve } from "./settings";
+import { resolveBenchmark } from "./benchmarks";
+import {
+  benchmarkReportOf,
+  normalizeBenchmarkRequest,
+} from "@/lib/finance/benchmark-resolve";
+import {
+  priceBasisReport,
+  resolveReturnBasis,
+  type BenchmarkReport,
+  type PriceBasisReport,
+} from "@/lib/finance/price-basis";
 import { getRiskFree } from "./risk-free";
 import type {
   ResolvedRiskFree,
@@ -106,7 +116,10 @@ export interface OptimizerUniverse {
   /** Where the risk-free rate came from (resolver output). */
   riskFreeInfo?: ResolvedRiskFree;
   equityRiskPremium: number;
-  benchmark: string;
+  /** The index β / CAPM are measured against (PRICE_BASIS_BENCHMARK_SPEC D2); null when none is available. */
+  benchmark: BenchmarkReport | null;
+  /** Which prices were used and which assets fell back or were left out (spec §5). */
+  priceBasis?: PriceBasisReport;
   assets: UniverseAsset[];
   skipped: { symbol: string; reason: string }[];
   /** Annualized sample covariance of THB returns, aligned with `assets`. */
@@ -139,20 +152,32 @@ export async function loadUniverse(
   opts: {
     withSeries?: boolean;
     returnBasis?: ReturnBasis;
+    /** "default" | "auto" | index symbol; omitted = Settings' defaultBenchmark. */
+    benchmark?: string;
     riskFree?: RiskFreeRequest;
     frequency?: SampleFrequency;
     bond?: { horizonYears?: number; rateShiftBp?: number };
   } = {},
 ): Promise<OptimizerUniverse> {
-  const basis = opts.returnBasis ?? "price_return";
+  const settings = await getSettings();
+  // Request → Settings → price_return (PRICE_BASIS_BENCHMARK_SPEC D3).
+  const basisInfo = resolveReturnBasis(
+    opts.returnBasis,
+    settings.defaultReturnBasis,
+    "price_return",
+  );
+  const basis = basisInfo.used;
+  const benchRequest = normalizeBenchmarkRequest(
+    opts.benchmark ?? settings.defaultBenchmark,
+  );
+  const wantedBench = basis === "total_return" ? "total_return" : "price";
   const frequency = opts.frequency ?? "daily";
   const minObs = MIN_OBS_BY_FREQUENCY[frequency];
-  const [assets, txRows, prices, fx, settings, adj, curve] = await Promise.all([
+  const [assets, txRows, prices, fx, adj, curve] = await Promise.all([
     listAssets(),
     allTransactions(),
     loadPriceHistory(),
     loadFxHistory(),
-    getSettings(),
     basis === "total_return" ? loadAdjPriceHistory() : Promise.resolve(null),
     getYieldCurve(),
   ]);
@@ -161,7 +186,18 @@ export async function loadUniverse(
   const returnBasisByAsset: Record<string, AssetReturnBasis> = {};
   const basisNotes: string[] = [];
   const basisById = new Map<number, AssetReturnBasis>();
-  const bench = await loadBenchmark(settings.benchmarkSymbol);
+  const basisExcluded: { symbol: string; reason: string }[] = [];
+  const basisFallback: { symbol: string; reason: string }[] = [];
+  // "default" = Settings' index whatever the basis (as before; a kind mismatch is now a warning — spec B1).
+  // "auto" / a symbol is resolved once the common calendar is known (coverage is checked from its first date).
+  const defaultBench =
+    benchRequest === "default"
+      ? await resolveBenchmark({
+          request: "default",
+          wanted: wantedBench,
+          featureDefault: "settings",
+        })
+      : null;
   // Portfolio Rf from the resolver (curve → Settings fallback); without a curve this equals Settings as before.
   const rfInfo = await getRiskFree({ purpose: "portfolio", ...opts.riskFree });
   if (!rfInfo.ok || rfInfo.rate == null)
@@ -215,6 +251,7 @@ export async function loadUniverse(
         symbol: a.symbol,
         reason: `ผลตอบแทนรวมพันธบัตร: ${bondTr.reason}`,
       });
+      basisExcluded.push(skipped[skipped.length - 1]);
       return false;
     }
     // Never convert at FX = 1: USD assets need a USDTHB fixing on (or within 5 days before) each date.
@@ -248,7 +285,10 @@ export async function loadUniverse(
               reason: src.reason,
               required: src.required,
             };
-          if (src?.ok && src.note) basisNotes.push(src.note);
+          if (src?.ok && src.note) {
+            basisNotes.push(src.note);
+            basisFallback.push({ symbol: a.symbol, reason: src.note });
+          }
           if (src?.ok) basisById.set(a.id, src.basis);
           return buildLevelSeries({
             label: a.symbol,
@@ -267,6 +307,8 @@ export async function loadUniverse(
         symbol: a.symbol,
         reason: `${lv.reason}${lv.required ? ` — ต้องการ: ${lv.required}` : ""}`,
       });
+      if (basis === "total_return")
+        basisExcluded.push(skipped[skipped.length - 1]);
       return false;
     }
     seriesWarnings.push(...lv.warnings);
@@ -304,7 +346,8 @@ export async function loadUniverse(
     riskFree: rf,
     riskFreeInfo: rfInfo,
     equityRiskPremium: erp,
-    benchmark: settings.benchmarkSymbol,
+    benchmark: benchmarkReportOf(defaultBench),
+    priceBasis: priceBasisReport(basisInfo, basisFallback, basisExcluded),
     assets: [],
     skipped,
     cov: [],
@@ -333,6 +376,15 @@ export async function loadUniverse(
     (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) /
     (365 * 86_400_000);
   const N = years > 0 ? (dates.length - 1) / years : 252;
+  const resolved =
+    defaultBench ??
+    (await resolveBenchmark({
+      request: benchRequest,
+      wanted: wantedBench,
+      from: dates[0],
+      featureDefault: "settings",
+    }));
+  const bench = resolved?.series ?? [];
   // Benchmark on the asset calendar where it has actual prints at both ends (NaN otherwise) — never forward-filled.
   const benchWindow = resampleLevels(
     bench.filter(([d]) => d >= from),
@@ -354,7 +406,8 @@ export async function loadUniverse(
     riskFree: rf,
     riskFreeInfo: rfInfo,
     equityRiskPremium: erp,
-    benchmark: settings.benchmarkSymbol,
+    benchmark: benchmarkReportOf(resolved),
+    priceBasis: priceBasisReport(basisInfo, basisFallback, basisExcluded),
     skipped,
     cov,
     covShrunk,
@@ -364,6 +417,7 @@ export async function loadUniverse(
       ...covarianceWarnings,
       ...seriesWarnings,
       ...basisNotes,
+      ...(resolved?.warning ? [`β / CAPM: ${resolved.warning}`] : []),
     ],
     returnBasis: basis,
     returnBasisByAsset,
@@ -530,6 +584,8 @@ export interface OptimizeParams {
   };
   robust?: { bootstrap?: number; returnShock?: number; seed?: number };
   returnBasis?: ReturnBasis;
+  /** β / CAPM index: "default" | "auto" | symbol (PRICE_BASIS_BENCHMARK_SPEC D2). */
+  benchmark?: string;
   constraints?: ConstraintsInput;
   /** risk_parity: budget by symbol (normalized; default equal). */
   riskBudgets?: Record<string, number>;
@@ -552,6 +608,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
   const u = await loadUniverse(p.lookbackDays, p.symbols, {
     withSeries: true,
     returnBasis: p.returnBasis,
+    benchmark: p.benchmark,
     riskFree: p.riskFree,
     frequency: p.frequency,
     bond: { horizonYears: p.bondHorizonYears, rateShiftBp: p.bondRateShiftBp },
@@ -832,6 +889,8 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     })),
     skipped: u.skipped,
     returnBasisByAsset: u.returnBasisByAsset,
+    priceBasis: u.priceBasis,
+    benchmark: u.benchmark,
     objective: r.objective,
     allocations: r.allocations,
     ...(r.riskBased

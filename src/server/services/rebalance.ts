@@ -74,7 +74,10 @@ export async function rebalancePortfolio(input: RebalanceParams) {
 
   // Tracking error uses the optimizer covariance when every targeted asset has enough history.
   let cov: number[][] | null = null;
-  const u = await loadUniverse(x.optimizer?.lookbackDays, rows.map((r) => r.symbol)).catch(() => null);
+  const u = await loadUniverse(x.optimizer?.lookbackDays, rows.map((r) => r.symbol), {
+    returnBasis: x.optimizer?.returnBasis,
+    benchmark: x.optimizer?.benchmark,
+  }).catch(() => null);
   if (u?.ok) {
     const idx = rows.map((r) => u.assets.findIndex((a) => a.symbol === r.symbol));
     if (idx.every((i) => i >= 0)) {

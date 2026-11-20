@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-20 — Price basis & benchmark, phase P2 (F3, F6, F9, F2)
+- **F3 optimizer / `optimize_portfolio` / `rebalance_portfolio` / `get_investment_universe`.**
+  - `loadUniverse` takes `returnBasis` and `benchmark` (request → Settings → price_return / Settings' index).
+  - Root cause of B1: β / CAPM always used Settings' index, even on total return. Default behaviour is kept (numbers unchanged) but a total-return run on a price index now carries the kind-mismatch warning; `benchmark: "auto"` picks a TRI.
+  - `auto` / a symbol are resolved from the first common date, so a short index is `BENCHMARK_COVERAGE`, an unknown one `BENCHMARK_NOT_FOUND` (REST 400 with `available`, MCP `[CODE]`).
+  - The universe's `benchmark` is now an object `{ symbol, kind, basis, wanted, source, warning }` (was the symbol string); every result carries `priceBasis { requested, used, source, fallback, excluded }`.
+  - Optimizer page: picker at the top (`?basis=…&bench=…`, μ/Σ recomputed server-side), summary line with warnings; the rebalancing proposal uses the same basis / index for its tracking-error covariance.
+- **F6 stress test**: `returnBasis` / `benchmark` in `stress_test_portfolio` and REST; β, covariance and the historical replay use them. `assumptions.beta` names the index, its kind and the price basis. Picker in the stress panel.
+- **F9 valuation β**: `editorDefaults(symbol, { returnBasis, benchmark })`; the β source now records basis, index kind, period and sampling. The valuation editor has a picker and "คำนวณ β ใหม่", which replaces only β and its source.
+- **F2 portfolio MPT** (`get_portfolio_optimization`, `GET /portfolio/mpt?returnBasis=`): total_return switches each holding's return series to adjusted closes under the same per-asset policy as the optimizer (MPT A3); fallbacks and exclusions are listed with reasons. Holdings are still valued on closes. The close path is unchanged (refactor to `loadUniverse` not done, to keep its numbers exactly).
+- Numbers: identical with no new option (before/after run of optimize max Sharpe / min variance, universe, stress, MPT, valuation defaults, rebalance). Text changes only: the β assumption / β source name the basis and index kind, and total_return on a price index adds the B1 warning.
+- Checks: `check:price-basis` now also covers 6.1 (no option == explicit defaults, F3/F6/F2/F9), 6.4 (a dividend payer without adj_close is in `priceBasis.excluded` with the reason) and 6.5 (MCP == REST == service for optimize, stress and portfolio MPT), plus Settings defaults vs request.
+
 ## 2026-11-20 — Price basis & benchmark, phase P0 + P1 (PRICE_BASIS_BENCHMARK_SPEC)
 - **P0 skipped — already done by MPT phase 2 (A2).** Evidence: `npm run check:price-basis` runs the daily updater (`updateAllPrices`, now injectable) against a stubbed provider: the new day of a Yahoo stock gets adj_close, adj_close coverage does not drop, and the adjustment base is recorded.
 - **P1 — shared infrastructure** (no feature uses it yet; every result is unchanged):
