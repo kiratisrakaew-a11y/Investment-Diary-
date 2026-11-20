@@ -154,6 +154,18 @@ With no new option, every result is unchanged digit for digit (checked before / 
 ## 4. Optimizer — `optimizer.ts`, `recommend.ts`, `mpt.ts`
 
 - Inputs: THB returns on dates where every asset has a price. μ = arithmetic mean × N. The covariance is the sample estimate or Ledoit–Wolf shrinkage. Both are checked for PSD (eigenvalue clipping with a warning) and conditioning.
+- Expected returns (`lib/finance/mu-estimate.ts`, the same in optimize, compare, backtest and the optimizer page; v2026.11-mpt5):
+  - `historical`: mean × N.
+  - `capm`: Rf + β·ERP.
+  - `blend`: w·hist + (1 − w)·CAPM with w = 0.5·min(1, years / 3).
+  - `shrinkage`: Bayes–Stein toward CAPM, δ = (n + 2) / ((n + 2) + years·(μ − μ₀)ᵀΣ⁻¹(μ − μ₀)).
+  - Settings `muCapPct` caps |μ − CAPM| for the history-based methods.
+  - Black–Litterman can add views from saved valuations (FV / price − 1, confidence from the scenario width; ≤ 90 days old). In backtests only valuations saved before each rebalance are used.
+  - CAPM-based μ with an ERP that has no source is a warning.
+- Calendar and sampling:
+  - A universe mixing Thai and US-time closes is sampled weekly unless `frequency` is given.
+  - `historyPolicy`: `common` names the assets that shorten the calendar; `drop_short` leaves them out; `pairwise` uses each pair's overlap for Σ, made PSD.
+  - USDTHB more than 5 days old makes a USD asset unavailable; it is never forward-filled.
 - Bounds must satisfy n·min ≤ 1 ≤ n·max. Otherwise the result is `INFEASIBLE_BOUNDS` with a suggestion. Bounds are never relaxed.
 - Exact active-set QP: `min wᵀΣw − λμᵀw`, with Σw = 1 and lo ≤ w ≤ hi. It reports status, KKT residual, |Σw − 1| and the largest bound violation.
 - Target return: exact, on both arms of the bullet. Target risk: maximum return subject to σ ≤ target. Max Sharpe: golden-section search along the efficient arm. Typed errors when a target is infeasible or no portfolio beats Rf.
@@ -275,6 +287,12 @@ With no new option, every result is unchanged digit for digit (checked before / 
 ## 6. Governance — `src/lib/governance.ts`
 
 - `MODEL_VERSION = "2026.10-val6"`: staged DCF and RIM horizons. Legacy values are unchanged, so older saves whose recomputed value is identical are labelled "same value". Only changed or unrecomputable ones are data-quality warnings.
+- `MODEL_VERSION = "2026.11-mpt5"`: portfolio estimation changes (see §1d and §4).
+  - μ: `blend` gives CAPM more weight under 3 years of data. Also new: `shrinkage`, the Settings `muCapPct` cap, and Black–Litterman views from valuations, point in time in backtests.
+  - Sampling: weekly by default for universes that mix markets.
+  - Constraints: one capped bucket for assets without a sector.
+  - `historyPolicy`; total return per asset; `dividendWithholding`.
+  - Valuation formulas are unchanged, so saved valuations recompute to the same value and differ only in the label.
 - `timestampFlags(x, policy)`: market inputs dated after the valuation or older than `inputsMaxAgeDays`; the last stored close on or before the valuation date more than `priceMaxGapDays` away; the latest fiscal year ending on or before the valuation date (year-end taken as 31 Dec) older than `statementsMaxAgeDays`. Thresholds are user-set in Settings (`settings.timestamp_policy`, migration 0012, defaults 180 / 7 / 548 days, REST `/api/v1/settings/timestamp-policy`). They are used on the stock page (computed on the server), in the editor (the price is checked only while it is still the stored close) and in the data-quality check "วันที่ข้อมูล valuation" (latest valuation per symbol and method). Flags only; no value changes.
 
 - Settings store the source, series and as-of date for Rf and ERP. Without a source the value is shown everywhere as illustrative.

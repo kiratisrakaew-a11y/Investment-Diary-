@@ -1,5 +1,5 @@
 /** MPT_FIX_SPEC phases M4–M5 checks on the local database (TEST-LOCAL PBM-* data, removed by mpt-check). */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import { expectedReturnsDetailed, loadUniverse, optimizePortfolio, universeYears } from "../server/services/optimizer";
 import { backtestPortfolio } from "../server/services/backtest";
@@ -159,6 +159,39 @@ export async function laterChecks(check: Check, days: string[]) {
       "A6 wht 10% → lower by ≈ 10% of the dividend yield",
       Math.abs(drop - 0.1 * yieldPa) <= 0.003,
       `drop ${(drop * 100).toFixed(2)}% vs ${(0.1 * yieldPa * 100).toFixed(2)}%`,
+    );
+
+    // ---------------------------------------------------------------- BT-7 total return without double counting
+    // PBM-DIV (above): closes fall by the dividend on each ex-date, adj chain consistent, events paid on the
+    // ex-date (paymentDate = exDate) so cash dividends and adjusted closes describe the same economics.
+    await db
+      .update(schema.dividendEvents)
+      .set({ paymentDate: sql`${schema.dividendEvents.exDate}` })
+      .where(eq(schema.dividendEvents.symbol, "PBM-DIV"));
+    const [Q] = await db
+      .insert(schema.assets)
+      .values({ symbol: "PBM-Q", name: "TEST-LOCAL PBM-Q (sample)", assetClass: "thai_stock", priceSource: "manual" })
+      .returning();
+    await db.insert(schema.prices).values(days.map((d, i) => ({ assetId: Q.id, date: d, close: 30 * (1 + 0.0002 * i + 0.03 * Math.cos(i / 11)), adjClose: 30 * (1 + 0.0002 * i + 0.03 * Math.cos(i / 11)) })));
+    const both = ["PBM-DIV", "PBM-Q"];
+    const rej = await backtestPortfolio({ strategy: "equal_weight", symbols: both, returnBasis: "total_return", dividendCashflows: true } as never).catch((e) => e as Error);
+    check("BT-7 total_return + dividendCashflows → rejected with the reason (double count)", rej instanceof Error && /ซ้ำ|twice|double/i.test(rej.message), rej instanceof Error ? rej.message.slice(0, 100) : "accepted");
+    const tr = await backtestPortfolio({ strategy: "equal_weight", symbols: both, returnBasis: "total_return", rebalance: "quarterly", useCosts: false } as never);
+    const cash = await backtestPortfolio({
+      strategy: "equal_weight",
+      symbols: both,
+      returnBasis: "price_return",
+      dividendCashflows: true,
+      reinvestDividends: true,
+      withholding: { thai_stock: 0 },
+      rebalance: "quarterly",
+      useCosts: false,
+    } as never);
+    const cagr = (r: typeof tr) => r.metrics.annualizedReturn ?? r.metrics.annualizedEquivalent ?? NaN;
+    check(
+      "BT-7 same universe: total_return vs price_return + cash dividends (wht 0, paid on the ex-date) → CAGR within 0.3%/yr",
+      Math.abs(cagr(tr) - cagr(cash)) <= 0.003,
+      `${(cagr(tr) * 100).toFixed(3)}% vs ${(cagr(cash) * 100).toFixed(3)}%`,
     );
   } finally {
     await restore();

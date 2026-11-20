@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — MPT fix, phase 5 (BACKTEST_SPEC BT-7, modelVersion)
+- **BT-7**: checks that total_return + dividend cash flows is refused (dividends would be counted twice). Also checks that, on the same universe, `total_return` (adjusted closes) and `price_return` + cash dividends (no withholding, paid on the ex-date) give CAGRs within 0.3%/yr (TEST data: 4.64% vs 4.75%). The per-asset total-return policy (gold / no-dividend stocks on closes, `returnBasisByAsset`) has been in the backtest since MPT phase 2.
+- **MODEL_VERSION `2026.11-mpt5`** (was `2026.10-val6`): the portfolio estimation changes of MPT phases 2–4, the backtest phases and the price-basis spec. Valuation formulas are unchanged; saved valuations recompute to the same value and differ only in the version label. Docs: `docs/MODEL_DOCUMENTATION.md` §4 (μ estimators, sampling, history policy) and the version note.
+- Baseline tests asked for by the spec already exist and pass: two-asset closed-form minimum variance, unconstrained tangency = Σ⁻¹(μ − Rf), equal weight feasible ⇒ optimal, and the bootstrap seed.
+
 ## 2026-11-20 — MPT fix, phase 4 (MPT_FIX_SPEC: P1-7, P1-8, P0-A6; BACKTEST_SPEC BT-6 point in time)
 - **P1-7 — μ that does not chase last year's return** (`lib/finance/mu-estimate.ts`, shared by optimize, compare, backtest and the optimizer page):
   - `blend` = w·historical + (1 − w)·CAPM with w = 0.5·min(1, years / 3). Under 3 years of data CAPM weighs more, and the result says how much. **Numbers change**: with 3 years or more it is the previous 50/50, so results with shorter data move toward CAPM (the default method in every tool). In backtests / comparisons the training window sets the years (252 days → w ≈ 0.17).

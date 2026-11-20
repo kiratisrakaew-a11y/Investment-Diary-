@@ -18,8 +18,12 @@ export { rateScaleWarnings } from "./rate-scale";
  * exact optimizer (PR 3), bond conventions (PR 4), provenance (PR 5).
  * 2026.10-val6: optional staged DCF, RIM horizon comparison / sensitivities. Legacy DCF and
  * RIM values are unchanged (golden tests), so older saves differ only in version label.
+ * 2026.11-mpt5: portfolio estimation (MPT_FIX_SPEC phases 2–4, BACKTEST_SPEC, PRICE_BASIS_BENCHMARK_SPEC):
+ * blend μ leans on CAPM under 3 years, shrinkage / μ cap, weekly sampling for mixed markets, sector bucket,
+ * calendar rebalancing, per-asset total return. Valuation formulas (DCF / DDM / RIM / multiples / bonds) are
+ * unchanged, so saved valuations recompute to the same value and differ only in the version label.
  */
-export const MODEL_VERSION = "2026.10-val6";
+export const MODEL_VERSION = "2026.11-mpt5";
 
 const DAY = 86_400_000;
 const days = (a: string, b: string) =>
