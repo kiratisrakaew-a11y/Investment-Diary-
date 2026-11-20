@@ -32,6 +32,8 @@ export async function getSettings() {
       timestampPolicy: null as unknown,
       sortinoMarPct: null as number | null,
       dividendPaymentLagDays: 21 as number | null,
+      defaultReturnBasis: "price_return" as "price_return" | "total_return",
+      defaultBenchmark: "default" as string,
     }
   );
 }
@@ -50,6 +52,8 @@ export async function saveSettings(input: {
   erpAsOf?: string | null;
   sortinoMarPct?: number | null;
   dividendPaymentLagDays?: number | null;
+  defaultReturnBasis?: "price_return" | "total_return";
+  defaultBenchmark?: string;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
@@ -70,6 +74,8 @@ export async function saveSettings(input: {
     erpAsOf: current.erpAsOf,
     sortinoMarPct: current.sortinoMarPct ?? null,
     dividendPaymentLagDays: current.dividendPaymentLagDays ?? null,
+    defaultReturnBasis: current.defaultReturnBasis,
+    defaultBenchmark: current.defaultBenchmark,
     ...defined,
   });
   await getDb()

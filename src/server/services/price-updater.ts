@@ -9,6 +9,7 @@ import {
   syncAssetSeries,
   syncMarketSeries,
   type SeriesResult,
+  type SyncDeps,
 } from "./price-sync";
 
 const DEFAULT_HISTORY_DAYS = 365 * 3;
@@ -47,7 +48,9 @@ const toResult = (r: SeriesResult): UpdateResult =>
  * Incremental daily update of USDTHB, the benchmark and every non-manual asset, through the same
  * sync functions as `syncHistoricalPrices` (overwriting the recent window to pick up corrections).
  */
-export async function updateAllPrices(): Promise<UpdateResult[]> {
+export async function updateAllPrices(
+  deps: SyncDeps = dbDeps,
+): Promise<UpdateResult[]> {
   const results: UpdateResult[] = [];
   const db = getDb();
   const to = today();
@@ -67,7 +70,7 @@ export async function updateAllPrices(): Promise<UpdateResult[]> {
   results.push(
     toResult(
       await syncMarketSeries(
-        dbDeps,
+        deps,
         "fx:USDTHB",
         "USDTHB",
         "THB=X",
@@ -86,7 +89,7 @@ export async function updateAllPrices(): Promise<UpdateResult[]> {
   results.push(
     toResult(
       await syncMarketSeries(
-        dbDeps,
+        deps,
         `bench:${b}`,
         b,
         b,
@@ -109,7 +112,7 @@ export async function updateAllPrices(): Promise<UpdateResult[]> {
     results.push(
       toResult(
         await syncAssetSeries(
-          dbDeps,
+          deps,
           a,
           { ...opts(from), priceType: adjusted ? "adjusted_close" : "close" },
           false,

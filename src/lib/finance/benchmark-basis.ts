@@ -46,10 +46,15 @@ export function chooseBenchmarkBasis(
   if (match) return pick(match, null);
   const other = usable[0];
   if (!other) return null;
-  return pick(
-    other,
-    wanted === "total_return"
-      ? `benchmark basis ไม่ตรง — พอร์ตรวมปันผลแต่ดัชนีอ้างอิง ${other.symbol} เป็นดัชนีราคา: alpha / IR เอียงเข้าข้างพอร์ต (ราว dividend yield ของตลาด) · นำเข้า SET TRI ด้วย import_prices target "benchmark" symbol SETTRI`
-      : `benchmark basis ไม่ตรง — พอร์ตไม่รวมปันผลแต่ดัชนีอ้างอิง ${other.symbol} เป็นผลตอบแทนรวม: alpha / IR ต่ำกว่าจริง`,
-  );
+  return pick(other, basisMismatchWarning(wanted, other.symbol));
+}
+
+/** The warning used whenever a benchmark's kind does not match the return basis it is compared with. */
+export function basisMismatchWarning(
+  wanted: BenchmarkBasis,
+  symbol: string,
+): string {
+  return wanted === "total_return"
+    ? `benchmark basis ไม่ตรง — พอร์ตรวมปันผลแต่ดัชนีอ้างอิง ${symbol} เป็นดัชนีราคา: alpha / IR เอียงเข้าข้างพอร์ต (ราว dividend yield ของตลาด) · นำเข้า SET TRI ด้วย import_prices target "benchmark" symbol SETTRI`
+    : `benchmark basis ไม่ตรง — พอร์ตไม่รวมปันผลแต่ดัชนีอ้างอิง ${symbol} เป็นผลตอบแทนรวม: alpha / IR ต่ำกว่าจริง`;
 }

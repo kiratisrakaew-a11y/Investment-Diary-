@@ -1,4 +1,4 @@
-import { chooseBenchmarkBasis } from "@/lib/finance/benchmark-basis";
+import { resolveBenchmarkWith } from "@/lib/finance/benchmark-resolve";
 import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { priceInput, today, type PriceInputT } from "@/lib/validation";
@@ -145,25 +145,21 @@ export async function benchmarkForBasis(
     benchmarkKind: "price_index" | "total_return";
   },
 ) {
-  const own =
-    settings.benchmarkKind === "total_return" ? "total_return" : "price";
-  const seen = new Set<string>();
-  const cands: { symbol: string; basis: "price" | "total_return" }[] = [
-    { symbol: settings.benchmarkSymbol, basis: own },
-    { symbol: "SETTRI", basis: "total_return" },
-    { symbol: "^SET.BK", basis: "price" },
-  ].filter((c) => !seen.has(c.symbol) && seen.add(c.symbol)) as {
-    symbol: string;
-    basis: "price" | "total_return";
-  }[];
-  const loaded = await Promise.all(
-    cands.map(async (c) => ({
-      ...c,
-      series: await loadBenchmark(c.symbol, from),
-    })),
+  // PRICE_BASIS_BENCHMARK_SPEC D4: now the resolver's "default" rule (Settings / SETTRI / ^SET.BK by kind).
+  const r = await resolveBenchmarkWith(
+    { request: "default", wanted, from, featureDefault: "basis" },
+    { settings, registry: new Map(), list: [], load: loadBenchmark },
   );
-  // Settings' own benchmark first among equals (the user's choice wins when its basis matches).
-  return chooseBenchmarkBasis(wanted, loaded, from);
+  return r
+    ? {
+        symbol: r.symbol,
+        basis: r.basis,
+        kind: r.kind,
+        series: r.series,
+        wanted: r.wanted,
+        warning: r.warning,
+      }
+    : null;
 }
 
 /**

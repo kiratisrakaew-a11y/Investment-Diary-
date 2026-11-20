@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-20 — Price basis & benchmark, phase P0 + P1 (PRICE_BASIS_BENCHMARK_SPEC)
+- **P0 skipped — already done by MPT phase 2 (A2).** Evidence: `npm run check:price-basis` runs the daily updater (`updateAllPrices`, now injectable) against a stubbed provider: the new day of a Yahoo stock gets adj_close, adj_close coverage does not drop, and the adjustment base is recorded.
+- **P1 — shared infrastructure** (no feature uses it yet; every result is unchanged):
+  - `lib/finance/price-basis.ts`: `ReturnBasis`, Thai labels, `resolveReturnBasis` (request → Settings → feature default), the shared `priceBasis` response block and the summary line.
+  - Benchmark registry: new table `benchmark_meta` (migration 0021, additive, rollback file). Seeded with Settings' index and kind, SETTRI as total return, every other stored index as a price index (inserts only).
+    - `import_prices` with `target: "benchmark"` takes `kind` and registers it.
+    - The Settings page lists every index with its range and kind, and the kind can be edited. Editing Settings' own index also updates Settings' kind, so the two never disagree.
+  - `lib/finance/benchmark-resolve.ts` + `services/benchmarks.ts`: `listBenchmarks()`, `resolveBenchmark({ request, wanted, from, featureDefault })`:
+    - `default` = the feature's current rule;
+    - `auto` = an index whose kind matches the basis;
+    - a symbol = that index; a kind mismatch is a warning; `BENCHMARK_NOT_FOUND` / `BENCHMARK_COVERAGE` list the indexes the app has.
+  - `benchmarkForBasis()` is now a wrapper over the resolver's `default` rule: byte-identical to the previous rule (checked on 6 cases against a verbatim copy).
+  - Settings: `defaultReturnBasis` (default `price_return`) and `defaultBenchmark` (default `"default"`) — migration 0021, merged on save like every other setting.
+  - `server/basis-schema.ts`: the shared `returnBasis` / `benchmark` zod fields.
+  - `components/BasisBenchmarkPicker.tsx` (query-string or state mode, disabled bases with a reason, adj coverage line) and `BasisSummary`.
+- Numbers: none change (no feature reads the new options yet).
+- Checks: `npm run check:price-basis` (P0 + P1, local DB, TEST-LOCAL PBT-* data), resolver unit tests (spec 6.3).
+
 ## 2026-11-20 — MPT fix, phase 2 (MPT_FIX_SPEC: P0-A2, A3, A4, A5)
 - **A2 — one base for adjusted closes.**
   - Yahoo rescales the whole adjusted-close history on every dividend / split.

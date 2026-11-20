@@ -374,6 +374,28 @@ export const settings = pgTable("settings", {
    * Not official data; null = such events are not credited.
    */
   dividendPaymentLagDays: integer("dividend_payment_lag_days").default(21),
+  /** PRICE_BASIS_BENCHMARK_SPEC D3: default price basis of return-based features (request overrides). */
+  defaultReturnBasis: text("default_return_basis")
+    .$type<"price_return" | "total_return">()
+    .notNull()
+    .default("price_return"),
+  /** Default benchmark choice: "default" (each feature's own rule) | "auto" (kind matches the basis) | a symbol. */
+  defaultBenchmark: text("default_benchmark").notNull().default("default"),
+});
+
+/**
+ * PRICE_BASIS_BENCHMARK_SPEC D4: what each index series in benchmark_prices is — a price index or a
+ * total-return index. A symbol without a row falls back to Settings' kind (its own benchmark), SETTRI →
+ * total_return, anything else → price_index.
+ */
+export const benchmarkMeta = pgTable("benchmark_meta", {
+  symbol: text("symbol").primaryKey(),
+  kind: text("kind").$type<"price_index" | "total_return">().notNull(),
+  label: text("label"),
+  source: text("source"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [

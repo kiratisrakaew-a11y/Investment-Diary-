@@ -288,6 +288,21 @@ export const settingsInput = z.object({
     .describe(
       "Backtest assumption (not official data): dividend events without a payment date are paid ex-date + N calendar days; null = not credited",
     ),
+  defaultReturnBasis: z
+    .enum(["price_return", "total_return"])
+    .default("price_return")
+    .describe(
+      "Default price basis of return-based features: price_return = closes, total_return = adjusted closes",
+    ),
+  defaultBenchmark: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .default("default")
+    .describe(
+      'Default benchmark: "default" (each feature\'s own rule), "auto" (index kind matches the price basis) or an index symbol',
+    ),
 });
 
 export const targetsInput = z.record(assetClass, z.number().min(0).max(100));

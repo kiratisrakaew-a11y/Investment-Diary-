@@ -12,6 +12,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { CopyBlock } from "@/components/CopyBlock";
 import { PageHeader, Section } from "@/components/ui";
 import {
+  saveBenchmarkKindAction,
   saveSettingsAction,
   saveTargetsAction,
   saveTimestampPolicyAction,
@@ -22,16 +23,23 @@ import { ASSET_CLASS_LABEL } from "@/lib/format";
 import { GPT_INSTRUCTIONS } from "@/lib/gpt-instructions";
 import { MODEL_VERSION, marketInputProvenance } from "@/lib/governance";
 import Link from "next/link";
+import { listBenchmarks } from "@/server/services/benchmarks";
+import {
+  BENCHMARK_KIND_LABEL,
+  RETURN_BASIS_LABEL,
+} from "@/lib/finance/price-basis";
 
 export default async function SettingsPage() {
-  const [settings, targets, h, costs, curve, tsPolicy] = await Promise.all([
-    getSettings(),
-    getTargets(),
-    headers(),
-    getTradingCosts(),
-    getYieldCurve(),
-    getTimestampPolicy(),
-  ]);
+  const [settings, targets, h, costs, curve, tsPolicy, benchmarks] =
+    await Promise.all([
+      getSettings(),
+      getTargets(),
+      headers(),
+      getTradingCosts(),
+      getYieldCurve(),
+      getTimestampPolicy(),
+      listBenchmarks(),
+    ]);
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span
@@ -147,6 +155,43 @@ export default async function SettingsPage() {
             </div>
             <div>
               <label className="label">
+                ชนิดราคาเริ่มต้นของการคำนวณผลตอบแทน (เปลี่ยนรายหน้าได้)
+              </label>
+              <select
+                name="defaultReturnBasis"
+                className="input"
+                defaultValue={settings.defaultReturnBasis}
+              >
+                <option value="price_return">
+                  {RETURN_BASIS_LABEL.price_return}
+                </option>
+                <option value="total_return">
+                  {RETURN_BASIS_LABEL.total_return}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label className="label">
+                ดัชนีอ้างอิงเริ่มต้นของการคำนวณ (β, α, IR, กราฟเทียบดัชนี)
+              </label>
+              <select
+                name="defaultBenchmark"
+                className="input"
+                defaultValue={settings.defaultBenchmark}
+              >
+                <option value="default">ตามค่าเดิมของแต่ละหน้า</option>
+                <option value="auto">อัตโนมัติ (ชนิดตรงกับราคา)</option>
+                {benchmarks
+                  .filter((b) => b.days > 0)
+                  .map((b) => (
+                    <option key={b.symbol} value={b.symbol}>
+                      {b.symbol} ({BENCHMARK_KIND_LABEL[b.kind]})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">
                 นโยบายเงินสด — เมื่อบันทึกซื้อแต่เงินสดในพอร์ตไม่พอ
               </label>
               <select
@@ -211,6 +256,62 @@ export default async function SettingsPage() {
               </p>
             </div>
           </ActionForm>
+        </Section>
+
+        <Section title="ทะเบียนดัชนีอ้างอิง">
+          <p className="mb-2 text-xs text-muted">
+            ชนิดของดัชนีบอกว่ารวมปันผลหรือไม่ — ใช้จับคู่กับชนิดราคา
+            (ราคาปิดคู่ดัชนีราคา · ราคาปรับปันผลคู่ดัชนีผลตอบแทนรวม)
+          </p>
+          {benchmarks.length ? (
+            <table className="w-full text-xs" data-testid="benchmark-registry">
+              <thead>
+                <tr className="text-left text-muted">
+                  <th className="py-1">ดัชนี</th>
+                  <th>ช่วงข้อมูล</th>
+                  <th className="text-right">วัน</th>
+                  <th>ชนิด</th>
+                </tr>
+              </thead>
+              <tbody>
+                {benchmarks.map((b) => (
+                  <tr key={b.symbol} className="border-t border-line">
+                    <td className="py-1 font-medium">
+                      {b.symbol}
+                      {b.label ? (
+                        <span className="ml-1 text-muted">{b.label}</span>
+                      ) : null}
+                    </td>
+                    <td>{b.from ? `${b.from} → ${b.to}` : "ยังไม่มีข้อมูล"}</td>
+                    <td className="text-right">{b.days}</td>
+                    <td>
+                      <ActionForm
+                        action={saveBenchmarkKindAction}
+                        className="flex items-center gap-1"
+                        resetOnSuccess={false}
+                      >
+                        <input type="hidden" name="symbol" value={b.symbol} />
+                        <select
+                          name="kind"
+                          className="input py-0.5 text-xs"
+                          defaultValue={b.kind}
+                        >
+                          <option value="price_index">
+                            {BENCHMARK_KIND_LABEL.price_index}
+                          </option>
+                          <option value="total_return">
+                            {BENCHMARK_KIND_LABEL.total_return}
+                          </option>
+                        </select>
+                      </ActionForm>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-xs text-muted">ยังไม่มีดัชนีในระบบ</p>
+          )}
         </Section>
 
         <Section title="แบบจำลองและคุณภาพข้อมูล">

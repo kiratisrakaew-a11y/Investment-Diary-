@@ -297,6 +297,12 @@ export async function saveSettingsAction(
       dividendPaymentLagDays: f.has("dividendPaymentLagDays")
         ? (num(f, "dividendPaymentLagDays") ?? null)
         : undefined,
+      defaultReturnBasis:
+        (str(f, "defaultReturnBasis") as
+          | "price_return"
+          | "total_return"
+          | undefined) ?? undefined,
+      defaultBenchmark: str(f, "defaultBenchmark") ?? undefined,
     });
     return done("บันทึกการตั้งค่าแล้ว");
   } catch (e) {
@@ -326,6 +332,24 @@ export async function saveTradingCostsAction(
       ),
     });
     return done("บันทึกต้นทุนการซื้อขายแล้ว");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveBenchmarkKindAction(
+  _: ActionState,
+  f: FormData,
+): Promise<ActionState> {
+  try {
+    const symbol = str(f, "symbol");
+    const kind = str(f, "kind");
+    if (!symbol || (kind !== "price_index" && kind !== "total_return"))
+      throw new Error("ต้องระบุดัชนีและชนิด");
+    const { setBenchmarkKind } = await import("@/server/services/benchmarks");
+    await setBenchmarkKind(symbol, kind, "settings");
+    revalidatePath("/settings");
+    return done(`บันทึกชนิดของ ${symbol.toUpperCase()} แล้ว`);
   } catch (e) {
     return fail(e);
   }

@@ -153,6 +153,11 @@ export interface SyncDeps {
     skipped: { symbol: string; reason: string }[];
   }>;
   benchmarkSymbol(): Promise<string>;
+  /** Register an imported index's kind (benchmark_meta); optional so test fakes need not implement it. */
+  setBenchmarkKind?(
+    symbol: string,
+    kind: "price_index" | "total_return",
+  ): Promise<void>;
   heldAssetIds(): Promise<Set<number>>;
   /** Persist provider dividend events (issuer data, never the ledger). Optional so test doubles can omit it. */
   saveDividendEvents?(
@@ -755,6 +760,12 @@ export const importPricesInput = z.object({
     .describe(
       "asset = prices of assets in the app (default). benchmark = an index series such as SETTRI (SET Total Return Index) stored by symbol in the benchmark table; volume is ignored",
     ),
+  kind: z
+    .enum(["price_index", "total_return"])
+    .optional()
+    .describe(
+      'target "benchmark" only: whether the index includes dividends (total_return, e.g. SETTRI) or not (price_index, e.g. ^SET.BK). Stored in the benchmark registry; omitted = keep the registered kind',
+    ),
 });
 export type ImportPricesInput = z.input<typeof importPricesInput>;
 
@@ -884,6 +895,8 @@ export async function importPrices(
   }
 
   const known = results.filter((r) => r.status === "ok").map((r) => r.symbol);
+  if (isBench && x.kind && !x.dryRun && known.length && deps.setBenchmarkKind)
+    for (const symbol of known) await deps.setBenchmarkKind(symbol, x.kind);
   let eligibility: Awaited<ReturnType<SyncDeps["eligibility"]>> | null = null;
   if (known.length && !x.dryRun && !isBench) {
     try {
@@ -1167,6 +1180,10 @@ export const dbDeps: SyncDeps = {
     return { lookbackDays, ok: u.ok, reason: u.reason, eligible, skipped };
   },
   benchmarkSymbol: async () => (await getSettings()).benchmarkSymbol,
+  async setBenchmarkKind(symbol, kind) {
+    const { setBenchmarkKind } = await import("./benchmarks");
+    await setBenchmarkKind(symbol, kind, "import");
+  },
   async heldAssetIds() {
     const { getPortfolioSummary } = await import("./portfolio");
     const s = await getPortfolioSummary();
