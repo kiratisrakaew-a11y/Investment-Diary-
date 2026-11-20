@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { DrawdownChart, GrowthChart, WeightsChart } from "./charts";
 import { NumField, SelectField, Toggle } from "./fields";
@@ -24,7 +25,9 @@ type Asset = {
   to: string;
   count: number;
 };
-type Response = BacktestResult & {
+type Response = Omit<BacktestResult, "benchmark"> & {
+  benchmark?: { symbol: string; kind: "price_index" | "total_return"; warning?: string | null } | null;
+  priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] };
   universe: string[];
   excluded: { symbol: string; reason: string }[];
   limitations: string[];
@@ -59,7 +62,17 @@ const COMPARE: BacktestStrategy[] = [
   "max_sharpe",
 ];
 
-export function BacktestClient({ assets }: { assets: Asset[] }) {
+export function BacktestClient({
+  assets,
+  initialBasis,
+  benchmarks = [],
+}: {
+  assets: Asset[];
+  /** Settings defaults (PRICE_BASIS_BENCHMARK_SPEC F5); changed here for this run only. */
+  initialBasis?: BasisBenchmarkValue;
+  benchmarks?: PickerBenchmark[];
+}) {
+  const [basis, setBasis] = useState<BasisBenchmarkValue>(initialBasis ?? { basis: "price_return", bench: "default" });
   const [included, setIncluded] = useState<Set<string>>(
     new Set(assets.map((a) => a.symbol)),
   );
@@ -92,6 +105,14 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // F5: dividend strategies / dividend cash flows count dividends as cash (closes only); lots need traded prices.
+  const cashDividends = strategy.startsWith("dividend_") || divCash;
+  const adjBlocked = cashDividends
+    ? "กลยุทธ์ปันผล / ปันผลเป็นเงินสด ใช้ราคาปิด + เงินปันผล — ป้องกันการนับปันผลซ้ำ"
+    : useLots
+      ? "การปัด lot ต้องใช้ราคาซื้อขายจริง (ราคาปิด) — ปิด “ปัด lot” ก่อน"
+      : null;
+  const usedBasis = adjBlocked ? "price_return" : basis.basis;
   const body = (s: BacktestStrategy) => {
     const w = Object.fromEntries(
       Object.entries(weights).filter(
@@ -111,6 +132,9 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
       initialCapital: capital,
       useCosts,
       useLots,
+      benchmark: basis.bench,
+      // Dividend strategies / cash flows always on closes (compare runs them alongside the others).
+      ...(s.startsWith("dividend_") || divCash ? {} : { returnBasis: usedBasis }),
       ...(s === "custom" || (s === "buy_and_hold" && Object.keys(w).length)
         ? { weights: w }
         : {}),
@@ -195,6 +219,12 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
             value={strategy}
             options={STRATEGIES}
             onChange={setStrategy}
+          />
+          <BasisBenchmarkPicker
+            value={{ ...basis, basis: usedBasis }}
+            onChange={setBasis}
+            benchmarks={benchmarks}
+            disabledBases={adjBlocked ? { total_return: adjBlocked } : undefined}
           />
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -536,6 +566,7 @@ export function BacktestClient({ assets }: { assets: Asset[] }) {
 
       {res && m && (
         <>
+          <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <div className="flex justify-end">
             <ExplainButton
               topic={`ผล Backtest (${res.strategy})`}

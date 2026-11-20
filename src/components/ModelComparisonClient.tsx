@@ -6,6 +6,7 @@
  * (train / test split or walk-forward).
  */
 import { useMemo, useState } from "react";
+import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { ModelLinesChart } from "./charts";
 import { NumField, SelectField, Toggle } from "./fields";
@@ -27,7 +28,8 @@ type Response = ModelComparisonResult & {
   excluded: { symbol: string; reason: string }[];
   limitations: string[];
   riskFreeRate: number;
-  benchmark: { symbol: string } | null;
+  benchmark: { symbol: string; kind: "price_index" | "total_return"; warning?: string | null } | null;
+  priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] };
   input: { rebalanceEveryObservations: number; observations: number };
 };
 type Mode = "split" | "walkForward";
@@ -73,7 +75,20 @@ function bestIndex(
   )[1];
 }
 
-export function ModelComparisonClient({ assets }: { assets: Asset[] }) {
+export function ModelComparisonClient({
+  assets,
+  basis: initialBasis,
+  benchmarks = [],
+}: {
+  assets: Asset[];
+  /** Page values (PRICE_BASIS_BENCHMARK_SPEC F4); changed here for this comparison only. */
+  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
+  benchmarks?: PickerBenchmark[];
+}) {
+  const [basis, setBasis] = useState<BasisBenchmarkValue>({
+    basis: initialBasis?.returnBasis ?? "price_return",
+    bench: initialBasis?.benchmark ?? "default",
+  });
   const [included, setIncluded] = useState<Set<string>>(
     new Set(assets.map((a) => a.symbol)),
   );
@@ -116,6 +131,8 @@ export function ModelComparisonClient({ assets }: { assets: Asset[] }) {
           minWeight: minW,
           maxWeight: maxW,
           useCosts,
+          returnBasis: basis.basis,
+          benchmark: basis.bench,
         }),
       });
       const data = await r.json();
@@ -186,6 +203,7 @@ export function ModelComparisonClient({ assets }: { assets: Asset[] }) {
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card space-y-3">
           <h2 className="text-[15px] font-semibold">เงื่อนไขการเปรียบเทียบ</h2>
+          <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={benchmarks} />
           <div className="grid grid-cols-2 gap-3">
             <NumField
               label="ช่วงฝึก (% ของข้อมูล)"
@@ -324,6 +342,7 @@ export function ModelComparisonClient({ assets }: { assets: Asset[] }) {
 
       {res && (
         <>
+          <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <div className="flex flex-wrap items-center gap-3">
             <div
               role="group"

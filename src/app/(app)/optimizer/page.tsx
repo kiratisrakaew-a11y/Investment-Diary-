@@ -83,7 +83,7 @@ export default async function OptimizerPage({
                 basis={basis}
                 erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
             }
-            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} />}
+            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} basis={basis} benchmarks={benchmarks} />}
           />
         </>
       )}

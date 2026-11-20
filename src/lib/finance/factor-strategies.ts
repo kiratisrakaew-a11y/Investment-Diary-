@@ -53,6 +53,12 @@ export interface FactorInput {
   splits: SplitInput[];
   /** Median intrinsic value per share of valuations saved by the cutoff (latest per method). */
   valuationMedian: number | null;
+  /**
+   * PRICE_BASIS_BENCHMARK_SPEC F7: series for momentum when it differs from `prices` (adjusted closes on a
+   * total-return basis). `momentumUnavailable` = why momentum has no value (never mixed with closes).
+   */
+  momentumPrices?: [string, number][];
+  momentumUnavailable?: string;
 }
 
 type Sub = { key: string; label: string; lowerIsBetter?: boolean; metric: MetricResult };
@@ -128,7 +134,12 @@ export function factorSignals(x: FactorInput, asOf: string, s: Pick<FactorSettin
   const price = x.prices.length ? x.prices[x.prices.length - 1][1] : null;
   const prof = dividendProfile({ symbol: x.symbol, asOf, price, priceCurrency: x.currency, events: x.events, splits: x.splits, statements: x.statements, sector: x.sector });
   const v = valueMetrics(x, asOf, price);
-  const m = momentum(x.prices, asOf);
+  const m = x.momentumUnavailable
+    ? {
+        mom: mr(asOf, "unavailable", null, "ราคาปรับปันผล 1 เดือนก่อน ÷ 12 เดือนก่อน − 1", [x.momentumUnavailable]),
+        vol: mr(asOf, "unavailable", null, "σ ผลตอบแทนรายวัน × √252 (12–1 เดือน)", [x.momentumUnavailable]),
+      }
+    : momentum(x.momentumPrices ?? x.prices, asOf);
   const momMetric: MetricResult =
     s.volScaledMomentum && m.mom.value != null && m.vol.value != null && m.vol.value > 0
       ? { ...m.mom, value: m.mom.value / m.vol.value, methodology: `${m.mom.methodology} ÷ σ 12 เดือน` }

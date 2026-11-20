@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { BasisBenchmarkPicker, type BasisBenchmarkValue } from "./BasisBenchmarkPicker";
 import { FACTOR_FAMILIES, FAMILY_LABEL, factorSettingsSchema, type FactorSettings, type FactorStrategyId } from "@/lib/finance/factor-strategies";
 import type { screenFactorStocks } from "@/server/services/strategies";
 import { fmtNum, fmtPct } from "@/lib/format";
@@ -20,7 +21,8 @@ const STRATEGIES: { value: FactorStrategyId; label: string }[] = [
 ];
 const PCT_KEYS = new Set(["earningsYield", "marginOfSafety", "roe", "fcfStability", "momentum", "ttmYieldRegular"]);
 
-export function FactorStrategyPanel({ symbols }: { symbols: string[] }) {
+export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: { symbols: string[]; initialBasis?: "price_return" | "total_return" }) {
+  const [basis, setBasis] = useState<BasisBenchmarkValue>({ basis: initialBasis, bench: "default" });
   const [strategy, setStrategy] = useState<FactorStrategyId>("multi_factor");
   const [s, setS] = useState<FactorSettings>(() => factorSettingsSchema.parse({}));
   const [asOf, setAsOf] = useState("");
@@ -37,7 +39,7 @@ export function FactorStrategyPanel({ symbols }: { symbols: string[] }) {
       const r = await fetch("/api/v1/strategies/factors", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ strategy, asOf: asOf || undefined, pointInTime: pit, settings: s }),
+        body: JSON.stringify({ strategy, asOf: asOf || undefined, pointInTime: pit, settings: s, returnBasis: basis.basis }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? data.issues?.map((i: { message: string }) => i.message).join(", ") ?? `HTTP ${r.status}`);
@@ -54,6 +56,8 @@ export function FactorStrategyPanel({ symbols }: { symbols: string[] }) {
     <div className="space-y-5">
       <section className="card space-y-4">
         <CardTitle title="ตั้งค่ากลยุทธ์ปัจจัย" />
+        {/* F7: momentum only — no benchmark here. */}
+        <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={[]} showBenchmark={false} note="ชนิดราคาใช้กับ Momentum 12–1 เท่านั้น — หุ้นที่ไม่มีราคาปรับปันผลครบ 12 เดือนจะไม่มีค่า momentum (ไม่ใช้ราคาปิดปน)" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SelectField label="กลยุทธ์" value={strategy} onChange={setStrategy} options={STRATEGIES} />
           <label className="block">

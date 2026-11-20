@@ -3,6 +3,9 @@
  * cost model for every model. Data preparation is the backtest's own (`loadBacktestData`).
  */
 import { z } from "zod";
+import { benchmarkField } from "@/server/basis-schema";
+import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
+import { getSettings } from "./settings";
 import {
   COMPARISON_MODELS,
   compareModels,
@@ -66,7 +69,13 @@ export const modelComparisonInput = z.object({
       "μ estimate (used by max_sharpe and by the ex-ante numbers of every model)",
     ),
   covMethod: z.enum(["sample", "ledoit_wolf"]).default("ledoit_wolf"),
-  returnBasis: z.enum(["price_return", "total_return"]).default("price_return"),
+  returnBasis: z
+    .enum(["price_return", "total_return"])
+    .optional()
+    .describe(
+      "price_return = closes; total_return = adjusted closes per asset (returnBasisByAsset). Omit = Settings default",
+    ),
+  benchmark: benchmarkField,
   useCosts: z
     .boolean()
     .default(true)
@@ -91,6 +100,13 @@ export async function comparePortfolioModels(
   const x = modelComparisonInput.parse(input);
   if (x.minWeight > x.maxWeight)
     throw new Error("น้ำหนักขั้นต่ำมากกว่าน้ำหนักสูงสุด");
+  // PRICE_BASIS_BENCHMARK_SPEC F4: request → Settings → price_return.
+  const basisInfo = resolveReturnBasis(
+    x.returnBasis,
+    (await getSettings()).defaultReturnBasis,
+    "price_return",
+  );
+  x.returnBasis = basisInfo.used;
   const d = await loadBacktestData({
     symbols: x.symbols,
     startDate: x.startDate,
@@ -102,6 +118,7 @@ export async function comparePortfolioModels(
     useLots: false,
     riskFree: x.riskFree,
     historyPolicy: x.historyPolicy,
+    benchmark: x.benchmark,
   });
   if (d.symbols.length < 2)
     throw new Error(
@@ -156,8 +173,12 @@ export async function comparePortfolioModels(
           symbol: d.benchmark.symbol,
           kind: d.benchmark.kind,
           basis: d.benchmark.basis,
+          wanted: d.benchmark.wanted,
+          source: d.benchmark.source,
+          warning: d.benchmark.warning,
         }
       : null,
+    priceBasis: priceBasisReport(basisInfo, d.basisFallback, d.basisExcluded),
     warnings: [...d.dataWarnings, ...r.warnings],
     limitations: [
       "Survivorship bias: ใช้เฉพาะสินทรัพย์ที่อยู่ในแอปวันนี้ — ผลอาจดีกว่าความเป็นจริง",
@@ -202,6 +223,7 @@ export function summarizeModelComparison(r: Full) {
     period: r.period,
     riskFreeRate: r.riskFreeRate,
     benchmark: r.benchmark,
+    priceBasis: r.priceBasis,
     excluded: r.excluded,
     returnBasisByAsset: r.returnBasisByAsset,
     split: r.split && {

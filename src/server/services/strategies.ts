@@ -22,7 +22,10 @@ import {
 import { dividendIncomePlan } from "@/lib/finance/dividend-income";
 import { FACTOR_STRATEGY_IDS, screenFactorStrategy, type FactorInput, type FactorSettingsInput } from "@/lib/finance/factor-strategies";
 import { listAssets } from "./assets";
-import { loadFxHistory, loadPriceHistory } from "./prices";
+import { loadAdjPriceHistory, loadFxHistory, loadPriceHistory } from "./prices";
+import { getSettings } from "./settings";
+import { returnBasisField } from "@/server/basis-schema";
+import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
 import { getPortfolioSummary, holdingsAt } from "./portfolio";
 import { allTransactions } from "./transactions";
 import { listDividendEvents, splitsBySymbol, toEventInput } from "./dividends";
@@ -77,18 +80,21 @@ export interface DividendData {
   splits: Record<string, SplitInput[]>;
   statements: Map<string, FundamentalsYear[]>;
   valuations: { symbol: string; method: string; createdAt: string; createdTs: number; intrinsicValue: number }[];
+  /** Adjusted closes (only loaded for a total-return momentum, F7). */
+  adjPrices?: Map<number, [string, number][]>;
 }
 
 /** Everything a dividend decision may need, loaded once. */
-export async function loadDividendData(): Promise<DividendData> {
+export async function loadDividendData(opts: { adj?: boolean } = {}): Promise<DividendData> {
   const db = getDb();
-  const [assets, prices, rows, splits, st, vals] = await Promise.all([
+  const [assets, prices, rows, splits, st, vals, adjPrices] = await Promise.all([
     listAssets(),
     loadPriceHistory(),
     listDividendEvents(),
     splitsBySymbol(),
     db.select().from(schema.financialStatements).orderBy(asc(schema.financialStatements.fiscalYear)),
     db.select({ symbol: schema.valuations.symbol, method: schema.valuations.method, createdAt: schema.valuations.createdAt, intrinsicValue: schema.valuations.intrinsicValue }).from(schema.valuations),
+    opts.adj ? loadAdjPriceHistory() : Promise.resolve(undefined),
   ]);
   const events = new Map<string, DividendEventInput[]>();
   for (const r of rows) {
@@ -105,6 +111,7 @@ export async function loadDividendData(): Promise<DividendData> {
   return {
     assets,
     prices,
+    ...(adjPrices ? { adjPrices } : {}),
     events,
     splits,
     statements,
@@ -339,15 +346,37 @@ export function summarizeDividendScreen(r: Awaited<ReturnType<typeof screenDivid
 
 // ------------------------------------------------------------------ factor strategies (Phase 3)
 
-export function factorInputsAsOf(data: DividendData, symbols: string[], cutoff: string, mode: PitMode): FactorInput[] {
+/**
+ * F7: momentum on adjusted closes needs adj_close on every close date of its 12–1 window (from 10 days before
+ * the 12-month point to the 1-month point); otherwise momentum is "unavailable" for that stock — closes and
+ * adjusted closes are never mixed in one ranking.
+ */
+function adjMomentumSeries(closes: [string, number][], adj: [string, number][] | undefined, cutoff: string): { series?: [string, number][]; reason?: string } {
+  const d1 = new Date(cutoff);
+  d1.setUTCMonth(d1.getUTCMonth() - 1);
+  const d12 = new Date(cutoff);
+  d12.setUTCMonth(d12.getUTCMonth() - 12);
+  const from = new Date(d12.getTime() - 10 * 86_400_000).toISOString().slice(0, 10);
+  const to = d1.toISOString().slice(0, 10);
+  const need = closes.filter(([d]) => d >= from && d <= to);
+  const m = new Map(adj ?? []);
+  const missing = need.filter(([d]) => !(m.get(d)! > 0)).length;
+  if (!need.length || missing) return { reason: `ไม่มีราคาปรับปันผลครบ 12 เดือน (ขาด ${missing || "ทั้งช่วง"} วัน) — ไม่คำนวณ momentum แบบผลตอบแทนรวม` };
+  return { series: (adj ?? []).filter(([d]) => d <= cutoff) };
+}
+
+export function factorInputsAsOf(data: DividendData, symbols: string[], cutoff: string, mode: PitMode, returnBasis: "price_return" | "total_return" = "price_return"): FactorInput[] {
   return symbols.map((sym) => {
     const a = data.assets.find((x) => x.symbol === sym)!;
+    const closes = data.prices.get(a.id)?.filter(([d]) => d <= cutoff) ?? [];
+    const tr = returnBasis === "total_return" ? adjMomentumSeries(closes, data.adjPrices?.get(a.id), cutoff) : null;
     return {
+      ...(tr ? (tr.series ? { momentumPrices: tr.series } : { momentumUnavailable: tr.reason }) : {}),
       symbol: sym,
       issuer: a.issuer,
       sector: a.sector,
       currency: a.currency,
-      prices: data.prices.get(a.id)?.filter(([d]) => d <= cutoff) ?? [],
+      prices: closes,
       statements: statementsKnownBy(data.statements.get(sym) ?? [], cutoff, mode),
       events: eventsKnownBy(data.events.get(sym) ?? [], cutoff),
       splits: data.splits[sym] ?? [],
@@ -380,15 +409,20 @@ export const screenFactorInput = z.object({
   settings: factorSettingsOverride.optional(),
   pointInTime: z.enum(["strict", "illustrative_lookahead"]).default("strict"),
   compareStandalone: z.boolean().default(true).describe("multi_factor: also return each standalone factor's top picks"),
+  returnBasis: returnBasisField.describe(
+    "Momentum prices: price_return = closes; total_return = adjusted closes (a stock without adjusted closes over the whole 12–1 window has no momentum — counted in coverage / exclusions, never mixed with closes). Omit = Settings default",
+  ),
 });
 
 /** Value / quality / momentum / multi-factor screen. Read-only. */
 export async function screenFactorStocks(input: z.input<typeof screenFactorInput> = {}) {
   const x = screenFactorInput.parse(input);
   const asOf = x.asOf ?? today();
-  const data = await loadDividendData();
+  // F7: request → Settings → price_return.
+  const basisInfo = resolveReturnBasis(x.returnBasis, (await getSettings()).defaultReturnBasis, "price_return");
+  const data = await loadDividendData({ adj: basisInfo.used === "total_return" });
   const symbols = dividendUniverse(data, x.symbols);
-  const inputs = factorInputsAsOf(data, symbols, asOf, x.pointInTime);
+  const inputs = factorInputsAsOf(data, symbols, asOf, x.pointInTime, basisInfo.used);
   const settings = (x.settings ?? {}) as Partial<FactorSettingsInput>;
   const decision = screenFactorStrategy({ strategyId: x.strategy, asOf, inputs, settings });
   const standalone =
@@ -401,6 +435,11 @@ export async function screenFactorStocks(input: z.input<typeof screenFactorInput
   return {
     ...decision,
     pointInTime: x.pointInTime,
+    priceBasis: priceBasisReport(
+      basisInfo,
+      [],
+      inputs.filter((i) => i.momentumUnavailable).map((i) => ({ symbol: i.symbol, reason: i.momentumUnavailable! })),
+    ),
     standalone,
     limitations: [
       "จักรวาลคือสินทรัพย์ในแอป (survivorship bias) · ไม่มีข้อมูลปริมาณการซื้อขาย",

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { benchmarkField } from "@/server/basis-schema";
+import { resolveBenchmark } from "./benchmarks";
+import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
 import { asOf, asOfEntry } from "@/lib/finance/portfolio";
 import {
   assertSingleDividendTreatment,
@@ -45,7 +48,6 @@ import {
 import { getRiskFree } from "./risk-free";
 import { listAssets } from "./assets";
 import {
-  benchmarkForBasis,
   loadAdjPriceHistory,
   loadCorporateActionDates,
   loadFxHistory,
@@ -135,10 +137,13 @@ export const backtestInput = z
       .describe("Round trades to whole lots (default: fractional units)"),
     returnBasis: z
       .enum(["price_return", "total_return"])
-      .default("price_return")
+      .optional()
       .describe(
-        "price_return = closes (dividends excluded); total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason",
+        "price_return = closes (dividends excluded); total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason. Omit = Settings default, except dividend_* strategies and dividendCashflows, which always use price_return (dividends as cash, never counted twice); total_return with them or with useLots is an error",
       ),
+    benchmark: benchmarkField.describe(
+      'Benchmark: "default" = an index matching the portfolio basis from Settings / SETTRI / ^SET.BK (as before), "auto" = any stored index whose kind matches, or an index symbol (a kind mismatch is computed with a warning; no data / short data → BENCHMARK_NOT_FOUND / BENCHMARK_COVERAGE). Omit = Settings default',
+    ),
     factorSettings: factorSettingsOverride
       .optional()
       .describe("value / quality / momentum / multi_factor settings"),
@@ -223,6 +228,8 @@ export type BacktestDataRequest = Pick<
   minObservations?: number;
   /** Basis of the portfolio being tested, for a benchmark on the same basis. */
   benchmarkBasis?: "price" | "total_return";
+  /** "default" | "auto" | symbol (PRICE_BASIS_BENCHMARK_SPEC D2); omitted = Settings' defaultBenchmark. */
+  benchmark?: string;
 };
 
 /**
@@ -284,6 +291,8 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     x.returnBasis === "total_return" ? await loadCorporateActionDates() : null;
   const returnBasisByAsset: Record<string, AssetReturnBasis> = {};
   const basisNotes: string[] = [];
+  const basisFallback: { symbol: string; reason: string }[] = [];
+  const basisExcluded: { symbol: string; reason: string }[] = [];
   const levels = new Map<
     number,
     { levels: [string, number][]; scale: number }
@@ -306,13 +315,14 @@ export async function loadBacktestData(x: BacktestDataRequest) {
         symbol: a.symbol,
         reason: `${src.reason}${src.required ? ` — ต้องการ: ${src.required}` : ""}`,
       });
+      basisExcluded.push(excluded[excluded.length - 1]);
       return false;
     }
     const useAdj = !!src?.ok && src.source === "adjusted_close";
     const lv = buildLevelSeries({
       label: a.symbol,
       observations,
-      basis: src?.ok && !useAdj ? "price_return" : x.returnBasis,
+      basis: src?.ok && !useAdj ? "price_return" : (x.returnBasis ?? "price_return"),
       totalReturnSource: useAdj ? "adjusted_close" : undefined,
       currency: a.currency,
       fx,
@@ -331,7 +341,10 @@ export async function loadBacktestData(x: BacktestDataRequest) {
       (a.currency === "USD" ? (asOf(fx, first[0]) ?? NaN) : 1);
     levels.set(a.id, { levels: lv.levels, scale: p0 });
     returnBasisByAsset[a.symbol] = src?.ok ? src.basis : "close";
-    if (src?.ok && src.note) basisNotes.push(src.note);
+    if (src?.ok && src.note) {
+      basisNotes.push(src.note);
+      basisFallback.push({ symbol: a.symbol, reason: src.note });
+    }
     return true;
   });
   if (!pool.length)
@@ -402,12 +415,15 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     (365 * 86_400_000);
   const obsPerYear = years > 0 ? (dates.length - 1) / years : 252;
   const every = Math.max(1, Math.round(obsPerYear / PER_YEAR[x.rebalance]));
-  const benchmark = await benchmarkForBasis(
-    x.benchmarkBasis ??
+  // "default" = benchmarkForBasis' rule (unchanged); auto / symbol per the resolver (spec D2).
+  const benchmark = await resolveBenchmark({
+    request: x.benchmark,
+    wanted:
+      x.benchmarkBasis ??
       (x.returnBasis === "total_return" ? "total_return" : "price"),
-    start,
-    settings,
-  );
+    from: start,
+    featureDefault: "basis",
+  });
   if (benchmark?.warning) dataWarnings.push(benchmark.warning);
   if (!benchmark)
     dataWarnings.push(
@@ -448,6 +464,8 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     returnBasisByAsset: Object.fromEntries(
       pool.map((a) => [a.symbol, returnBasisByAsset[a.symbol] ?? "close"]),
     ),
+    basisFallback: basisFallback.filter((f) => pool.some((a) => a.symbol === f.symbol)),
+    basisExcluded,
   };
 }
 
@@ -459,6 +477,14 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     x.strategy,
   );
   const withCash = isDividend || !!x.dividendCashflows;
+  // Request → Settings → price_return; dividend cash flows never read the Settings default (they need closes).
+  const basisInfo = resolveReturnBasis(
+    x.returnBasis,
+    withCash ? null : (await getSettings()).defaultReturnBasis,
+    "price_return",
+  );
+  const basis = basisInfo.used;
+  x.returnBasis = basis;
   assertSingleDividendTreatment(x.returnBasis, withCash);
   // Optimizer strategies need a training window + at least one test day (see lib/backtest: start = window + 1).
   const usesWindow =
@@ -482,6 +508,8 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     obsPerYear,
     dataWarnings,
     returnBasisByAsset,
+    basisFallback,
+    basisExcluded,
   } = await loadBacktestData({
     ...x,
     minObservations: usesWindow ? x.windowDays + 3 : 3,
@@ -509,7 +537,8 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   );
   const factorWarnings: string[] = [];
   if (isFactor) {
-    const data = await loadDividendData();
+    // F7: momentum on the backtest's own basis (adjusted closes for total_return), same rule as the screen.
+    const data = await loadDividendData({ adj: x.returnBasis === "total_return" });
     const fo = (x.factorSettings ?? {}) as Partial<FactorSettingsInput>;
     const fs = factorSettingsSchema.parse(fo);
     if (factorNeedsStatements(x.strategy as FactorStrategyId, fs)) {
@@ -535,7 +564,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
       const d = screenFactorStrategy({
         strategyId: x.strategy as FactorStrategyId,
         asOf: cutoff,
-        inputs: factorInputsAsOf(data, symbols, cutoff, x.pointInTime),
+        inputs: factorInputsAsOf(data, symbols, cutoff, x.pointInTime, x.returnBasis),
         settings: fo,
         previous,
       });
@@ -793,8 +822,12 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
           symbol: benchmark.symbol,
           basis: benchmark.basis,
           wanted: benchmark.wanted,
+          kind: benchmark.kind,
+          source: benchmark.source,
+          warning: benchmark.warning,
         }
       : null,
+    priceBasis: priceBasisReport(basisInfo, basisFallback, basisExcluded),
     riskFreeInfo,
     ...(assumedPaymentDates ? { assumedPaymentDates } : {}),
     costModel: costs,

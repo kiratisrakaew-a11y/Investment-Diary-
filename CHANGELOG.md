@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-20 — Price basis & benchmark, phase P4 (F4 compare, F5 backtest, F7 momentum)
+- **F5 backtest** (`backtest_portfolio`, REST, page):
+  - `returnBasis` now defaults to Settings (request → Settings → price_return), except dividend strategies and `dividendCashflows`, which always use closes + cash dividends (never the Settings default; an explicit total_return there or with `useLots` is still an error).
+  - New `benchmark` (`default` = the previous basis-matched rule, `auto`, or a symbol). The result's `benchmark` adds `kind / source / warning`; new `priceBasis` with fallbacks / exclusions.
+  - Page: picker under the strategy; Adjusted Close is disabled, with the reason, for dividend strategies, dividend cash flows and lot rounding (no error after clicking).
+- **F4 model comparison**: same two options; the comparison panel sends them (it never sent `returnBasis` before) and shows the summary line. The optimizer page passes its `?basis / ?bench` as the starting values.
+- **F7 momentum 12–1** (`screen_factor_stocks` `returnBasis`, factor page picker, backtest momentum / multi_factor on the backtest's basis):
+  - total_return ranks on adjusted closes;
+  - a stock without adj_close on every close date of its 12–1 window has no momentum (unavailable, counted by the existing coverage / exclusion rules, listed in `priceBasis.excluded`) — closes and adjusted closes are never mixed in one ranking.
+- Numbers: identical with no new option (before/after run of backtest max Sharpe / equal weight / total_return / momentum, model comparison, factor screens).
+- Checks (`check:price-basis`): 6.1 for F4 / F5 / F7, the dividend-cash-flow exception to a total_return Settings default, auto → TRI, MCP / REST / service parity, and F7 screen ↔ backtest selection parity on total_return (TEST stocks whose dividends change the ranking; one without adj_close in its window).
+
 ## 2026-11-20 — Price basis & benchmark, phase P3 (F1 real portfolio, D5)
 - **F1 `getPerformance(end, data, { returnBasis, benchmark })`** — overview and analytics pages (shared `?basis=…&bench=…` picker with the D5 note), `GET /portfolio/performance?returnBasis=&benchmark=`, MCP `get_performance_metrics` (had no parameters).
 - **D5 — total return without counting dividends twice** (`buildValueSeries(…, { adj, assetIds })`, `ValuePoint.returnValue`):
