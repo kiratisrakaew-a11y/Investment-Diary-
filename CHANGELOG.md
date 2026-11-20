@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-20 — MPT fix, phase 1 (spec MPT_FIX_SPEC: P0-B1, P0-A1)
+- **P0-B1 — false `INFEASIBLE_CONSTRAINTS`.** Root cause differs from the spec's hypothesis (multi-constraint working set).
+  - Real cause: `feasibleReturnRange` found the LP max/min of μᵀw with a QP whose linear term was doubled up to huge values. The dual active-set solver broke down numerically and reported "infeasible".
+  - It failed even with per-asset caps only, or one group, and took down max Sharpe / frontier / target return (and compare / backtest / rebalance, which use the same code).
+  - Fixes:
+    - The range is now an exact LP (`solveLP`, moved to `src/lib/finance/lp.ts`).
+    - `INFEASIBLE_CONSTRAINTS` is raised only when an LP proves the constraint set empty, and it names a minimal conflicting subset (deletion filter).
+    - A QP that fails on a feasible set reports the new `SOLVER_FAILURE`.
+  - The dual active-set method needs no feasible starting point, so none is passed.
+  - Results that already solved are unchanged (max difference 1e-15 on a fixed set of cases).
+- **P0-A1 — adjusted close.** Root cause differs from the spec.
+  - A real (non-dry-run) `adjusted_close` sync already filled adj_close on stored rows.
+  - What was wrong: the counters overlapped (one row was both `updated` and `skippedExisting`), and the daily price updater stores close only (`price-updater.ts`), so new days never get adj_close. That updater is changed together with the adj_close rebase in phase 2.
+  - New per-column counters: `closeUpdated`, `adjCloseFilled`, `adjCloseRebased`.
+    - `unchanged` now means "close identical" in overwrite mode.
+    - `updated` is still the number of rows written.
+  - New `adjCloseCoverage` per series.
+- Tests: feasibility suite (2 / 4 / 8 overlapping groups, maxPerSector, random constraint sets, minimal conflict set), analytical 2-asset minimum variance, unconstrained tangency, sync counter / coverage tests, and a DB check of the adj_close fill.
+
 ## 2026-11-18 — Abnormal trading, phase 7: asset page
 - Thai stock pages get a "ความผิดปกติการซื้อขาย" section under the price chart. It loads after the page, so the price chart never waits.
   - Status badge.

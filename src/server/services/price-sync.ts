@@ -33,17 +33,51 @@ export const MAX_FUND_NAV_DAYS = 400;
 const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 export const syncHistoricalPricesInput = z.object({
-  symbols: z.array(z.string().min(1)).min(1).max(MAX_SYNC_SYMBOLS).describe("Asset symbols as stored in the app (e.g. BBL, AP); add_asset first for new ones"),
-  startDate: z.string().optional().describe("YYYY-MM-DD; default = endDate − lookbackDays"),
+  symbols: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(MAX_SYNC_SYMBOLS)
+    .describe(
+      "Asset symbols as stored in the app (e.g. BBL, AP); add_asset first for new ones",
+    ),
+  startDate: z
+    .string()
+    .optional()
+    .describe("YYYY-MM-DD; default = endDate − lookbackDays"),
   endDate: z.string().optional().describe("YYYY-MM-DD; default today"),
-  lookbackDays: z.number().int().min(1).max(3660).optional().describe("Default 365"),
-  priceType: z.enum(["close", "adjusted_close"]).default("close").describe("close = provider close (split-adjusted). adjusted_close also stores the split+dividend-adjusted series"),
-  overwriteExisting: z.boolean().default(false).describe("false = keep stored prices, only add missing dates"),
-  dryRun: z.boolean().default(false).describe("true = fetch and report what would change, write nothing"),
-  includeBenchmark: z.boolean().default(true).describe("Also sync the benchmark index over the same range"),
-  includeFx: z.boolean().default(true).describe("Also sync USDTHB over the same range"),
+  lookbackDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(3660)
+    .optional()
+    .describe("Default 365"),
+  priceType: z
+    .enum(["close", "adjusted_close"])
+    .default("close")
+    .describe(
+      "close = provider close (split-adjusted). adjusted_close also stores the split+dividend-adjusted series",
+    ),
+  overwriteExisting: z
+    .boolean()
+    .default(false)
+    .describe("false = keep stored prices, only add missing dates"),
+  dryRun: z
+    .boolean()
+    .default(false)
+    .describe("true = fetch and report what would change, write nothing"),
+  includeBenchmark: z
+    .boolean()
+    .default(true)
+    .describe("Also sync the benchmark index over the same range"),
+  includeFx: z
+    .boolean()
+    .default(true)
+    .describe("Also sync USDTHB over the same range"),
 });
-export type SyncHistoricalPricesInput = z.input<typeof syncHistoricalPricesInput>;
+export type SyncHistoricalPricesInput = z.input<
+  typeof syncHistoricalPricesInput
+>;
 
 export interface AssetLike {
   id: number;
@@ -54,7 +88,10 @@ export interface AssetLike {
   providerSymbol: string | null;
 }
 
-type Existing = Map<string, { close: number; adjClose: number | null; volume?: number | null }>;
+type Existing = Map<
+  string,
+  { close: number; adjClose: number | null; volume?: number | null }
+>;
 
 export interface SyncDeps {
   today(): string;
@@ -63,19 +100,45 @@ export interface SyncDeps {
   fetchFundNav(projId: string, date: string): Promise<number | null>;
   /** Series key: `asset:<id>`, `fx:USDTHB` or `bench:<symbol>`. */
   loadExisting(key: string, range: SyncRange): Promise<Existing>;
-  write(key: string, inserts: PricePoint[], updates: PricePoint[]): Promise<void>;
+  write(
+    key: string,
+    inserts: PricePoint[],
+    updates: PricePoint[],
+  ): Promise<void>;
   /** Set volume on stored asset rows whose volume is empty (never touches close / adjusted close). Optional for test doubles. */
-  fillVolume?(key: string, fills: { date: string; volume: number }[]): Promise<number>;
+  fillVolume?(
+    key: string,
+    fills: { date: string; volume: number }[],
+  ): Promise<number>;
   loadFx(): Promise<[string, number][]>;
   sleep(ms: number): Promise<void>;
-  eligibility(symbols: string[], lookbackDays: number): Promise<{ lookbackDays: number; ok: boolean; reason?: string; eligible: string[]; skipped: { symbol: string; reason: string }[] }>;
+  eligibility(
+    symbols: string[],
+    lookbackDays: number,
+  ): Promise<{
+    lookbackDays: number;
+    ok: boolean;
+    reason?: string;
+    eligible: string[];
+    skipped: { symbol: string; reason: string }[];
+  }>;
   benchmarkSymbol(): Promise<string>;
   heldAssetIds(): Promise<Set<number>>;
   /** Persist provider dividend events (issuer data, never the ledger). Optional so test doubles can omit it. */
-  saveDividendEvents?(symbol: string, provider: string, currency: string, dividends: DailyHistory["dividends"]): Promise<{ inserted: number; updated: number }>;
+  saveDividendEvents?(
+    symbol: string,
+    provider: string,
+    currency: string,
+    dividends: DailyHistory["dividends"],
+  ): Promise<{ inserted: number; updated: number }>;
 }
 
-export type SyncStatus = "ok" | "no_data" | "unknown_asset" | "unsupported" | "error";
+export type SyncStatus =
+  | "ok"
+  | "no_data"
+  | "unknown_asset"
+  | "unsupported"
+  | "error";
 
 export interface SeriesResult {
   symbol: string;
@@ -87,15 +150,28 @@ export interface SeriesResult {
   inserted: number;
   updated: number;
   skippedExisting: number;
+  /** Per-column counters (see WritePlan): close rewritten / adj_close filled where empty / adj_close replaced. */
+  closeUpdated?: number;
+  adjCloseFilled?: number;
+  adjCloseRebased?: number;
+  /** Days in the range with an adjusted close ÷ days with a close (after this sync; dry run = what it would be). */
+  adjCloseCoverage?: { withAdjClose: number; withClose: number; ratio: number };
   unchanged: number;
   /** Stored rows that received a volume (prices unchanged). */
   volumeFilled?: number;
   coverage?: Coverage;
-  corporateActions?: { splits: DailyHistory["splits"]; dividends: DailyHistory["dividends"] };
+  corporateActions?: {
+    splits: DailyHistory["splits"];
+    dividends: DailyHistory["dividends"];
+  };
   warnings: string[];
 }
 
-const empty = (symbol: string, status: SyncStatus, message?: string): SeriesResult => ({
+const empty = (
+  symbol: string,
+  status: SyncStatus,
+  message?: string,
+): SeriesResult => ({
   symbol,
   status,
   message,
@@ -115,17 +191,56 @@ interface Opts {
 }
 
 /** Plan and (unless dry run) write one series; returns counts, coverage and warnings. */
-async function applySeries(deps: SyncDeps, key: string, label: string, history: DailyHistory, o: Opts, held: boolean, base: Partial<SeriesResult>): Promise<SeriesResult> {
+async function applySeries(
+  deps: SyncDeps,
+  key: string,
+  label: string,
+  history: DailyHistory,
+  o: Opts,
+  held: boolean,
+  base: Partial<SeriesResult>,
+): Promise<SeriesResult> {
   const existing = await deps.loadExisting(key, o.range);
-  const plan = planWrites(existing, history.rows, { overwrite: o.overwrite, priceType: o.priceType });
-  if (!o.dryRun && (plan.inserts.length || plan.updates.length)) await deps.write(key, plan.inserts, plan.updates);
+  const plan = planWrites(existing, history.rows, {
+    overwrite: o.overwrite,
+    priceType: o.priceType,
+  });
+  if (!o.dryRun && (plan.inserts.length || plan.updates.length))
+    await deps.write(key, plan.inserts, plan.updates);
   // Volume is stored for assets only (benchmark / FX rows have none).
   const volumeFills = key.startsWith("asset:") ? plan.volumeFills : [];
-  const volumeFilled = !o.dryRun && volumeFills.length && deps.fillVolume ? await deps.fillVolume(key, volumeFills) : o.dryRun ? volumeFills.length : 0;
-  const dates = new Set([...existing.keys(), ...plan.inserts.map((r) => r.date)]);
-  const warnings = corporateActionWarnings(label, history.splits, history.dividends, held);
-  if (plan.changedButKept) warnings.push(`${label}: ${plan.changedButKept} วันที่ราคา${base.source === "import" ? "ในไฟล์" : "จากผู้ให้ข้อมูล"}ต่างจากที่เก็บไว้ — เก็บของเดิมไว้ (ใช้ overwriteExisting เพื่ออัปเดต)`);
-  if (plan.invalid) warnings.push(`${label}: ข้ามราคา ${plan.invalid} แถวที่ไม่ถูกต้อง (≤ 0 หรือไม่ใช่ตัวเลข)`);
+  const volumeFilled =
+    !o.dryRun && volumeFills.length && deps.fillVolume
+      ? await deps.fillVolume(key, volumeFills)
+      : o.dryRun
+        ? volumeFills.length
+        : 0;
+  const dates = new Set([
+    ...existing.keys(),
+    ...plan.inserts.map((r) => r.date),
+  ]);
+  // Adjusted-close coverage of the requested range as it stands after this plan.
+  const adjAfter = new Map([...existing].map(([d, r]) => [d, r.adjClose]));
+  for (const r of [...plan.inserts, ...plan.updates])
+    adjAfter.set(r.date, r.adjClose);
+  const inRange = [...adjAfter].filter(
+    ([d]) => d >= o.range.from && d <= o.range.to,
+  );
+  const withAdj = inRange.filter(([, a]) => a != null).length;
+  const warnings = corporateActionWarnings(
+    label,
+    history.splits,
+    history.dividends,
+    held,
+  );
+  if (plan.changedButKept)
+    warnings.push(
+      `${label}: ${plan.changedButKept} วันที่ราคา${base.source === "import" ? "ในไฟล์" : "จากผู้ให้ข้อมูล"}ต่างจากที่เก็บไว้ — เก็บของเดิมไว้ (ใช้ overwriteExisting เพื่ออัปเดต)`,
+    );
+  if (plan.invalid)
+    warnings.push(
+      `${label}: ข้ามราคา ${plan.invalid} แถวที่ไม่ถูกต้อง (≤ 0 หรือไม่ใช่ตัวเลข)`,
+    );
   return {
     symbol: label,
     ...base,
@@ -136,6 +251,14 @@ async function applySeries(deps: SyncDeps, key: string, label: string, history: 
     updated: plan.updates.length,
     skippedExisting: plan.skippedExisting,
     unchanged: plan.unchanged,
+    closeUpdated: plan.closeUpdated,
+    adjCloseFilled: plan.adjCloseFilled,
+    adjCloseRebased: plan.adjCloseRebased,
+    adjCloseCoverage: {
+      withAdjClose: withAdj,
+      withClose: inRange.length,
+      ratio: inRange.length ? withAdj / inRange.length : 0,
+    },
     ...(key.startsWith("asset:") ? { volumeFilled } : {}),
     coverage: coverage([...dates], o.range, deps.today()),
     corporateActions: { splits: history.splits, dividends: history.dividends },
@@ -143,11 +266,16 @@ async function applySeries(deps: SyncDeps, key: string, label: string, history: 
   };
 }
 
-const retry = <T>(deps: SyncDeps, fn: () => Promise<T>) => withRetry(fn, { attempts: 3, baseMs: 500, sleep: deps.sleep });
+const retry = <T>(deps: SyncDeps, fn: () => Promise<T>) =>
+  withRetry(fn, { attempts: 3, baseMs: 500, sleep: deps.sleep });
 
 function weekdays(range: SyncRange) {
   const out: string[] = [];
-  for (let t = Date.parse(range.from); t <= Date.parse(range.to); t += 86_400_000) {
+  for (
+    let t = Date.parse(range.from);
+    t <= Date.parse(range.to);
+    t += 86_400_000
+  ) {
     const d = new Date(t).getUTCDay();
     if (d !== 0 && d !== 6) out.push(isoDay(t));
   }
@@ -155,25 +283,66 @@ function weekdays(range: SyncRange) {
 }
 
 /** Sync one asset's price series from its configured source. */
-export async function syncAssetSeries(deps: SyncDeps, asset: AssetLike, o: Opts, held: boolean): Promise<SeriesResult> {
+export async function syncAssetSeries(
+  deps: SyncDeps,
+  asset: AssetLike,
+  o: Opts,
+  held: boolean,
+): Promise<SeriesResult> {
   const key = `asset:${asset.id}`;
   try {
     if (asset.priceSource === "manual") {
-      return { ...empty(asset.symbol, "unsupported", "แหล่งราคาเป็น manual — บันทึกราคาเองด้วย update_price หรือเปลี่ยนแหล่งราคาเป็น Yahoo"), source: "manual" };
+      return {
+        ...empty(
+          asset.symbol,
+          "unsupported",
+          "แหล่งราคาเป็น manual — บันทึกราคาเองด้วย update_price หรือเปลี่ยนแหล่งราคาเป็น Yahoo",
+        ),
+        source: "manual",
+      };
     }
     if (asset.priceSource === "sec_th") {
-      if (!asset.providerSymbol) return { ...empty(asset.symbol, "unsupported", "กองทุนต้องมี providerSymbol (proj_id ของ ก.ล.ต.)"), source: "sec_th" };
-      const days = (Date.parse(o.range.to) - Date.parse(o.range.from)) / 86_400_000;
+      if (!asset.providerSymbol)
+        return {
+          ...empty(
+            asset.symbol,
+            "unsupported",
+            "กองทุนต้องมี providerSymbol (proj_id ของ ก.ล.ต.)",
+          ),
+          source: "sec_th",
+        };
+      const days =
+        (Date.parse(o.range.to) - Date.parse(o.range.from)) / 86_400_000;
       if (days > MAX_FUND_NAV_DAYS) {
-        return { ...empty(asset.symbol, "unsupported", `API ก.ล.ต. ดึง NAV ได้ทีละวัน — จำกัดช่วงไม่เกิน ${MAX_FUND_NAV_DAYS} วันต่อครั้ง`), source: "sec_th" };
+        return {
+          ...empty(
+            asset.symbol,
+            "unsupported",
+            `API ก.ล.ต. ดึง NAV ได้ทีละวัน — จำกัดช่วงไม่เกิน ${MAX_FUND_NAV_DAYS} วันต่อครั้ง`,
+          ),
+          source: "sec_th",
+        };
       }
       const rows: PricePoint[] = [];
       for (const d of weekdays(o.range)) {
-        const nav = await retry(deps, () => deps.fetchFundNav(asset.providerSymbol!, d));
+        const nav = await retry(deps, () =>
+          deps.fetchFundNav(asset.providerSymbol!, d),
+        );
         if (nav != null) rows.push({ date: d, close: nav, adjClose: null });
       }
-      const r = await applySeries(deps, key, asset.symbol, { rows, splits: [], dividends: [] }, o, held, { source: "sec_th", providerSymbol: asset.providerSymbol });
-      if (o.priceType === "adjusted_close") r.warnings.push(`${asset.symbol}: NAV กองทุนไม่มี adjusted series แยก (NAV สะท้อนการจ่ายปันผลอยู่แล้ว)`);
+      const r = await applySeries(
+        deps,
+        key,
+        asset.symbol,
+        { rows, splits: [], dividends: [] },
+        o,
+        held,
+        { source: "sec_th", providerSymbol: asset.providerSymbol },
+      );
+      if (o.priceType === "adjusted_close")
+        r.warnings.push(
+          `${asset.symbol}: NAV กองทุนไม่มี adjusted series แยก (NAV สะท้อนการจ่ายปันผลอยู่แล้ว)`,
+        );
       return r;
     }
     if (asset.providerSymbol?.toUpperCase() === THAI_GOLD_SYMBOL) {
@@ -186,70 +355,160 @@ export async function syncAssetSeries(deps: SyncDeps, asset: AssetLike, o: Opts,
           missingFx++;
           return [];
         }
-        return [{ date: g.date, close: thaiGoldPrice(g.close, rate), adjClose: null }];
+        return [
+          { date: g.date, close: thaiGoldPrice(g.close, rate), adjClose: null },
+        ];
       });
-      const r = await applySeries(deps, key, asset.symbol, { rows, splits: [], dividends: [] }, o, held, { source: "yahoo GC=F × USDTHB", providerSymbol: "GC=F" });
-      if (missingFx) r.warnings.push(`${asset.symbol}: ข้าม ${missingFx} วันที่ไม่มีอัตรา USDTHB`);
+      const r = await applySeries(
+        deps,
+        key,
+        asset.symbol,
+        { rows, splits: [], dividends: [] },
+        o,
+        held,
+        { source: "yahoo GC=F × USDTHB", providerSymbol: "GC=F" },
+      );
+      if (missingFx)
+        r.warnings.push(
+          `${asset.symbol}: ข้าม ${missingFx} วันที่ไม่มีอัตรา USDTHB`,
+        );
       return r;
     }
     const provider = asset.providerSymbol || asset.symbol;
-    const history = await retry(deps, () => deps.fetchHistory(provider, o.range));
-    const r = await applySeries(deps, key, asset.symbol, history, o, held, { source: "yahoo", providerSymbol: provider });
+    const history = await retry(deps, () =>
+      deps.fetchHistory(provider, o.range),
+    );
+    const r = await applySeries(deps, key, asset.symbol, history, o, held, {
+      source: "yahoo",
+      providerSymbol: provider,
+    });
     if (!o.dryRun && history.dividends.length && deps.saveDividendEvents) {
-      const d = await deps.saveDividendEvents(asset.symbol, provider, asset.currency ?? "THB", history.dividends);
-      if (d.inserted || d.updated) r.warnings.push(`${asset.symbol}: บันทึกเหตุการณ์ปันผลจาก Yahoo ${d.inserted} ใหม่ / ${d.updated} แก้ไข (ข้อมูลผู้ออก — ไม่ใช่รายการรับเงินในบัญชี)`);
+      const d = await deps.saveDividendEvents(
+        asset.symbol,
+        provider,
+        asset.currency ?? "THB",
+        history.dividends,
+      );
+      if (d.inserted || d.updated)
+        r.warnings.push(
+          `${asset.symbol}: บันทึกเหตุการณ์ปันผลจาก Yahoo ${d.inserted} ใหม่ / ${d.updated} แก้ไข (ข้อมูลผู้ออก — ไม่ใช่รายการรับเงินในบัญชี)`,
+        );
     }
     if (o.priceType === "adjusted_close" && r.status === "ok") {
-      r.warnings.push(`${asset.symbol}: adjusted close ของ Yahoo ถูกปรับย้อนหลังทุกครั้งที่มีปันผลใหม่ — ควร sync ทั้งช่วงพร้อม overwriteExisting เพื่อให้ทั้งชุดอยู่บนฐานเดียวกัน`);
+      r.warnings.push(
+        `${asset.symbol}: adjusted close ของ Yahoo ถูกปรับย้อนหลังทุกครั้งที่มีปันผลใหม่ — ควร sync ทั้งช่วงพร้อม overwriteExisting เพื่อให้ทั้งชุดอยู่บนฐานเดียวกัน`,
+      );
     }
     return r;
   } catch (e) {
-    return { ...empty(asset.symbol, "error", e instanceof Error ? e.message : String(e)), source: asset.priceSource };
+    return {
+      ...empty(
+        asset.symbol,
+        "error",
+        e instanceof Error ? e.message : String(e),
+      ),
+      source: asset.priceSource,
+    };
   }
 }
 
 /** Sync a non-asset series (benchmark index or USDTHB) from Yahoo. */
-export async function syncMarketSeries(deps: SyncDeps, key: string, label: string, provider: string, o: Opts): Promise<SeriesResult> {
+export async function syncMarketSeries(
+  deps: SyncDeps,
+  key: string,
+  label: string,
+  provider: string,
+  o: Opts,
+): Promise<SeriesResult> {
   try {
-    const history = await retry(deps, () => deps.fetchHistory(provider, o.range));
-    return await applySeries(deps, key, label, { ...history, splits: [], dividends: [] }, o, false, { source: "yahoo", providerSymbol: provider });
+    const history = await retry(deps, () =>
+      deps.fetchHistory(provider, o.range),
+    );
+    return await applySeries(
+      deps,
+      key,
+      label,
+      { ...history, splits: [], dividends: [] },
+      o,
+      false,
+      { source: "yahoo", providerSymbol: provider },
+    );
   } catch (e) {
-    return { ...empty(label, "error", e instanceof Error ? e.message : String(e)), source: "yahoo", providerSymbol: provider };
+    return {
+      ...empty(label, "error", e instanceof Error ? e.message : String(e)),
+      source: "yahoo",
+      providerSymbol: provider,
+    };
   }
 }
 
 /** Backfill / incremental / date-range sync for the given assets, plus benchmark and USDTHB. */
-export async function syncHistoricalPrices(input: SyncHistoricalPricesInput, deps: SyncDeps = dbDeps) {
+export async function syncHistoricalPrices(
+  input: SyncHistoricalPricesInput,
+  deps: SyncDeps = dbDeps,
+) {
   const x = syncHistoricalPricesInput.parse(input);
   const range = resolveSyncRange(x, deps.today());
-  const o: Opts = { range, priceType: x.priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun };
+  const o: Opts = {
+    range,
+    priceType: x.priceType,
+    overwrite: x.overwriteExisting,
+    dryRun: x.dryRun,
+  };
   const symbols = [...new Set(x.symbols.map((s) => s.trim().toUpperCase()))];
 
   // USDTHB first: Thai gold and USD assets are valued with it.
-  const fx = x.includeFx ? await syncMarketSeries(deps, "fx:USDTHB", "USDTHB", "THB=X", o) : null;
+  const fx = x.includeFx
+    ? await syncMarketSeries(deps, "fx:USDTHB", "USDTHB", "THB=X", o)
+    : null;
   const benchSymbol = await deps.benchmarkSymbol();
-  const benchmark = x.includeBenchmark ? await syncMarketSeries(deps, `bench:${benchSymbol}`, benchSymbol, benchSymbol, o) : null;
+  const benchmark = x.includeBenchmark
+    ? await syncMarketSeries(
+        deps,
+        `bench:${benchSymbol}`,
+        benchSymbol,
+        benchSymbol,
+        o,
+      )
+    : null;
 
   const held = await deps.heldAssetIds();
   const results: SeriesResult[] = [];
   for (const [i, s] of symbols.entries()) {
     const asset = await deps.findAsset(s);
     if (!asset) {
-      results.push(empty(s, "unknown_asset", `ไม่พบ ${s} ในรายการสินทรัพย์ — เพิ่มด้วย add_asset ก่อน (หุ้นไทยใช้ providerSymbol ${s}.BK) แล้วสั่ง sync ใหม่`));
+      results.push(
+        empty(
+          s,
+          "unknown_asset",
+          `ไม่พบ ${s} ในรายการสินทรัพย์ — เพิ่มด้วย add_asset ก่อน (หุ้นไทยใช้ providerSymbol ${s}.BK) แล้วสั่ง sync ใหม่`,
+        ),
+      );
       continue;
     }
     if (i > 0) await deps.sleep(300); // gentle on the free provider
     results.push(await syncAssetSeries(deps, asset, o, held.has(asset.id)));
   }
 
-  const known = results.filter((r) => r.status === "ok" || r.status === "no_data").map((r) => r.symbol);
-  const lookbackDays = Math.max(90, Math.ceil((Date.parse(deps.today()) - Date.parse(range.from)) / 86_400_000));
+  const known = results
+    .filter((r) => r.status === "ok" || r.status === "no_data")
+    .map((r) => r.symbol);
+  const lookbackDays = Math.max(
+    90,
+    Math.ceil((Date.parse(deps.today()) - Date.parse(range.from)) / 86_400_000),
+  );
   let eligibility: Awaited<ReturnType<SyncDeps["eligibility"]>> | null = null;
   if (known.length) {
     try {
       eligibility = await deps.eligibility(known, lookbackDays);
     } catch (e) {
-      eligibility = { lookbackDays, ok: false, reason: e instanceof Error ? e.message : String(e), eligible: [], skipped: [] };
+      eligibility = {
+        lookbackDays,
+        ok: false,
+        reason: e instanceof Error ? e.message : String(e),
+        eligible: [],
+        skipped: [],
+      };
     }
   }
 
@@ -281,18 +540,47 @@ export const MAX_IMPORT_ROWS = 50_000;
 
 export const importPricesInput = z.object({
   rows: z
-    .array(z.object({ symbol: z.string().min(1), date: z.string(), close: z.number(), adjClose: z.number().nullable().optional(), volume: z.number().min(0).nullable().optional() }))
+    .array(
+      z.object({
+        symbol: z.string().min(1),
+        date: z.string(),
+        close: z.number(),
+        adjClose: z.number().nullable().optional(),
+        volume: z.number().min(0).nullable().optional(),
+      }),
+    )
     .max(MAX_IMPORT_ROWS)
     .optional()
-    .describe("Prices to store: [{ symbol, date YYYY-MM-DD, close, adjClose?, volume? (shares traded) }]"),
-  csv: z.string().max(5_000_000).optional().describe("Alternative to rows: CSV text (symbol,date,close | date,SYM1,SYM2,… | one-symbol export with `symbol`)"),
-  symbol: z.string().optional().describe("Symbol for a one-symbol CSV export (Date, Open, High, Low, Close, …)"),
-  overwriteExisting: z.boolean().default(false).describe("false = keep stored prices, only add missing dates"),
-  dryRun: z.boolean().default(false).describe("true = validate and report what would change, write nothing"),
+    .describe(
+      "Prices to store: [{ symbol, date YYYY-MM-DD, close, adjClose?, volume? (shares traded) }]",
+    ),
+  csv: z
+    .string()
+    .max(5_000_000)
+    .optional()
+    .describe(
+      "Alternative to rows: CSV text (symbol,date,close | date,SYM1,SYM2,… | one-symbol export with `symbol`)",
+    ),
+  symbol: z
+    .string()
+    .optional()
+    .describe(
+      "Symbol for a one-symbol CSV export (Date, Open, High, Low, Close, …)",
+    ),
+  overwriteExisting: z
+    .boolean()
+    .default(false)
+    .describe("false = keep stored prices, only add missing dates"),
+  dryRun: z
+    .boolean()
+    .default(false)
+    .describe("true = validate and report what would change, write nothing"),
   target: z
     .enum(["asset", "benchmark"])
     .default("asset")
-    .describe("asset = prices of assets in the app (default). benchmark = an index series such as SETTRI (SET Total Return Index) stored by symbol in the benchmark table; volume is ignored"),
+    .describe(
+      "asset = prices of assets in the app (default). benchmark = an index series such as SETTRI (SET Total Return Index) stored by symbol in the benchmark table; volume is ignored",
+    ),
 });
 export type ImportPricesInput = z.input<typeof importPricesInput>;
 
@@ -301,10 +589,23 @@ export type ImportPricesInput = z.input<typeof importPricesInput>;
  * provider sync: existing prices are kept unless overwriteExisting, dry run writes nothing, unknown
  * symbols are reported. Any price source is accepted (manual assets included).
  */
-export async function importPrices(input: ImportPricesInput, deps: SyncDeps = dbDeps) {
+export async function importPrices(
+  input: ImportPricesInput,
+  deps: SyncDeps = dbDeps,
+) {
   const x = importPricesInput.parse(input);
   const parseErrors: { line: number; reason: string }[] = [];
-  let rows: { symbol: string; date: string; close: number; adjClose: number | null; volume?: number | null }[] = (x.rows ?? []).map((r) => ({ ...r, symbol: r.symbol.trim().toUpperCase(), adjClose: r.adjClose ?? null }));
+  let rows: {
+    symbol: string;
+    date: string;
+    close: number;
+    adjClose: number | null;
+    volume?: number | null;
+  }[] = (x.rows ?? []).map((r) => ({
+    ...r,
+    symbol: r.symbol.trim().toUpperCase(),
+    adjClose: r.adjClose ?? null,
+  }));
   let format: string | null = x.rows ? "rows" : null;
   if (x.csv) {
     const { parsePriceTable } = await import("@/lib/prices/price-import");
@@ -313,10 +614,23 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
     parseErrors.push(...p.errors);
     format = p.format;
   }
-  if (rows.length > MAX_IMPORT_ROWS) throw new PriceSyncError("INVALID_INPUT", `มี ${rows.length} แถว เกินสูงสุด ${MAX_IMPORT_ROWS} — แบ่งไฟล์`);
+  if (rows.length > MAX_IMPORT_ROWS)
+    throw new PriceSyncError(
+      "INVALID_INPUT",
+      `มี ${rows.length} แถว เกินสูงสุด ${MAX_IMPORT_ROWS} — แบ่งไฟล์`,
+    );
   const today = deps.today();
   const bySymbol = new Map<string, PricePoint[]>();
-  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), { date: r.date, close: r.close, adjClose: r.adjClose, ...(r.volume != null ? { volume: r.volume } : {}) }]);
+  for (const r of rows)
+    bySymbol.set(r.symbol, [
+      ...(bySymbol.get(r.symbol) ?? []),
+      {
+        date: r.date,
+        close: r.close,
+        adjClose: r.adjClose,
+        ...(r.volume != null ? { volume: r.volume } : {}),
+      },
+    ]);
   const isBench = x.target === "benchmark";
 
   const held = await deps.heldAssetIds();
@@ -324,7 +638,14 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
   for (const [symbol, list] of bySymbol) {
     const asset = isBench ? null : await deps.findAsset(symbol);
     if (!isBench && !asset) {
-      results.push({ ...empty(symbol, "unknown_asset", `ไม่พบ ${symbol} ในรายการสินทรัพย์ — เพิ่มสินทรัพย์ก่อนแล้วนำเข้าใหม่ (ถ้าเป็นดัชนี เช่น SETTRI ให้ใช้ target: "benchmark")`), fetched: list.length });
+      results.push({
+        ...empty(
+          symbol,
+          "unknown_asset",
+          `ไม่พบ ${symbol} ในรายการสินทรัพย์ — เพิ่มสินทรัพย์ก่อนแล้วนำเข้าใหม่ (ถ้าเป็นดัชนี เช่น SETTRI ให้ใช้ target: "benchmark")`,
+        ),
+        fetched: list.length,
+      });
       continue;
     }
     const warnings: string[] = [];
@@ -334,7 +655,10 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
     let future = 0;
     let badDate = 0;
     for (const r of list) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || Number.isNaN(Date.parse(r.date))) {
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ||
+        Number.isNaN(Date.parse(r.date))
+      ) {
         badDate++;
         continue;
       }
@@ -345,20 +669,41 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
       if (byDate.has(r.date)) dups++;
       byDate.set(r.date, r);
     }
-    if (dups) warnings.push(`${symbol}: วันที่ซ้ำในข้อมูล ${dups} แถว — ใช้แถวหลังสุด`);
+    if (dups)
+      warnings.push(`${symbol}: วันที่ซ้ำในข้อมูล ${dups} แถว — ใช้แถวหลังสุด`);
     if (future) warnings.push(`${symbol}: ข้าม ${future} แถวที่เป็นวันในอนาคต`);
-    if (badDate) warnings.push(`${symbol}: ข้าม ${badDate} แถวที่วันที่ไม่ใช่รูปแบบ YYYY-MM-DD`);
-    const points = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (badDate)
+      warnings.push(
+        `${symbol}: ข้าม ${badDate} แถวที่วันที่ไม่ใช่รูปแบบ YYYY-MM-DD`,
+      );
+    const points = [...byDate.values()].sort((a, b) =>
+      a.date < b.date ? -1 : 1,
+    );
     if (!points.length) {
-      results.push({ ...empty(symbol, "no_data", "ไม่มีแถวที่ใช้ได้"), warnings, fetched: list.length });
+      results.push({
+        ...empty(symbol, "no_data", "ไม่มีแถวที่ใช้ได้"),
+        warnings,
+        fetched: list.length,
+      });
       continue;
     }
     const range = { from: points[0].date, to: points[points.length - 1].date };
-    const priceType: PriceType = points.some((p) => p.adjClose != null) ? "adjusted_close" : "close";
-    const r = await applySeries(deps, asset ? `asset:${asset.id}` : `bench:${symbol}`, asset?.symbol ?? symbol, { rows: points, splits: [], dividends: [] }, { range, priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun }, asset ? held.has(asset.id) : false, {
-      source: "import",
-    });
-    if (isBench && points.some((p) => p.volume != null)) r.warnings.push(`${symbol}: ไม่เก็บ volume ของ benchmark`);
+    const priceType: PriceType = points.some((p) => p.adjClose != null)
+      ? "adjusted_close"
+      : "close";
+    const r = await applySeries(
+      deps,
+      asset ? `asset:${asset.id}` : `bench:${symbol}`,
+      asset?.symbol ?? symbol,
+      { rows: points, splits: [], dividends: [] },
+      { range, priceType, overwrite: x.overwriteExisting, dryRun: x.dryRun },
+      asset ? held.has(asset.id) : false,
+      {
+        source: "import",
+      },
+    );
+    if (isBench && points.some((p) => p.volume != null))
+      r.warnings.push(`${symbol}: ไม่เก็บ volume ของ benchmark`);
     r.fetched = list.length;
     r.warnings.unshift(...warnings);
     results.push(r);
@@ -397,7 +742,10 @@ export async function importPrices(input: ImportPricesInput, deps: SyncDeps = db
 // ------------------------------------------------------------------ database dependencies
 
 function tableFor(key: string) {
-  const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  const [kind, id] = [
+    key.slice(0, key.indexOf(":")),
+    key.slice(key.indexOf(":") + 1),
+  ];
   return { kind, id };
 }
 
@@ -406,7 +754,9 @@ const CHUNK = 500;
 export const dbDeps: SyncDeps = {
   saveDividendEvents: async (symbol, provider, currency, dividends) => {
     const { upsertDividendEvents, yahooEvents } = await import("./dividends");
-    return upsertDividendEvents(yahooEvents(symbol, provider, currency, dividends));
+    return upsertDividendEvents(
+      yahooEvents(symbol, provider, currency, dividends),
+    );
   },
   today: () => todayIso(),
   findAsset: (s) => getAssetBySymbol(s),
@@ -420,15 +770,35 @@ export const dbDeps: SyncDeps = {
     const out: Existing = new Map();
     if (kind === "asset") {
       const t = schema.prices;
-      const rows = await db.select({ d: t.date, c: t.close, a: t.adjClose, v: t.volume }).from(t).where(and(eq(t.assetId, Number(id)), gte(t.date, range.from), lte(t.date, range.to)));
-      for (const r of rows) out.set(r.d, { close: r.c, adjClose: r.a, volume: r.v });
+      const rows = await db
+        .select({ d: t.date, c: t.close, a: t.adjClose, v: t.volume })
+        .from(t)
+        .where(
+          and(
+            eq(t.assetId, Number(id)),
+            gte(t.date, range.from),
+            lte(t.date, range.to),
+          ),
+        );
+      for (const r of rows)
+        out.set(r.d, { close: r.c, adjClose: r.a, volume: r.v });
     } else if (kind === "bench") {
       const t = schema.benchmarkPrices;
-      const rows = await db.select({ d: t.date, c: t.close, a: t.adjClose }).from(t).where(and(eq(t.symbol, id), gte(t.date, range.from), lte(t.date, range.to)));
+      const rows = await db
+        .select({ d: t.date, c: t.close, a: t.adjClose })
+        .from(t)
+        .where(
+          and(eq(t.symbol, id), gte(t.date, range.from), lte(t.date, range.to)),
+        );
       for (const r of rows) out.set(r.d, { close: r.c, adjClose: r.a });
     } else {
       const t = schema.fxRates;
-      const rows = await db.select({ d: t.date, c: t.rate }).from(t).where(and(eq(t.pair, id), gte(t.date, range.from), lte(t.date, range.to)));
+      const rows = await db
+        .select({ d: t.date, c: t.rate })
+        .from(t)
+        .where(
+          and(eq(t.pair, id), gte(t.date, range.from), lte(t.date, range.to)),
+        );
       for (const r of rows) out.set(r.d, { close: r.c, adjClose: null });
     }
     return out;
@@ -444,16 +814,60 @@ export const dbDeps: SyncDeps = {
         const part = rows.slice(i, i + CHUNK);
         if (kind === "asset") {
           const t = schema.prices;
-          const q = db.insert(t).values(part.map((r) => ({ assetId: Number(id), date: r.date, close: r.close, adjClose: r.adjClose, volume: r.volume ?? null })));
-          await (update ? q.onConflictDoUpdate({ target: [t.assetId, t.date], set: { close: sql`excluded.close`, adjClose: sql`excluded.adj_close` } }) : q.onConflictDoNothing());
+          const q = db
+            .insert(t)
+            .values(
+              part.map((r) => ({
+                assetId: Number(id),
+                date: r.date,
+                close: r.close,
+                adjClose: r.adjClose,
+                volume: r.volume ?? null,
+              })),
+            );
+          await (update
+            ? q.onConflictDoUpdate({
+                target: [t.assetId, t.date],
+                set: {
+                  close: sql`excluded.close`,
+                  adjClose: sql`excluded.adj_close`,
+                },
+              })
+            : q.onConflictDoNothing());
         } else if (kind === "bench") {
           const t = schema.benchmarkPrices;
-          const q = db.insert(t).values(part.map((r) => ({ symbol: id, date: r.date, close: r.close, adjClose: r.adjClose })));
-          await (update ? q.onConflictDoUpdate({ target: [t.symbol, t.date], set: { close: sql`excluded.close`, adjClose: sql`excluded.adj_close` } }) : q.onConflictDoNothing());
+          const q = db
+            .insert(t)
+            .values(
+              part.map((r) => ({
+                symbol: id,
+                date: r.date,
+                close: r.close,
+                adjClose: r.adjClose,
+              })),
+            );
+          await (update
+            ? q.onConflictDoUpdate({
+                target: [t.symbol, t.date],
+                set: {
+                  close: sql`excluded.close`,
+                  adjClose: sql`excluded.adj_close`,
+                },
+              })
+            : q.onConflictDoNothing());
         } else {
           const t = schema.fxRates;
-          const q = db.insert(t).values(part.map((r) => ({ pair: id, date: r.date, rate: r.close })));
-          await (update ? q.onConflictDoUpdate({ target: [t.pair, t.date], set: { rate: sql`excluded.rate` } }) : q.onConflictDoNothing());
+          const q = db
+            .insert(t)
+            .values(
+              part.map((r) => ({ pair: id, date: r.date, rate: r.close })),
+            );
+          await (update
+            ? q.onConflictDoUpdate({
+                target: [t.pair, t.date],
+                set: { rate: sql`excluded.rate` },
+              })
+            : q.onConflictDoNothing());
         }
       }
     }
@@ -469,7 +883,9 @@ export const dbDeps: SyncDeps = {
       const rows = await getDb().execute(sql`
         update ${t} set volume = v.volume
         from (values ${sql.join(
-          part.map((f) => sql`(${f.date}::date, ${f.volume}::double precision)`),
+          part.map(
+            (f) => sql`(${f.date}::date, ${f.volume}::double precision)`,
+          ),
           sql`, `,
         )}) as v(d, volume)
         where ${t.assetId} = ${Number(id)} and ${t.date} = v.d and ${t.volume} is null
@@ -484,10 +900,16 @@ export const dbDeps: SyncDeps = {
     const { loadUniverse } = await import("./optimizer");
     const u = await loadUniverse(lookbackDays);
     const want = new Set(symbols.map((x) => x.toUpperCase()));
-    const eligible = u.assets.map((a) => a.symbol).filter((x) => want.has(x.toUpperCase()));
+    const eligible = u.assets
+      .map((a) => a.symbol)
+      .filter((x) => want.has(x.toUpperCase()));
     const skipped = u.skipped.filter((x) => want.has(x.symbol.toUpperCase()));
     for (const x of want) {
-      if (!eligible.some((e) => e.toUpperCase() === x) && !skipped.some((k) => k.symbol.toUpperCase() === x)) skipped.push({ symbol: x, reason: u.reason ?? "ไม่อยู่ใน universe" });
+      if (
+        !eligible.some((e) => e.toUpperCase() === x) &&
+        !skipped.some((k) => k.symbol.toUpperCase() === x)
+      )
+        skipped.push({ symbol: x, reason: u.reason ?? "ไม่อยู่ใน universe" });
     }
     return { lookbackDays, ok: u.ok, reason: u.reason, eligible, skipped };
   },
@@ -495,7 +917,9 @@ export const dbDeps: SyncDeps = {
   async heldAssetIds() {
     const { getPortfolioSummary } = await import("./portfolio");
     const s = await getPortfolioSummary();
-    return new Set(s.positions.filter((p) => p.quantity > 0).map((p) => p.assetId));
+    return new Set(
+      s.positions.filter((p) => p.quantity > 0).map((p) => p.assetId),
+    );
   },
 };
 

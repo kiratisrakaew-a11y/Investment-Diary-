@@ -6,30 +6,65 @@ import { syncHistoricalPrices, type SyncDeps } from "./price-sync";
 
 type Row = { close: number; adjClose: number | null };
 
-function fakeDeps(opts: { failTimes?: Record<string, number>; splits?: boolean } = {}) {
+function fakeDeps(
+  opts: { failTimes?: Record<string, number>; splits?: boolean } = {},
+) {
   const assets = [
-    { id: 1, symbol: "BBL", assetClass: "thai_stock", currency: "THB", priceSource: "yahoo", providerSymbol: "BBL.BK" },
-    { id: 2, symbol: "AP", assetClass: "thai_stock", currency: "THB", priceSource: "yahoo", providerSymbol: "AP.BK" },
-    { id: 3, symbol: "LB29DA", assetClass: "bond", currency: "THB", priceSource: "manual", providerSymbol: null },
+    {
+      id: 1,
+      symbol: "BBL",
+      assetClass: "thai_stock",
+      currency: "THB",
+      priceSource: "yahoo",
+      providerSymbol: "BBL.BK",
+    },
+    {
+      id: 2,
+      symbol: "AP",
+      assetClass: "thai_stock",
+      currency: "THB",
+      priceSource: "yahoo",
+      providerSymbol: "AP.BK",
+    },
+    {
+      id: 3,
+      symbol: "LB29DA",
+      assetClass: "bond",
+      currency: "THB",
+      priceSource: "manual",
+      providerSymbol: null,
+    },
   ];
   const store = new Map<string, Map<string, Row>>(); // key: series id
-  store.set("asset:1", new Map([["2026-01-05", { close: 150, adjClose: null }]]));
+  store.set(
+    "asset:1",
+    new Map([["2026-01-05", { close: 150, adjClose: null }]]),
+  );
   const calls: string[] = [];
   const fails = { ...(opts.failTimes ?? {}) };
   const days = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"];
   const deps: SyncDeps = {
     today: () => "2026-01-31",
-    findAsset: async (s) => assets.find((a) => a.symbol === s.toUpperCase()) ?? null,
+    findAsset: async (s) =>
+      assets.find((a) => a.symbol === s.toUpperCase()) ?? null,
     fetchHistory: async (provider, range) => {
       calls.push(`${provider}:${range.from}:${range.to}`);
       if ((fails[provider] ?? 0) > 0) {
         fails[provider]--;
         throw new Error("503 Service Unavailable");
       }
-      const base = provider === "THB=X" ? 35 : provider === "^SET.BK" ? 1400 : 100;
+      const base =
+        provider === "THB=X" ? 35 : provider === "^SET.BK" ? 1400 : 100;
       return {
-        rows: days.map((d, i) => ({ date: d, close: base + i, adjClose: base + i - 1 })),
-        splits: opts.splits && provider === "AP.BK" ? [{ date: "2026-01-06", numerator: 2, denominator: 1 }] : [],
+        rows: days.map((d, i) => ({
+          date: d,
+          close: base + i,
+          adjClose: base + i - 1,
+        })),
+        splits:
+          opts.splits && provider === "AP.BK"
+            ? [{ date: "2026-01-06", numerator: 2, denominator: 1 }]
+            : [],
         dividends: [],
       };
     },
@@ -37,12 +72,18 @@ function fakeDeps(opts: { failTimes?: Record<string, number>; splits?: boolean }
     loadExisting: async (key) => new Map(store.get(key) ?? []),
     write: async (key, inserts, updates) => {
       const m = store.get(key) ?? new Map<string, Row>();
-      for (const r of [...inserts, ...updates]) m.set(r.date, { close: r.close, adjClose: r.adjClose });
+      for (const r of [...inserts, ...updates])
+        m.set(r.date, { close: r.close, adjClose: r.adjClose });
       store.set(key, m);
     },
     loadFx: async () => [["2025-12-01", 35]],
     sleep: async () => {},
-    eligibility: async (symbols) => ({ lookbackDays: 365, ok: false, eligible: [], skipped: symbols.map((s) => ({ symbol: s, reason: "test" })) }),
+    eligibility: async (symbols) => ({
+      lookbackDays: 365,
+      ok: false,
+      eligible: [],
+      skipped: symbols.map((s) => ({ symbol: s, reason: "test" })),
+    }),
     benchmarkSymbol: async () => "^SET.BK",
     heldAssetIds: async () => new Set([2]),
   };
@@ -52,7 +93,14 @@ function fakeDeps(opts: { failTimes?: Record<string, number>; splits?: boolean }
 describe("syncHistoricalPrices", () => {
   it("backfills known assets over the range, keeps existing prices, reports unknown and unsupported symbols", async () => {
     const { deps, store } = fakeDeps();
-    const r = await syncHistoricalPrices({ symbols: ["BBL", "AP", "KBANK", "LB29DA"], startDate: "2026-01-01", endDate: "2026-01-31" }, deps);
+    const r = await syncHistoricalPrices(
+      {
+        symbols: ["BBL", "AP", "KBANK", "LB29DA"],
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      },
+      deps,
+    );
     const by = Object.fromEntries(r.results.map((x) => [x.symbol, x]));
     expect(by.BBL.status).toBe("ok");
     expect(by.BBL.inserted).toBe(3);
@@ -67,7 +115,10 @@ describe("syncHistoricalPrices", () => {
 
   it("dry run fetches and plans but writes nothing", async () => {
     const { deps, store } = fakeDeps();
-    const r = await syncHistoricalPrices({ symbols: ["AP"], lookbackDays: 30, dryRun: true }, deps);
+    const r = await syncHistoricalPrices(
+      { symbols: ["AP"], lookbackDays: 30, dryRun: true },
+      deps,
+    );
     expect(r.results[0].inserted).toBe(4);
     expect(store.get("asset:2")).toBeUndefined();
     expect(r.dryRun).toBe(true);
@@ -76,21 +127,35 @@ describe("syncHistoricalPrices", () => {
   it("is idempotent: a second run inserts nothing", async () => {
     const { deps } = fakeDeps();
     await syncHistoricalPrices({ symbols: ["AP"], lookbackDays: 30 }, deps);
-    const again = await syncHistoricalPrices({ symbols: ["AP"], lookbackDays: 30 }, deps);
+    const again = await syncHistoricalPrices(
+      { symbols: ["AP"], lookbackDays: 30 },
+      deps,
+    );
     expect(again.results[0].inserted).toBe(0);
     expect(again.results[0].skippedExisting).toBe(4);
   });
 
   it("overwriteExisting updates changed prices", async () => {
     const { deps, store } = fakeDeps();
-    const r = await syncHistoricalPrices({ symbols: ["BBL"], startDate: "2026-01-01", endDate: "2026-01-31", overwriteExisting: true }, deps);
+    const r = await syncHistoricalPrices(
+      {
+        symbols: ["BBL"],
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+        overwriteExisting: true,
+      },
+      deps,
+    );
     expect(r.results[0].updated).toBe(1);
     expect(store.get("asset:1")!.get("2026-01-05")!.close).toBe(101);
   });
 
   it("adjusted_close stores the adjusted series separately; close keeps its meaning", async () => {
     const { deps, store } = fakeDeps();
-    await syncHistoricalPrices({ symbols: ["AP"], lookbackDays: 30, priceType: "adjusted_close" }, deps);
+    await syncHistoricalPrices(
+      { symbols: ["AP"], lookbackDays: 30, priceType: "adjusted_close" },
+      deps,
+    );
     const row = store.get("asset:2")!.get("2026-01-02")!;
     expect(row.close).toBe(100);
     expect(row.adjClose).toBe(99);
@@ -98,7 +163,10 @@ describe("syncHistoricalPrices", () => {
 
   it("retries transient provider errors and continues after a permanent failure", async () => {
     const { deps } = fakeDeps({ failTimes: { "BBL.BK": 2, "AP.BK": 9 } });
-    const r = await syncHistoricalPrices({ symbols: ["BBL", "AP"], lookbackDays: 30 }, deps);
+    const r = await syncHistoricalPrices(
+      { symbols: ["BBL", "AP"], lookbackDays: 30 },
+      deps,
+    );
     const by = Object.fromEntries(r.results.map((x) => [x.symbol, x]));
     expect(by.BBL.status).toBe("ok");
     expect(by.AP.status).toBe("error");
@@ -107,13 +175,19 @@ describe("syncHistoricalPrices", () => {
 
   it("warns on a split inside the range for a held asset", async () => {
     const { deps } = fakeDeps({ splits: true });
-    const r = await syncHistoricalPrices({ symbols: ["AP"], lookbackDays: 30 }, deps);
+    const r = await syncHistoricalPrices(
+      { symbols: ["AP"], lookbackDays: 30 },
+      deps,
+    );
     expect(r.results[0].warnings.some((w) => w.includes("split"))).toBe(true);
   });
 
   it("also syncs the benchmark and USDTHB over the same range by default", async () => {
     const { deps, calls } = fakeDeps();
-    const r = await syncHistoricalPrices({ symbols: ["AP"], startDate: "2026-01-01", endDate: "2026-01-31" }, deps);
+    const r = await syncHistoricalPrices(
+      { symbols: ["AP"], startDate: "2026-01-01", endDate: "2026-01-31" },
+      deps,
+    );
     expect(calls).toContain("^SET.BK:2026-01-01:2026-01-31");
     expect(calls).toContain("THB=X:2026-01-01:2026-01-31");
     expect(r.benchmark?.status).toBe("ok");
@@ -122,7 +196,12 @@ describe("syncHistoricalPrices", () => {
 
   it("rejects too many symbols", async () => {
     const { deps } = fakeDeps();
-    await expect(syncHistoricalPrices({ symbols: Array.from({ length: 51 }, (_, i) => `S${i}`) }, deps)).rejects.toThrow();
+    await expect(
+      syncHistoricalPrices(
+        { symbols: Array.from({ length: 51 }, (_, i) => `S${i}`) },
+        deps,
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -135,14 +214,23 @@ describe("importPrices", () => {
         rows: [
           { symbol: "BBL", date: "2026-01-05", close: 999, adjClose: null }, // already stored (150) → kept
           { symbol: "BBL", date: "2026-01-06", close: 151, adjClose: null },
-          { symbol: "LB29DA", date: "2026-01-06", close: 1007.5, adjClose: null },
+          {
+            symbol: "LB29DA",
+            date: "2026-01-06",
+            close: 1007.5,
+            adjClose: null,
+          },
           { symbol: "KBANK", date: "2026-01-06", close: 140, adjClose: null },
         ],
       },
       deps,
     );
     const by = Object.fromEntries(r.results.map((x) => [x.symbol, x]));
-    expect(by.BBL).toMatchObject({ status: "ok", inserted: 1, skippedExisting: 1 });
+    expect(by.BBL).toMatchObject({
+      status: "ok",
+      inserted: 1,
+      skippedExisting: 1,
+    });
     expect(store.get("asset:1")!.get("2026-01-05")!.close).toBe(150);
     expect(by.LB29DA).toMatchObject({ status: "ok", inserted: 1 });
     expect(by.KBANK.status).toBe("unknown_asset");
@@ -168,8 +256,96 @@ describe("importPrices", () => {
   it("rejects future dates", async () => {
     const { importPrices } = await import("./price-sync");
     const { deps } = fakeDeps();
-    const r = await importPrices({ rows: [{ symbol: "AP", date: "2027-01-01", close: 10, adjClose: null }] }, deps);
+    const r = await importPrices(
+      {
+        rows: [{ symbol: "AP", date: "2027-01-01", close: 10, adjClose: null }],
+      },
+      deps,
+    );
     expect(r.results[0].inserted).toBe(0);
     expect(r.results[0].warnings.some((w) => w.includes("อนาคต"))).toBe(true);
+  });
+});
+
+describe("MPT_FIX_SPEC P0-A1: adjusted close on rows that already have a close", () => {
+  it("fills adj_close where it is empty, keeps close, counts each row once per column, coverage 100%", async () => {
+    const { deps, store } = fakeDeps();
+    // Close only on every provider day (as written by the daily close-only updater).
+    store.set(
+      "asset:1",
+      new Map(
+        ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"].map((d, i) => [
+          d,
+          { close: 200 + i, adjClose: null },
+        ]),
+      ),
+    );
+    const before = new Map(store.get("asset:1")!);
+    const dry = await syncHistoricalPrices(
+      {
+        symbols: ["BBL"],
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+        priceType: "adjusted_close",
+        dryRun: true,
+      },
+      deps,
+    );
+    expect(dry.results[0].adjCloseFilled).toBe(4);
+    expect(dry.results[0].adjCloseCoverage).toEqual({
+      withAdjClose: 4,
+      withClose: 4,
+      ratio: 1,
+    });
+    expect(
+      [...store.get("asset:1")!.values()].every((r) => r.adjClose == null),
+    ).toBe(true); // dry run writes nothing
+
+    const r = (
+      await syncHistoricalPrices(
+        {
+          symbols: ["BBL"],
+          startDate: "2026-01-01",
+          endDate: "2026-01-31",
+          priceType: "adjusted_close",
+        },
+        deps,
+      )
+    ).results[0];
+    const rows = store.get("asset:1")!;
+    expect([...rows.values()].every((x) => x.adjClose != null)).toBe(true);
+    for (const [d, x] of rows) expect(x.close).toBe(before.get(d)!.close); // close untouched
+    // close column: inserted + closeUpdated + unchanged + skippedExisting = fetched; adj column separately.
+    expect(
+      r.inserted! + r.closeUpdated! + r.unchanged + r.skippedExisting,
+    ).toBe(r.fetched);
+    expect(r.adjCloseFilled).toBe(4);
+    expect(r.adjCloseRebased).toBe(0);
+    expect(r.adjCloseCoverage!.ratio).toBe(1);
+  });
+  it("overwrite mode: a changed close is closeUpdated, a replaced adj_close is adjCloseRebased — never both buckets of one column", async () => {
+    const { deps, store } = fakeDeps();
+    store.set(
+      "asset:1",
+      new Map([["2026-01-05", { close: 150, adjClose: 140 }]]),
+    );
+    const r = (
+      await syncHistoricalPrices(
+        {
+          symbols: ["BBL"],
+          startDate: "2026-01-01",
+          endDate: "2026-01-31",
+          priceType: "adjusted_close",
+          overwriteExisting: true,
+        },
+        deps,
+      )
+    ).results[0];
+    expect(r.closeUpdated).toBe(1);
+    expect(r.adjCloseRebased).toBe(1);
+    expect(r.skippedExisting).toBe(0);
+    expect(
+      r.inserted! + r.closeUpdated! + r.unchanged + r.skippedExisting,
+    ).toBe(r.fetched);
   });
 });

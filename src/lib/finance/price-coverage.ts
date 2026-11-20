@@ -6,7 +6,8 @@
 
 const DAY = 86_400_000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
-const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+const isIsoDate = (s: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
 export const MAX_SYNC_DAYS = 3660;
 
@@ -28,18 +29,38 @@ export interface SyncRange {
 }
 
 /** Range from explicit dates or a look-back window (default 365 days ending today). */
-export function resolveSyncRange(o: { startDate?: string; endDate?: string; lookbackDays?: number }, today: string): SyncRange {
+export function resolveSyncRange(
+  o: { startDate?: string; endDate?: string; lookbackDays?: number },
+  today: string,
+): SyncRange {
   for (const d of [o.startDate, o.endDate]) {
-    if (d != null && !isIsoDate(d)) throw new PriceSyncError("INVALID_RANGE", `วันที่ ${d} ต้องเป็นรูปแบบ YYYY-MM-DD`);
+    if (d != null && !isIsoDate(d))
+      throw new PriceSyncError(
+        "INVALID_RANGE",
+        `วันที่ ${d} ต้องเป็นรูปแบบ YYYY-MM-DD`,
+      );
   }
   const to = o.endDate ?? today;
-  if (to > today) throw new PriceSyncError("INVALID_RANGE", `วันสิ้นสุด ${to} อยู่ในอนาคต`);
+  if (to > today)
+    throw new PriceSyncError("INVALID_RANGE", `วันสิ้นสุด ${to} อยู่ในอนาคต`);
   const look = o.lookbackDays ?? 365;
-  if (!(Number.isInteger(look) && look >= 1)) throw new PriceSyncError("INVALID_RANGE", "lookbackDays ต้องเป็นจำนวนเต็ม ≥ 1");
+  if (!(Number.isInteger(look) && look >= 1))
+    throw new PriceSyncError(
+      "INVALID_RANGE",
+      "lookbackDays ต้องเป็นจำนวนเต็ม ≥ 1",
+    );
   const from = o.startDate ?? iso(Date.parse(to) - look * DAY);
-  if (from > to) throw new PriceSyncError("INVALID_RANGE", `วันเริ่ม ${from} อยู่หลังวันสิ้นสุด ${to}`);
+  if (from > to)
+    throw new PriceSyncError(
+      "INVALID_RANGE",
+      `วันเริ่ม ${from} อยู่หลังวันสิ้นสุด ${to}`,
+    );
   const span = (Date.parse(to) - Date.parse(from)) / DAY;
-  if (span > MAX_SYNC_DAYS) throw new PriceSyncError("INVALID_RANGE", `ช่วงวันที่ยาว ${Math.round(span)} วัน เกินสูงสุด ${MAX_SYNC_DAYS} วัน — แบ่งดึงเป็นหลายช่วง`);
+  if (span > MAX_SYNC_DAYS)
+    throw new PriceSyncError(
+      "INVALID_RANGE",
+      `ช่วงวันที่ยาว ${Math.round(span)} วัน เกินสูงสุด ${MAX_SYNC_DAYS} วัน — แบ่งดึงเป็นหลายช่วง`,
+    );
   return { from, to };
 }
 
@@ -64,9 +85,20 @@ export interface WritePlan {
   invalid: number;
   /** Stored rows whose volume is still empty: fill the volume only (close / adjusted close untouched). */
   volumeFills: { date: string; volume: number }[];
+  /**
+   * Per-column counts (each fetched row lands in exactly one bucket per column):
+   * close: inserted + closeUpdated + unchanged + skippedExisting + invalid = fetched rows;
+   * adj_close: adjCloseFilled (was empty) / adjCloseRebased (stored value replaced).
+   */
+  closeUpdated: number;
+  adjCloseFilled: number;
+  adjCloseRebased: number;
 }
 
-const same = (a: number | null, b: number | null) => (a == null || b == null ? a === b : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)));
+const same = (a: number | null, b: number | null) =>
+  a == null || b == null
+    ? a === b
+    : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a));
 
 /**
  * Decide what to write. Rules:
@@ -76,36 +108,75 @@ const same = (a: number | null, b: number | null) => (a == null || b == null ? a
  * - volume: inserted with new dates; on stored dates only filled where empty (volumeFills).
  */
 export function planWrites(
-  existing: Map<string, { close: number; adjClose: number | null; volume?: number | null }>,
+  existing: Map<
+    string,
+    { close: number; adjClose: number | null; volume?: number | null }
+  >,
   fetched: PricePoint[],
   o: { overwrite: boolean; priceType: PriceType },
 ): WritePlan {
-  const plan: WritePlan = { inserts: [], updates: [], skippedExisting: 0, changedButKept: 0, unchanged: 0, invalid: 0, volumeFills: [] };
-  const vol = (v: number | null | undefined) => (v != null && Number.isFinite(v) && v >= 0 ? v : null);
+  const plan: WritePlan = {
+    inserts: [],
+    updates: [],
+    skippedExisting: 0,
+    changedButKept: 0,
+    unchanged: 0,
+    invalid: 0,
+    volumeFills: [],
+    closeUpdated: 0,
+    adjCloseFilled: 0,
+    adjCloseRebased: 0,
+  };
+  const vol = (v: number | null | undefined) =>
+    v != null && Number.isFinite(v) && v >= 0 ? v : null;
   const wantAdj = o.priceType === "adjusted_close";
   for (const f of fetched) {
     if (!(Number.isFinite(f.close) && f.close > 0)) {
       plan.invalid++;
       continue;
     }
-    const adj = wantAdj && f.adjClose != null && Number.isFinite(f.adjClose) && f.adjClose > 0 ? f.adjClose : null;
+    const adj =
+      wantAdj &&
+      f.adjClose != null &&
+      Number.isFinite(f.adjClose) &&
+      f.adjClose > 0
+        ? f.adjClose
+        : null;
     const cur = existing.get(f.date);
     const v = vol(f.volume);
     if (!cur) {
-      plan.inserts.push(v != null ? { date: f.date, close: f.close, adjClose: adj, volume: v } : { date: f.date, close: f.close, adjClose: adj });
+      plan.inserts.push(
+        v != null
+          ? { date: f.date, close: f.close, adjClose: adj, volume: v }
+          : { date: f.date, close: f.close, adjClose: adj },
+      );
       continue;
     }
     // Volume is filled only where none is stored, in both modes; it never changes a price.
-    if (v != null && cur.volume == null) plan.volumeFills.push({ date: f.date, volume: v });
+    if (v != null && cur.volume == null)
+      plan.volumeFills.push({ date: f.date, volume: v });
     if (o.overwrite) {
-      const next = { date: f.date, close: f.close, adjClose: wantAdj ? adj : cur.adjClose };
-      if (same(cur.close, next.close) && same(cur.adjClose, next.adjClose)) plan.unchanged++;
-      else plan.updates.push(next);
+      const next = {
+        date: f.date,
+        close: f.close,
+        adjClose: wantAdj ? adj : cur.adjClose,
+      };
+      if (same(cur.close, next.close)) plan.unchanged++;
+      else plan.closeUpdated++;
+      if (!same(cur.adjClose, next.adjClose)) {
+        if (cur.adjClose == null) plan.adjCloseFilled++;
+        else if (next.adjClose != null) plan.adjCloseRebased++;
+      }
+      if (!(same(cur.close, next.close) && same(cur.adjClose, next.adjClose)))
+        plan.updates.push(next);
       continue;
     }
     plan.skippedExisting++;
     if (!same(cur.close, f.close)) plan.changedButKept++;
-    if (wantAdj && cur.adjClose == null && adj != null) plan.updates.push({ date: f.date, close: cur.close, adjClose: adj });
+    if (wantAdj && cur.adjClose == null && adj != null) {
+      plan.updates.push({ date: f.date, close: cur.close, adjClose: adj });
+      plan.adjCloseFilled++;
+    }
   }
   return plan;
 }
@@ -120,17 +191,24 @@ export interface Coverage {
   staleDays: number | null;
 }
 
-export function coverage(dates: string[], range: SyncRange, today: string): Coverage {
+export function coverage(
+  dates: string[],
+  range: SyncRange,
+  today: string,
+): Coverage {
   const ds = dates.filter((d) => d >= range.from && d <= range.to).sort();
   let gap = 0;
-  for (let i = 1; i < ds.length; i++) gap = Math.max(gap, (Date.parse(ds[i]) - Date.parse(ds[i - 1])) / DAY);
+  for (let i = 1; i < ds.length; i++)
+    gap = Math.max(gap, (Date.parse(ds[i]) - Date.parse(ds[i - 1])) / DAY);
   const end = range.to < today ? range.to : today;
   return {
     observations: ds.length,
     firstDate: ds[0] ?? null,
     lastDate: ds[ds.length - 1] ?? null,
     largestGapDays: gap,
-    staleDays: ds.length ? (Date.parse(end) - Date.parse(ds[ds.length - 1])) / DAY : null,
+    staleDays: ds.length
+      ? (Date.parse(end) - Date.parse(ds[ds.length - 1])) / DAY
+      : null,
   };
 }
 
@@ -151,13 +229,18 @@ export function corporateActionWarnings(
     );
   }
   if (dividends.length) {
-    out.push(`${symbol}: มีปันผล ${dividends.length} ครั้งในช่วงนี้ (${dividends.map((d) => `${d.date} ${d.amount}`).join(", ")}) — ราคา close ไม่รวมปันผล ใช้ adjusted_close ถ้าต้องการผลตอบแทนรวม`);
+    out.push(
+      `${symbol}: มีปันผล ${dividends.length} ครั้งในช่วงนี้ (${dividends.map((d) => `${d.date} ${d.amount}`).join(", ")}) — ราคา close ไม่รวมปันผล ใช้ adjusted_close ถ้าต้องการผลตอบแทนรวม`,
+    );
   }
   return out;
 }
 
 /** Retry an async call with exponential backoff (baseMs, 2·baseMs, …). */
-export async function withRetry<T>(fn: () => Promise<T>, o: { attempts: number; baseMs: number; sleep: (ms: number) => Promise<void> }): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  o: { attempts: number; baseMs: number; sleep: (ms: number) => Promise<void> },
+): Promise<T> {
   let last: unknown;
   for (let i = 0; i < o.attempts; i++) {
     try {
@@ -188,42 +271,116 @@ export interface SplitRepairPlan {
  * means unadjusted (divide earlier rows by the ratio); no gap means already adjusted (e.g. Yahoo
  * re-sync). Idempotent: after a repair the gap disappears and the plan is empty.
  */
-export function planSplitPriceRepair(rows: { date: string; close: number; adjClose: number | null }[], date: string, ratio: number): SplitRepairPlan {
+export function planSplitPriceRepair(
+  rows: { date: string; close: number; adjClose: number | null }[],
+  date: string,
+  ratio: number,
+): SplitRepairPlan {
   const sorted = [...rows].sort((a, b) => (a.date < b.date ? -1 : 1));
   const before = [...sorted].reverse().find((r) => r.date < date) ?? null;
   const after = sorted.find((r) => r.date >= date) ?? null;
-  const base = { before: before && { date: before.date, close: before.close }, after: after && { date: after.date, close: after.close } };
-  if (!before) return { status: "no_data", observedRatio: null, ...base, updates: [], message: "ไม่มีราคาก่อนวันแตกพาร์ — ไม่ต้องปรับ" };
-  if (!after) return { status: "no_data", observedRatio: null, ...base, updates: [], message: "ยังไม่มีราคาหลังวันแตกพาร์ — ดึงราคาหลังวันนั้นก่อนแล้วตรวจอีกครั้ง" };
+  const base = {
+    before: before && { date: before.date, close: before.close },
+    after: after && { date: after.date, close: after.close },
+  };
+  if (!before)
+    return {
+      status: "no_data",
+      observedRatio: null,
+      ...base,
+      updates: [],
+      message: "ไม่มีราคาก่อนวันแตกพาร์ — ไม่ต้องปรับ",
+    };
+  if (!after)
+    return {
+      status: "no_data",
+      observedRatio: null,
+      ...base,
+      updates: [],
+      message:
+        "ยังไม่มีราคาหลังวันแตกพาร์ — ดึงราคาหลังวันนั้นก่อนแล้วตรวจอีกครั้ง",
+    };
   const observed = before.close / after.close;
   const dU = Math.abs(Math.log(observed / ratio));
   const dA = Math.abs(Math.log(observed));
   // Within ~±19% of the ratio (for 2×) counts as a match; anything in between is left to the user.
   const margin = Math.abs(Math.log(ratio)) / 4;
   if (dU < dA && dU < margin) {
-    const updates = sorted.filter((r) => r.date < date).map((r) => ({ date: r.date, close: r.close / ratio, adjClose: r.adjClose != null ? r.adjClose / ratio : null }));
-    return { status: "unadjusted", observedRatio: observed, ...base, updates, message: `ราคาก่อน ${date} ยังไม่ปรับ (ต่างกัน ${observed.toFixed(3)}×) — หารด้วย ${ratio} จำนวน ${updates.length} วัน` };
+    const updates = sorted
+      .filter((r) => r.date < date)
+      .map((r) => ({
+        date: r.date,
+        close: r.close / ratio,
+        adjClose: r.adjClose != null ? r.adjClose / ratio : null,
+      }));
+    return {
+      status: "unadjusted",
+      observedRatio: observed,
+      ...base,
+      updates,
+      message: `ราคาก่อน ${date} ยังไม่ปรับ (ต่างกัน ${observed.toFixed(3)}×) — หารด้วย ${ratio} จำนวน ${updates.length} วัน`,
+    };
   }
-  if (dA <= dU && dA < margin) return { status: "already_adjusted", observedRatio: observed, ...base, updates: [], message: "ราคาย้อนหลังปรับตามการแตกพาร์แล้ว — ไม่ต้องแก้" };
-  return { status: "ambiguous", observedRatio: observed, ...base, updates: [], message: `ราคาก่อน/หลังต่างกัน ${observed.toFixed(3)}× ไม่ตรงกับอัตรา ${ratio} หรือ 1 — ไม่แก้ให้อัตโนมัติ ตรวจราคาก่อน` };
+  if (dA <= dU && dA < margin)
+    return {
+      status: "already_adjusted",
+      observedRatio: observed,
+      ...base,
+      updates: [],
+      message: "ราคาย้อนหลังปรับตามการแตกพาร์แล้ว — ไม่ต้องแก้",
+    };
+  return {
+    status: "ambiguous",
+    observedRatio: observed,
+    ...base,
+    updates: [],
+    message: `ราคาก่อน/หลังต่างกัน ${observed.toFixed(3)}× ไม่ตรงกับอัตรา ${ratio} หรือ 1 — ไม่แก้ให้อัตโนมัติ ตรวจราคาก่อน`,
+  };
 }
 
-const SPLIT_FACTORS = [2, 3, 4, 5, 10, 20, 1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 10, 1 / 20];
+const SPLIT_FACTORS = [
+  2,
+  3,
+  4,
+  5,
+  10,
+  20,
+  1 / 2,
+  1 / 3,
+  1 / 4,
+  1 / 5,
+  1 / 10,
+  1 / 20,
+];
 
 /**
  * Day-to-day price gaps that look like an unrecorded split (≈ 2×, 5×, 10×, 1/10× … within 8%).
  * Exchanges' daily limits (SET ±30%) make such moves implausible as real returns.
  */
-export function detectUnrecordedSplits(series: [string, number][], recordedSplitDates: string[], toleranceDays = 7) {
-  const out: { date: string; previousDate: string; factor: number; observed: number }[] = [];
-  const near = (d: string) => recordedSplitDates.some((s) => Math.abs(Date.parse(s) - Date.parse(d)) <= toleranceDays * 86_400_000);
+export function detectUnrecordedSplits(
+  series: [string, number][],
+  recordedSplitDates: string[],
+  toleranceDays = 7,
+) {
+  const out: {
+    date: string;
+    previousDate: string;
+    factor: number;
+    observed: number;
+  }[] = [];
+  const near = (d: string) =>
+    recordedSplitDates.some(
+      (s) =>
+        Math.abs(Date.parse(s) - Date.parse(d)) <= toleranceDays * 86_400_000,
+    );
   for (let i = 1; i < series.length; i++) {
     const [d0, p0] = series[i - 1];
     const [d1, p1] = series[i];
     if (!(p0 > 0 && p1 > 0)) continue;
     const obs = p0 / p1;
     const f = SPLIT_FACTORS.find((x) => Math.abs(Math.log(obs / x)) < 0.08);
-    if (f && !near(d1)) out.push({ date: d1, previousDate: d0, factor: f, observed: obs });
+    if (f && !near(d1))
+      out.push({ date: d1, previousDate: d0, factor: f, observed: obs });
   }
   return out;
 }

@@ -12,7 +12,13 @@
  *   utility maximization U = E[R] − ½Aσ², and the optimal complete portfolio
  *   y* = (E[R_T] − R_f) / (A σ_T²) along the Capital Allocation Line.
  */
-import { covarianceDiagnostics, portfolioStats, type Matrix, type PortfolioPoint } from "./mpt";
+import {
+  covarianceDiagnostics,
+  portfolioStats,
+  type Matrix,
+  type PortfolioPoint,
+} from "./mpt";
+import { solveLP, type LpRow } from "./lp";
 
 export interface Bounds {
   min: number; // e.g. 0 for long-only
@@ -36,20 +42,31 @@ export interface LinearConstraint {
 }
 
 /** True when the problem needs the general-constraint solver (anything beyond one shared box). */
-export const isGeneral = (b: Bounds) => !!(b.gross != null || b.linear?.length || b.lower?.some((x) => x != null) || b.upper?.some((x) => x != null));
+export const isGeneral = (b: Bounds) =>
+  !!(
+    b.gross != null ||
+    b.linear?.length ||
+    b.lower?.some((x) => x != null) ||
+    b.upper?.some((x) => x != null)
+  );
 const loOf = (b: Bounds, i: number) => b.lower?.[i] ?? b.min;
 const hiOf = (b: Bounds, i: number) => b.upper?.[i] ?? b.max;
 
-const dot = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0);
+const dot = (a: number[], b: number[]) =>
+  a.reduce((s, x, i) => s + x * b[i], 0);
 const matVec = (m: Matrix, v: number[]) => m.map((row) => dot(row, v));
 
 /** Gauss-Jordan inverse with partial pivoting; returns null if singular. */
 export function invert(m: Matrix): Matrix | null {
   const n = m.length;
-  const a = m.map((row, i) => [...row, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
+  const a = m.map((row, i) => [
+    ...row,
+    ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)),
+  ]);
   for (let c = 0; c < n; c++) {
     let p = c;
-    for (let r = c + 1; r < n; r++) if (Math.abs(a[r][c]) > Math.abs(a[p][c])) p = r;
+    for (let r = c + 1; r < n; r++)
+      if (Math.abs(a[r][c]) > Math.abs(a[p][c])) p = r;
     if (Math.abs(a[p][c]) < 1e-14) return null;
     [a[c], a[p]] = [a[p], a[c]];
     const div = a[c][c];
@@ -83,7 +100,12 @@ export interface AnalyticFrontier {
   curve: { volatility: number; expectedReturn: number; efficient: boolean }[];
 }
 
-export function analyticFrontier(mu: number[], cov: Matrix, rf: number, points = 60): AnalyticFrontier | null {
+export function analyticFrontier(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  points = 60,
+): AnalyticFrontier | null {
   // Ridge only when Σ is singular, so a well-conditioned frontier is exact.
   const inv = invert(cov) ?? invert(regularize(cov));
   if (!inv) return null;
@@ -108,15 +130,29 @@ export function analyticFrontier(mu: number[], cov: Matrix, rf: number, points =
   const excess = mu.map((m) => m - rf);
   const invEx = matVec(inv, excess);
   const s = invEx.reduce((a, b) => a + b, 0);
-  const tangency = s > 0 && B / A > rf ? portfolioStats(invEx.map((x) => x / s), mu, cov, rf) : null;
+  const tangency =
+    s > 0 && B / A > rf
+      ? portfolioStats(
+          invEx.map((x) => x / s),
+          mu,
+          cov,
+          rf,
+        )
+      : null;
 
   const muGmv = B / A;
-  const span = Math.max(Math.max(...mu) - Math.min(...mu), Math.abs(muGmv) * 0.5, 0.02) * 1.3;
+  const span =
+    Math.max(Math.max(...mu) - Math.min(...mu), Math.abs(muGmv) * 0.5, 0.02) *
+    1.3;
   const curve: AnalyticFrontier["curve"] = [];
   for (let i = 0; i < points; i++) {
     const mup = muGmv - span + (2 * span * i) / (points - 1);
     const v = (A * mup * mup - 2 * B * mup + C) / D;
-    curve.push({ volatility: Math.sqrt(Math.max(v, 0)), expectedReturn: mup, efficient: mup >= muGmv });
+    curve.push({
+      volatility: Math.sqrt(Math.max(v, 0)),
+      expectedReturn: mup,
+      efficient: mup >= muGmv,
+    });
   }
   return { A, B, C, D, gmv, tangency, weightsFor, curve };
 }
@@ -131,6 +167,8 @@ export type OptimizerIssueCode =
   | "INFEASIBLE_TARGET_RISK"
   | "NO_EXCESS_RETURN"
   | "SHORT_SELLING_DISABLED"
+  /** The constraints are feasible (an LP found a point) but the QP did not converge. */
+  | "SOLVER_FAILURE"
   | "INVALID_INPUT";
 
 export interface OptimizerIssue {
@@ -154,28 +192,67 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 /** Bounds must admit a fully invested portfolio: n·min ≤ 1 ≤ n·max. Never relaxed silently. */
 export function validateBounds(n: number, b: Bounds): OptimizerIssue | null {
   if (isGeneral(b)) {
-    if (!(n >= 1)) return { code: "INVALID_INPUT", message: "ต้องมีสินทรัพย์อย่างน้อย 1 ตัว" };
+    if (!(n >= 1))
+      return {
+        code: "INVALID_INPUT",
+        message: "ต้องมีสินทรัพย์อย่างน้อย 1 ตัว",
+      };
     let sumLo = 0;
     let sumHi = 0;
     for (let i = 0; i < n; i++) {
       const lo = loOf(b, i);
       const hi = hiOf(b, i);
-      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo > hi) return { code: "INVALID_INPUT", message: `ขอบเขตน้ำหนักของสินทรัพย์ลำดับ ${i + 1} ไม่ถูกต้อง (${pct(lo)} > ${pct(hi)})` };
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo > hi)
+        return {
+          code: "INVALID_INPUT",
+          message: `ขอบเขตน้ำหนักของสินทรัพย์ลำดับ ${i + 1} ไม่ถูกต้อง (${pct(lo)} > ${pct(hi)})`,
+        };
       sumLo += lo;
       sumHi += hi;
     }
     for (const c of b.linear ?? []) {
-      if (c.a.length !== n || !c.a.every(Number.isFinite)) return { code: "INVALID_INPUT", message: `ข้อจำกัด ${c.name}: ค่าสัมประสิทธิ์ไม่ครบ` };
-      if (c.lo != null && c.hi != null && c.lo > c.hi + 1e-12) return { code: "INFEASIBLE_CONSTRAINTS", message: `ข้อจำกัด ${c.name}: ต่ำสุด > สูงสุด`, constraints: [c.name] };
+      if (c.a.length !== n || !c.a.every(Number.isFinite))
+        return {
+          code: "INVALID_INPUT",
+          message: `ข้อจำกัด ${c.name}: ค่าสัมประสิทธิ์ไม่ครบ`,
+        };
+      if (c.lo != null && c.hi != null && c.lo > c.hi + 1e-12)
+        return {
+          code: "INFEASIBLE_CONSTRAINTS",
+          message: `ข้อจำกัด ${c.name}: ต่ำสุด > สูงสุด`,
+          constraints: [c.name],
+        };
     }
-    if (sumHi < 1 - 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักสูงสุดรวมทุกตัว ${pct(sumHi)} < 100%`, suggestion: "เพิ่มน้ำหนักสูงสุดของบางสินทรัพย์" };
+    if (sumHi < 1 - 1e-12)
+      return {
+        code: "INFEASIBLE_BOUNDS",
+        message: `น้ำหนักสูงสุดรวมทุกตัว ${pct(sumHi)} < 100%`,
+        suggestion: "เพิ่มน้ำหนักสูงสุดของบางสินทรัพย์",
+      };
     if (b.gross != null && !(b.gross >= 1 - 1e-12))
-      return { code: "INFEASIBLE_CONSTRAINTS", message: `Gross exposure สูงสุด ${pct(b.gross)} < 100% — ลงทุนครบ 100% ต้องมี Σ|w| ≥ 100%`, constraints: ["Gross exposure"] };
-    if (sumLo > 1 + 1e-12) return { code: "INFEASIBLE_BOUNDS", message: `น้ำหนักต่ำสุดรวมทุกตัว ${pct(sumLo)} > 100%`, suggestion: "ลดน้ำหนักต่ำสุดของบางสินทรัพย์" };
+      return {
+        code: "INFEASIBLE_CONSTRAINTS",
+        message: `Gross exposure สูงสุด ${pct(b.gross)} < 100% — ลงทุนครบ 100% ต้องมี Σ|w| ≥ 100%`,
+        constraints: ["Gross exposure"],
+      };
+    if (sumLo > 1 + 1e-12)
+      return {
+        code: "INFEASIBLE_BOUNDS",
+        message: `น้ำหนักต่ำสุดรวมทุกตัว ${pct(sumLo)} > 100%`,
+        suggestion: "ลดน้ำหนักต่ำสุดของบางสินทรัพย์",
+      };
     return null;
   }
-  if (!(n >= 1) || !Number.isFinite(b.min) || !Number.isFinite(b.max) || b.min > b.max) {
-    return { code: "INVALID_INPUT", message: `ขอบเขตน้ำหนักไม่ถูกต้อง (ต่ำสุด ${pct(b.min)} > สูงสุด ${pct(b.max)})` };
+  if (
+    !(n >= 1) ||
+    !Number.isFinite(b.min) ||
+    !Number.isFinite(b.max) ||
+    b.min > b.max
+  ) {
+    return {
+      code: "INVALID_INPUT",
+      message: `ขอบเขตน้ำหนักไม่ถูกต้อง (ต่ำสุด ${pct(b.min)} > สูงสุด ${pct(b.max)})`,
+    };
   }
   if (n * b.max < 1 - 1e-12) {
     return {
@@ -205,10 +282,16 @@ export function checkWeights(w: number[], b: Bounds) {
     const v = dot(c.a, w);
     return Math.max(c.lo != null ? c.lo - v : 0, c.hi != null ? v - c.hi : 0);
   });
-  const grossExcess = b.gross != null ? w.reduce((a, x) => a + Math.abs(x), 0) - b.gross : 0;
+  const grossExcess =
+    b.gross != null ? w.reduce((a, x) => a + Math.abs(x), 0) - b.gross : 0;
   return {
     sumError: Math.abs(w.reduce((a, x) => a + x, 0) - 1),
-    maxBoundViolation: Math.max(0, ...w.map((x, i) => Math.max(loOf(b, i) - x, x - hiOf(b, i))), ...linear, grossExcess),
+    maxBoundViolation: Math.max(
+      0,
+      ...w.map((x, i) => Math.max(loOf(b, i) - x, x - hiOf(b, i))),
+      ...linear,
+      grossExcess,
+    ),
   };
 }
 
@@ -216,7 +299,8 @@ export function checkWeights(w: number[], b: Bounds) {
 export function projectBoxSimplex(v: number[], b: Bounds): number[] {
   assertBounds(v.length, b);
   const { min: lo, max: hi } = b;
-  const sumAt = (t: number) => v.reduce((s, x) => s + Math.min(hi, Math.max(lo, x - t)), 0);
+  const sumAt = (t: number) =>
+    v.reduce((s, x) => s + Math.min(hi, Math.max(lo, x - t)), 0);
   let a = Math.min(...v) - hi - 1;
   let c = Math.max(...v) - lo + 1;
   for (let i = 0; i < 200; i++) {
@@ -244,25 +328,168 @@ function greedyFill(n: number, b: Bounds, order: number[]) {
 export function feasibleReturnRange(mu: number[], b: Bounds): [number, number] {
   assertBounds(mu.length, b);
   if (isGeneral(b)) {
-    // LP max/min μᵀw over the polytope: min ½‖w‖² ∓ K·μᵀw is piecewise linear in K and reaches the
-    // LP vertex exactly for large K (well conditioned, unlike a vanishing quadratic term).
-    const I = mu.map((_, i) => mu.map((__, j) => (i === j ? 1 : 0)));
-    const spread = Math.max(Math.max(...mu) - Math.min(...mu), 1e-12);
-    const extreme = (sign: 1 | -1) => {
-      let K = 1 / spread;
-      let prev = NaN;
-      for (let k = 0; k < 200; k++) {
-        const v = dot(solveGeneralQP(I, mu.map((m) => -sign * K * m), b).weights, mu);
-        if (Math.abs(v - prev) <= 1e-15 * Math.max(1, Math.abs(v))) return v;
-        prev = v;
-        K *= 2;
-      }
-      return prev;
+    // Exact LP max/min μᵀw over the polytope (a QP with a vanishing quadratic term broke down numerically).
+    const ext = (sign: 1 | -1) => {
+      const r = lpOverBounds(
+        mu.length,
+        b,
+        mu.map((m) => -sign * m),
+      );
+      if (r.status === "infeasible") throw infeasibleError(mu.length, b);
+      if (r.status !== "optimal")
+        throw new OptimizerError({
+          code: "SOLVER_FAILURE",
+          message: `หาช่วงผลตอบแทนที่ทำได้ไม่สำเร็จ (LP: ${r.status})`,
+        });
+      return dot(r.w, mu);
     };
-    return [extreme(-1), extreme(1)];
+    return [ext(-1), ext(1)];
   }
   const idx = mu.map((_, i) => i);
-  return [dot(greedyFill(mu.length, b, [...idx].sort((a, c) => mu[a] - mu[c])), mu), dot(greedyFill(mu.length, b, [...idx].sort((a, c) => mu[c] - mu[a])), mu)];
+  return [
+    dot(
+      greedyFill(
+        mu.length,
+        b,
+        [...idx].sort((a, c) => mu[a] - mu[c]),
+      ),
+      mu,
+    ),
+    dot(
+      greedyFill(
+        mu.length,
+        b,
+        [...idx].sort((a, c) => mu[c] - mu[a]),
+      ),
+      mu,
+    ),
+  ];
+}
+
+// ------------------------------------------------------------------ LP over the constraint set
+
+interface NamedRow {
+  row: LpRow;
+  name: string;
+  /** The budget Σw = 1 is never dropped when looking for the conflicting subset. */
+  budget?: boolean;
+}
+
+/**
+ * The optimizer's constraint set as LP rows in y = w − lo ≥ 0 (plus t ≥ |w| when a gross cap is set).
+ * Every lower bound is finite (lo = lower ?? min), so the shift is exact.
+ */
+function lpRows(n: number, b: Bounds) {
+  const gross = b.gross != null;
+  const N = gross ? 2 * n : n;
+  const lo = Array.from({ length: n }, (_, i) => loOf(b, i));
+  const z = () => Array<number>(N).fill(0);
+  const label = (i: number) => b.names?.[i] ?? `สินทรัพย์ ${i + 1}`;
+  const rows: NamedRow[] = [];
+  const sumLo = lo.reduce((a, v) => a + v, 0);
+  rows.push({
+    row: { a: z().map((_, j) => (j < n ? 1 : 0)), op: "=", b: 1 - sumLo },
+    name: "ลงทุนครบ 100%",
+    budget: true,
+  });
+  for (let i = 0; i < n; i++) {
+    const hi = hiOf(b, i);
+    if (Number.isFinite(hi))
+      rows.push({
+        row: {
+          a: z().map((_, j) => (j === i ? 1 : 0)),
+          op: "<=",
+          b: hi - lo[i],
+        },
+        name: `${label(i)} ≤ ${pct(hi)}`,
+      });
+    // The lower bound itself is y ≥ 0; named so it can appear in the conflicting subset.
+  }
+  for (const k of b.linear ?? []) {
+    const shift = k.a.reduce((acc, v, i) => acc + v * lo[i], 0);
+    const a = z().map((_, j) => (j < n ? k.a[j] : 0));
+    if (k.lo != null)
+      rows.push({
+        row: { a, op: ">=", b: k.lo - shift },
+        name: `${k.name} ≥ ${pct(k.lo)}`,
+      });
+    if (k.hi != null)
+      rows.push({
+        row: { a, op: "<=", b: k.hi - shift },
+        name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}`,
+      });
+  }
+  if (gross) {
+    for (let i = 0; i < n; i++) {
+      rows.push({
+        row: {
+          a: z().map((_, j) => (j === n + i ? 1 : j === i ? -1 : 0)),
+          op: ">=",
+          b: lo[i],
+        },
+        name: `|${label(i)}| (aux ≥ w)`,
+      });
+      rows.push({
+        row: {
+          a: z().map((_, j) => (j === n + i ? 1 : j === i ? 1 : 0)),
+          op: ">=",
+          b: -lo[i],
+        },
+        name: `|${label(i)}| (aux ≥ −w)`,
+      });
+    }
+    rows.push({
+      row: { a: z().map((_, j) => (j >= n ? 1 : 0)), op: "<=", b: b.gross! },
+      name: `Gross exposure ≤ ${pct(b.gross!)}`,
+    });
+  }
+  return { rows, N, lo };
+}
+
+/** min cᵀw over the constraint set (exact simplex); w back in the original space. */
+function lpOverBounds(
+  n: number,
+  b: Bounds,
+  c: number[],
+  rowsOverride?: NamedRow[],
+) {
+  const { rows, N, lo } = lpRows(n, b);
+  const use = rowsOverride ?? rows;
+  const r = solveLP(
+    [...c, ...Array<number>(N - n).fill(0)],
+    use.map((x) => x.row),
+  );
+  return { status: r.status, w: r.x.slice(0, n).map((y, i) => y + lo[i]) };
+}
+
+/** Is there any w satisfying every constraint? (phase 1 of the simplex) */
+export function constraintsFeasible(n: number, b: Bounds): boolean {
+  return lpOverBounds(n, b, Array<number>(n).fill(0)).status === "optimal";
+}
+
+/**
+ * INFEASIBLE_CONSTRAINTS with a minimal conflicting subset (deletion filter: drop each constraint whose
+ * removal keeps the rest infeasible). Per-asset lower bounds are implicit (y ≥ 0) and named in the hint.
+ */
+function infeasibleError(n: number, b: Bounds): OptimizerError {
+  const { rows } = lpRows(n, b);
+  let keep = [...rows];
+  for (const r of rows) {
+    if (r.budget) continue;
+    const trial = keep.filter((x) => x !== r);
+    if (
+      lpOverBounds(n, b, Array<number>(n).fill(0), trial).status ===
+      "infeasible"
+    )
+      keep = trial;
+  }
+  const names = keep.map((r) => r.name);
+  return new OptimizerError({
+    code: "INFEASIBLE_CONSTRAINTS",
+    message: `ข้อจำกัดขัดกัน — ไม่มีน้ำหนักที่ผ่านทุกข้อพร้อมกัน: ${names.join(" · ")}${b.min !== 0 || b.lower?.some((x) => x != null) ? " (รวมน้ำหนักต่ำสุดรายตัว)" : ""}`,
+    suggestion: "ผ่อนข้อจำกัดใดข้อหนึ่งในรายการนี้ (ระบบไม่ผ่อนให้เอง)",
+    constraints: names,
+  });
 }
 
 // ------------------------------------------------------------------ QP solver
@@ -273,7 +500,8 @@ function solveLinear(A: Matrix, y: number[]): number[] | null {
   const m = A.map((row, i) => [...row, y[i]]);
   for (let c = 0; c < n; c++) {
     let p = c;
-    for (let r = c + 1; r < n; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
+    for (let r = c + 1; r < n; r++)
+      if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
     if (Math.abs(m[p][c]) < 1e-15) return null;
     [m[c], m[p]] = [m[p], m[c]];
     for (let r = c + 1; r < n; r++) {
@@ -306,7 +534,12 @@ export interface QpResult {
  * Primal active-set method for  min ½wᵀQw + cᵀw  s.t. Σw = 1, lo ≤ w ≤ hi  (Q positive semidefinite).
  * Deterministic; exact up to floating point for the small problems of a personal portfolio.
  */
-export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): QpResult {
+export function solveBoxQP(
+  Q: Matrix,
+  c: number[],
+  b: Bounds,
+  maxIter = 500,
+): QpResult {
   const n = c.length;
   assertBounds(n, b);
   const { min: lo, max: hi } = b;
@@ -318,7 +551,15 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
   let lastFilled = order[0];
   for (const i of order) if (w[i] > lo) lastFilled = i;
   // fixed[i] = -1 at lower bound, +1 at upper bound, 0 free
-  const fixed = w.map((x, i) => (i === lastFilled ? 0 : Math.abs(x - lo) < 1e-15 ? -1 : Math.abs(x - hi) < 1e-15 ? 1 : 0));
+  const fixed = w.map((x, i) =>
+    i === lastFilled
+      ? 0
+      : Math.abs(x - lo) < 1e-15
+        ? -1
+        : Math.abs(x - hi) < 1e-15
+          ? 1
+          : 0,
+  );
   if (lo === hi) fixed.fill(-1);
   const grad = () => Q.map((row, i) => dot(row, w) + c[i] + ridge * w[i]);
 
@@ -390,7 +631,9 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
   for (let i = 0; i < n; i++) w[i] = Math.min(hi, Math.max(lo, w[i]));
   const g = grad();
   const free = w.map((_, i) => i).filter((i) => fixed[i] === 0);
-  const nuHat = free.length ? free.reduce((s, i) => s + g[i], 0) / free.length : 0;
+  const nuHat = free.length
+    ? free.reduce((s, i) => s + g[i], 0) / free.length
+    : 0;
   let kkt = 0;
   for (let i = 0; i < n; i++) {
     const r = g[i] - nuHat;
@@ -399,7 +642,14 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
     else kkt = Math.max(kkt, r);
   }
   const chk = checkWeights(w, b);
-  return { weights: w, status: iterations < maxIter ? "optimal" : "max_iterations", iterations, kktResidual: Math.max(0, kkt), ...chk, regularized: ridge > 0 };
+  return {
+    weights: w,
+    status: iterations < maxIter ? "optimal" : "max_iterations",
+    iterations,
+    kktResidual: Math.max(0, kkt),
+    ...chk,
+    regularized: ridge > 0,
+  };
 }
 
 // ------------------------------------------------------------------ general linear constraints
@@ -412,43 +662,93 @@ export function solveBoxQP(Q: Matrix, c: number[], b: Bounds, maxIter = 500): Qp
  * named (INFEASIBLE_CONSTRAINTS). G is made positive definite with a tiny ridge when needed.
  * Used only when per-asset bounds or linear constraints are given; the box-only path is unchanged.
  */
-export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 2000): QpResult {
+export function solveGeneralQP(
+  Gw: Matrix,
+  cw: number[],
+  b: Bounds,
+  maxIter = 2000,
+): QpResult {
   const n = cw.length;
   assertBounds(n, b);
   // Gross exposure Σ|wᵢ| ≤ G: auxiliary tᵢ with tᵢ ≥ wᵢ, tᵢ ≥ −wᵢ, Σtᵢ ≤ G. The objective is lifted as
   // ½wᵀ(G − εI)w + ½ε‖t‖²: for fixed w the best t is tᵢ = |wᵢ|, so it equals ½wᵀGw exactly, while
   // ε = ½·λmin(G) keeps the extended matrix as well conditioned as G. The budget row stays on w only.
   const m = b.gross != null ? 2 * n : n;
-  const pad = (v: number[]) => (m > n ? [...v, ...Array<number>(n).fill(0)] : v);
+  const pad = (v: number[]) =>
+    m > n ? [...v, ...Array<number>(n).fill(0)] : v;
   const avgW = Gw.reduce((s, r, i) => s + Math.abs(r[i]), 0) / n || 1;
   const lamMin = m > n ? covarianceDiagnostics(Gw).minEigenvalue : 0;
   const eps = lamMin > 1e-10 * avgW ? 0.5 * lamMin : 1e-9 * avgW;
   const Gin =
     m > n
-      ? Array.from({ length: m }, (_, i) => Array.from({ length: m }, (__, j) => (i < n && j < n ? Gw[i][j] - (i === j && lamMin > 1e-10 * avgW ? eps : 0) : i === j ? eps : 0)))
+      ? Array.from({ length: m }, (_, i) =>
+          Array.from({ length: m }, (__, j) =>
+            i < n && j < n
+              ? Gw[i][j] - (i === j && lamMin > 1e-10 * avgW ? eps : 0)
+              : i === j
+                ? eps
+                : 0,
+          ),
+        )
       : Gw;
   const c = pad(cw);
   // Constraints as nᵀw ≥ β (equalities flagged).
-  const rows: { v: number[]; beta: number; eq: boolean; name: string }[] = [{ v: pad(cw.map(() => 1)), beta: 1, eq: true, name: "ลงทุนครบ 100%" }];
+  const rows: { v: number[]; beta: number; eq: boolean; name: string }[] = [
+    { v: pad(cw.map(() => 1)), beta: 1, eq: true, name: "ลงทุนครบ 100%" },
+  ];
   for (let i = 0; i < n; i++) {
     const e = c.map((_, j) => (j === i ? 1 : 0));
     const lo = loOf(b, i);
     const hi = hiOf(b, i);
     const label = b.names?.[i] ?? `สินทรัพย์ ${i + 1}`;
-    if (Number.isFinite(lo)) rows.push({ v: e, beta: lo, eq: false, name: `${label} ≥ ${pct(lo)}` });
-    if (Number.isFinite(hi)) rows.push({ v: e.map((x) => -x), beta: -hi, eq: false, name: `${label} ≤ ${pct(hi)}` });
+    if (Number.isFinite(lo))
+      rows.push({ v: e, beta: lo, eq: false, name: `${label} ≥ ${pct(lo)}` });
+    if (Number.isFinite(hi))
+      rows.push({
+        v: e.map((x) => -x),
+        beta: -hi,
+        eq: false,
+        name: `${label} ≤ ${pct(hi)}`,
+      });
   }
   for (const k of b.linear ?? []) {
-    if (k.lo != null) rows.push({ v: pad([...k.a]), beta: k.lo, eq: false, name: `${k.name} ≥ ${pct(k.lo)}` });
-    if (k.hi != null) rows.push({ v: pad(k.a.map((x) => -x)), beta: -k.hi, eq: false, name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}` });
+    if (k.lo != null)
+      rows.push({
+        v: pad([...k.a]),
+        beta: k.lo,
+        eq: false,
+        name: `${k.name} ≥ ${pct(k.lo)}`,
+      });
+    if (k.hi != null)
+      rows.push({
+        v: pad(k.a.map((x) => -x)),
+        beta: -k.hi,
+        eq: false,
+        name: `${k.name} ≤ ${k.hi < 1.5 ? pct(k.hi) : k.hi.toFixed(4)}`,
+      });
   }
   if (m > n) {
     for (let i = 0; i < n; i++) {
       const label = b.names?.[i] ?? `สินทรัพย์ ${i + 1}`;
-      rows.push({ v: c.map((_, j) => (j === n + i ? 1 : j === i ? -1 : 0)), beta: 0, eq: false, name: `|${label}| (aux ≥ w)` });
-      rows.push({ v: c.map((_, j) => (j === n + i ? 1 : j === i ? 1 : 0)), beta: 0, eq: false, name: `|${label}| (aux ≥ −w)` });
+      rows.push({
+        v: c.map((_, j) => (j === n + i ? 1 : j === i ? -1 : 0)),
+        beta: 0,
+        eq: false,
+        name: `|${label}| (aux ≥ w)`,
+      });
+      rows.push({
+        v: c.map((_, j) => (j === n + i ? 1 : j === i ? 1 : 0)),
+        beta: 0,
+        eq: false,
+        name: `|${label}| (aux ≥ −w)`,
+      });
     }
-    rows.push({ v: c.map((_, j) => (j >= n ? -1 : 0)), beta: -b.gross!, eq: false, name: `Gross exposure ≤ ${pct(b.gross!)}` });
+    rows.push({
+      v: c.map((_, j) => (j >= n ? -1 : 0)),
+      beta: -b.gross!,
+      eq: false,
+      name: `Gross exposure ≤ ${pct(b.gross!)}`,
+    });
   }
   const avgDiag = Gin.reduce((s, r, i) => s + Math.abs(r[i]), 0) / n || 1;
   let ridge = 0;
@@ -456,10 +756,16 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
   // Positive definiteness check through the inverse; add the smallest ridge that makes G invertible.
   while (!Ginv || Ginv.some((r, i) => !(r[i] > 0))) {
     ridge = ridge ? ridge * 10 : 1e-12 * avgDiag;
-    Ginv = invert(Gin.map((r, i) => r.map((x, j) => (i === j ? x + ridge : x))));
+    Ginv = invert(
+      Gin.map((r, i) => r.map((x, j) => (i === j ? x + ridge : x))),
+    );
     if (ridge > 1e-3 * avgDiag) break;
   }
-  if (!Ginv) throw new OptimizerError({ code: "INVALID_INPUT", message: "covariance ใช้คำนวณไม่ได้ (singular)" });
+  if (!Ginv)
+    throw new OptimizerError({
+      code: "INVALID_INPUT",
+      message: "covariance ใช้คำนวณไม่ได้ (singular)",
+    });
   const G = Gin.map((r, i) => r.map((x, j) => (i === j ? x + ridge : x)));
   const tol = 1e-12 * Math.max(1, avgDiag);
 
@@ -477,7 +783,9 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
     const Ginp = matVec(Ginv!, np);
     const NtGinp = N.map((v) => dot(v, Ginp));
     const r = matVec(Minv, NtGinp);
-    const z = Ginp.map((g, i) => g - GiN.reduce((s, col, k) => s + col[i] * r[k], 0));
+    const z = Ginp.map(
+      (g, i) => g - GiN.reduce((s, col, k) => s + col[i] * r[k], 0),
+    );
     return { z, r };
   };
 
@@ -528,13 +836,21 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
       const sp = dot(np, x) - betaP;
       // z = 0 means n⁺ depends linearly on the active set; judge it relative to ‖G⁻¹n⁺‖ (rounding-safe).
       const scaleZ = Math.max(...matVec(Ginv!, np).map(Math.abs), 1e-300);
-      if (Math.max(...z.map(Math.abs)) <= 1e-9 * scaleZ || Math.abs(zn) <= 1e-12 * scaleZ * Math.max(...np.map(Math.abs))) {
+      if (
+        Math.max(...z.map(Math.abs)) <= 1e-9 * scaleZ ||
+        Math.abs(zn) <= 1e-12 * scaleZ * Math.max(...np.map(Math.abs))
+      ) {
         if (!Number.isFinite(t2)) {
           // No primal step and no constraint to drop: the constraint set is empty.
-          infeasible = [rows[p].name, ...active.filter((k) => !rows[k].eq).map((k) => rows[k].name)];
+          infeasible = [
+            rows[p].name,
+            ...active.filter((k) => !rows[k].eq).map((k) => rows[k].name),
+          ];
           break outer;
         }
-        uPlus = uPlus.map((v, j) => (j < active.length ? v - t2 * r[j] : v + t2));
+        uPlus = uPlus.map((v, j) =>
+          j < active.length ? v - t2 * r[j] : v + t2,
+        );
         active.splice(drop, 1);
         uPlus.splice(drop, 1);
         continue;
@@ -555,11 +871,15 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
     }
   }
   if (infeasible) {
+    // The dual active-set method also stops on degenerate (linearly dependent) active sets; only an
+    // exact LP may call the constraint set empty.
+    if (!constraintsFeasible(n, b)) throw infeasibleError(n, b);
     throw new OptimizerError({
-      code: "INFEASIBLE_CONSTRAINTS",
-      message: `ข้อจำกัดขัดกัน — ไม่มีน้ำหนักที่ผ่านทุกข้อพร้อมกัน: ${[...new Set(infeasible)].join(" · ")}`,
-      suggestion: "ผ่อนข้อจำกัดใดข้อหนึ่งในรายการนี้ (ระบบไม่ผ่อนให้เอง)",
-      constraints: [...new Set(infeasible)],
+      code: "SOLVER_FAILURE",
+      message:
+        "ข้อจำกัดเป็นไปได้ (มีน้ำหนักที่ผ่านทุกข้อ) แต่ตัวแก้ QP ไม่ลู่เข้า",
+      suggestion:
+        "ลองลดจำนวนข้อจำกัดที่ซ้ำซ้อนกัน หรือแจ้งผู้พัฒนาพร้อม input นี้",
     });
   }
   // Polish: solve the KKT system on the final active set directly ([G −N; Nᵀ 0][x; u] = [−c; β]),
@@ -570,12 +890,23 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
       ...G.map((row, i) => [...row, ...active.map((k) => -rows[k].v[i])]),
       ...active.map((k) => [...rows[k].v, ...Array<number>(m).fill(0)]),
     ];
-    const sol = solveLinear(K, [...c.map((v) => -v), ...active.map((k) => rows[k].beta)]);
+    const sol = solveLinear(K, [
+      ...c.map((v) => -v),
+      ...active.map((k) => rows[k].beta),
+    ]);
     if (sol) {
       const xp = sol.slice(0, n);
       const up = sol.slice(n);
-      const feasible = rows.every((row) => dot(row.v, xp) - row.beta >= -1e-10 * Math.max(1, Math.abs(row.beta)) || (row.eq && Math.abs(dot(row.v, xp) - row.beta) <= 1e-10));
-      const dualOk = active.every((k, j) => rows[k].eq || up[j] >= -1e-9 * Math.max(1, ...up.map(Math.abs)));
+      const feasible = rows.every(
+        (row) =>
+          dot(row.v, xp) - row.beta >=
+            -1e-10 * Math.max(1, Math.abs(row.beta)) ||
+          (row.eq && Math.abs(dot(row.v, xp) - row.beta) <= 1e-10),
+      );
+      const dualOk = active.every(
+        (k, j) =>
+          rows[k].eq || up[j] >= -1e-9 * Math.max(1, ...up.map(Math.abs)),
+      );
       if (feasible && dualOk) {
         x = xp;
         u = up;
@@ -585,7 +916,10 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
   // KKT residual: stationarity Gx + c − Σ u_k n_k, dual feasibility (u ≥ 0 for inequalities), primal feasibility.
   const g = matVec(G, x).map((v, i) => v + c[i]);
   active.forEach((k, j) => rows[k].v.forEach((v, i) => (g[i] -= u[j] * v)));
-  const dualViol = Math.max(0, ...active.map((k, j) => (rows[k].eq ? 0 : -u[j])));
+  const dualViol = Math.max(
+    0,
+    ...active.map((k, j) => (rows[k].eq ? 0 : -u[j])),
+  );
   const weights = x.slice(0, n);
   const chk = checkWeights(weights, b);
   return {
@@ -601,10 +935,19 @@ export function solveGeneralQP(Gw: Matrix, cw: number[], b: Bounds, maxIter = 20
 // ------------------------------------------------------------------ constrained frontier
 
 export type SolverDiagnostics = Omit<QpResult, "weights">;
-export type OptimizedPoint = PortfolioPoint & { solver: SolverDiagnostics; lambda: number };
+export type OptimizedPoint = PortfolioPoint & {
+  solver: SolverDiagnostics;
+  lambda: number;
+};
 
 /** min wᵀΣw − λ μᵀw  under the bounds (λ = 0: GMV; λ < 0 traces the inefficient arm). */
-function solveLambda(mu: number[], cov: Matrix, rf: number, lambda: number, b: Bounds): OptimizedPoint {
+function solveLambda(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  lambda: number,
+  b: Bounds,
+): OptimizedPoint {
   const r = (isGeneral(b) ? solveGeneralQP : solveBoxQP)(
     cov.map((row) => row.map((x) => 2 * x)),
     mu.map((m) => -lambda * m),
@@ -621,25 +964,43 @@ function lambdaScale(mu: number[], cov: Matrix) {
 }
 
 /** Smallest λ (in magnitude, with sign) at which the solution reaches the max (sign = 1) or min (sign = −1) return corner. */
-function cornerLambda(mu: number[], cov: Matrix, rf: number, b: Bounds, sign: 1 | -1) {
+function cornerLambda(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  b: Bounds,
+  sign: 1 | -1,
+) {
   const [rMin, rMax] = feasibleReturnRange(mu, b);
   const goal = sign === 1 ? rMax : rMin;
   let l = lambdaScale(mu, cov);
   for (let k = 0; k < 200; k++) {
     const p = solveLambda(mu, cov, rf, sign * l, b);
-    if (Math.abs(p.expectedReturn - goal) < 1e-12 * Math.max(1, Math.abs(goal))) return sign * l;
+    if (Math.abs(p.expectedReturn - goal) < 1e-12 * Math.max(1, Math.abs(goal)))
+      return sign * l;
     l *= 2;
   }
   return sign * l;
 }
 
-export function gmvPortfolio(mu: number[], cov: Matrix, rf: number, b: Bounds): OptimizedPoint {
+export function gmvPortfolio(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  b: Bounds,
+): OptimizedPoint {
   assertBounds(mu.length, b);
   return solveLambda(mu, cov, rf, 0, b);
 }
 
 /** Minimum-variance portfolio with exactly the target expected return (both arms of the bullet). */
-export function targetReturnPortfolio(mu: number[], cov: Matrix, rf: number, target: number, b: Bounds): OptimizedPoint {
+export function targetReturnPortfolio(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  target: number,
+  b: Bounds,
+): OptimizedPoint {
   const [rMin, rMax] = feasibleReturnRange(mu, b);
   const tol = 1e-12 * Math.max(1, Math.abs(target));
   if (target > rMax + tol || target < rMin - tol) {
@@ -655,7 +1016,11 @@ export function targetReturnPortfolio(mu: number[], cov: Matrix, rf: number, tar
   for (let k = 0; k < 200; k++) {
     const mid = (lo + hi) / 2;
     const p = solveLambda(mu, cov, rf, mid, b);
-    if (Math.abs(p.expectedReturn - target) < Math.abs(best.expectedReturn - target)) best = p;
+    if (
+      Math.abs(p.expectedReturn - target) <
+      Math.abs(best.expectedReturn - target)
+    )
+      best = p;
     if (Math.abs(p.expectedReturn - target) <= 1e-13) break;
     if (p.expectedReturn < target) lo = mid;
     else hi = mid;
@@ -664,7 +1029,13 @@ export function targetReturnPortfolio(mu: number[], cov: Matrix, rf: number, tar
 }
 
 /** Highest expected return with volatility ≤ target (lies on the efficient arm). */
-export function targetRiskPortfolio(mu: number[], cov: Matrix, rf: number, targetVol: number, b: Bounds): OptimizedPoint & { binding: boolean } {
+export function targetRiskPortfolio(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  targetVol: number,
+  b: Bounds,
+): OptimizedPoint & { binding: boolean } {
   const gmv = gmvPortfolio(mu, cov, rf, b);
   if (targetVol < gmv.volatility - 1e-12) {
     throw new OptimizerError({
@@ -691,16 +1062,23 @@ export function targetRiskPortfolio(mu: number[], cov: Matrix, rf: number, targe
 }
 
 /** Max-Sharpe portfolio under the bounds; Sharpe is quasi-concave along the efficient arm, so golden-section on λ is exact. */
-export function tangencyPortfolio(mu: number[], cov: Matrix, rf: number, b: Bounds): OptimizedPoint {
+export function tangencyPortfolio(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  b: Bounds,
+): OptimizedPoint {
   const [, rMax] = feasibleReturnRange(mu, b);
   if (rMax <= rf) {
     throw new OptimizerError({
       code: "NO_EXCESS_RETURN",
       message: `ไม่มีพอร์ตที่ผลตอบแทนคาดหวังสูงกว่า Rf (${pct(rf)}) — ไม่มี tangency portfolio`,
-      suggestion: "ตรวจสมมติฐานผลตอบแทนคาดหวัง หรือเลือก objective อื่น (เช่น minimum variance)",
+      suggestion:
+        "ตรวจสมมติฐานผลตอบแทนคาดหวัง หรือเลือก objective อื่น (เช่น minimum variance)",
     });
   }
-  const score = (p: PortfolioPoint) => (p.sharpe != null && p.expectedReturn > rf ? p.sharpe : -Infinity);
+  const score = (p: PortfolioPoint) =>
+    p.sharpe != null && p.expectedReturn > rf ? p.sharpe : -Infinity;
   let lo = 0;
   let hi = cornerLambda(mu, cov, rf, b, 1);
   const g = (Math.sqrt(5) - 1) / 2;
@@ -723,23 +1101,49 @@ export function tangencyPortfolio(mu: number[], cov: Matrix, rf: number, b: Boun
       pd = solveLambda(mu, cov, rf, d, b);
     }
   }
-  return [pc, pd, solveLambda(mu, cov, rf, 0, b), solveLambda(mu, cov, rf, cornerLambda(mu, cov, rf, b, 1), b)].reduce((a, x) => (score(x) > score(a) ? x : a));
+  return [
+    pc,
+    pd,
+    solveLambda(mu, cov, rf, 0, b),
+    solveLambda(mu, cov, rf, cornerLambda(mu, cov, rf, b, 1), b),
+  ].reduce((a, x) => (score(x) > score(a) ? x : a));
 }
 
 /** Utility maximization: max μᵀw − (A/2) wᵀΣw  ⇔  λ = 2/A. */
-export function utilityPortfolio(mu: number[], cov: Matrix, rf: number, riskAversion: number, b: Bounds): OptimizedPoint {
+export function utilityPortfolio(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  riskAversion: number,
+  b: Bounds,
+): OptimizedPoint {
   assertBounds(mu.length, b);
   return solveLambda(mu, cov, rf, 2 / riskAversion, b);
 }
 
 /** Backwards-compatible helpers. */
-export function constrainedMeanVariance(mu: number[], cov: Matrix, lambda: number, b: Bounds): number[] {
+export function constrainedMeanVariance(
+  mu: number[],
+  cov: Matrix,
+  lambda: number,
+  b: Bounds,
+): number[] {
   return solveLambda(mu, cov, 0, lambda, b).weights;
 }
-export function constrainedTargetReturn(mu: number[], cov: Matrix, target: number, b: Bounds): number[] {
+export function constrainedTargetReturn(
+  mu: number[],
+  cov: Matrix,
+  target: number,
+  b: Bounds,
+): number[] {
   return targetReturnPortfolio(mu, cov, 0, target, b).weights;
 }
-export function constrainedMaxSharpe(mu: number[], cov: Matrix, rf: number, b: Bounds): PortfolioPoint {
+export function constrainedMaxSharpe(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  b: Bounds,
+): PortfolioPoint {
   return tangencyPortfolio(mu, cov, rf, b);
 }
 
@@ -747,11 +1151,22 @@ export interface ConstrainedFrontier {
   gmv: OptimizedPoint;
   tangency: OptimizedPoint | null;
   /** Both halves (bullet) under the constraints. */
-  curve: { volatility: number; expectedReturn: number; efficient: boolean; weights: number[] }[];
+  curve: {
+    volatility: number;
+    expectedReturn: number;
+    efficient: boolean;
+    weights: number[];
+  }[];
 }
 
 /** Bullet under the bounds, traced by λ from the min-return corner (inefficient arm) to the max-return corner. */
-export function constrainedFrontier(mu: number[], cov: Matrix, rf: number, b: Bounds, points = 30): ConstrainedFrontier {
+export function constrainedFrontier(
+  mu: number[],
+  cov: Matrix,
+  rf: number,
+  b: Bounds,
+  points = 30,
+): ConstrainedFrontier {
   const gmv = gmvPortfolio(mu, cov, rf, b);
   const lTop = cornerLambda(mu, cov, rf, b, 1);
   const lBot = cornerLambda(mu, cov, rf, b, -1);
@@ -762,7 +1177,12 @@ export function constrainedFrontier(mu: number[], cov: Matrix, rf: number, b: Bo
   ];
   const curve = lambdas.map((l) => {
     const p = solveLambda(mu, cov, rf, l, b);
-    return { volatility: p.volatility, expectedReturn: p.expectedReturn, efficient: l >= 0, weights: p.weights };
+    return {
+      volatility: p.volatility,
+      expectedReturn: p.expectedReturn,
+      efficient: l >= 0,
+      weights: p.weights,
+    };
   });
   curve.sort((a, c) => a.expectedReturn - c.expectedReturn);
   let tangency: OptimizedPoint | null = null;
@@ -775,12 +1195,23 @@ export function constrainedFrontier(mu: number[], cov: Matrix, rf: number, b: Bo
 }
 
 /** Optimal complete portfolio: share y* of wealth in the risky (tangency) portfolio, rest in the risk-free asset. */
-export function completePortfolio(tangency: PortfolioPoint, rf: number, riskAversion: number) {
-  const y = tangency.volatility > 0 ? (tangency.expectedReturn - rf) / (riskAversion * tangency.volatility ** 2) : 0;
+export function completePortfolio(
+  tangency: PortfolioPoint,
+  rf: number,
+  riskAversion: number,
+) {
+  const y =
+    tangency.volatility > 0
+      ? (tangency.expectedReturn - rf) /
+        (riskAversion * tangency.volatility ** 2)
+      : 0;
   return {
     riskyShare: y,
     expectedReturn: rf + y * (tangency.expectedReturn - rf),
     volatility: Math.abs(y) * tangency.volatility,
-    utility: rf + y * (tangency.expectedReturn - rf) - 0.5 * riskAversion * (y * tangency.volatility) ** 2,
+    utility:
+      rf +
+      y * (tangency.expectedReturn - rf) -
+      0.5 * riskAversion * (y * tangency.volatility) ** 2,
   };
 }
