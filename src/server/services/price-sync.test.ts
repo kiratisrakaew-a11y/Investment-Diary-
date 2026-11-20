@@ -349,3 +349,132 @@ describe("MPT_FIX_SPEC P0-A1: adjusted close on rows that already have a close",
     ).toBe(r.fetched);
   });
 });
+
+describe("MPT_FIX_SPEC P0-A2: one base for adjusted closes", () => {
+  type Meta = { adjBaseDate: string; adjLastEventDate: string | null };
+  function withAdj(opts: { failRebase?: boolean } = {}) {
+    const f = fakeDeps();
+    const days = [
+      "2026-01-02",
+      "2026-01-05",
+      "2026-01-06",
+      "2026-01-07",
+      "2026-01-08",
+      "2026-01-09",
+    ];
+    // Provider state: a factor applied to every adjusted close (a new dividend rescales history).
+    const state = {
+      factor: 0.9,
+      dividends: [] as { date: string; amount: number }[],
+      today: "2026-01-31",
+    };
+    const meta = new Map<number, Meta>();
+    f.store.delete("asset:1");
+    const deps: SyncDeps = {
+      ...f.deps,
+      today: () => state.today,
+      fetchHistory: async (_p, range) => ({
+        rows: days
+          .filter((d) => d >= range.from && d <= range.to)
+          .map((d) => ({
+            date: d,
+            close: 100 + days.indexOf(d),
+            adjClose: (100 + days.indexOf(d)) * state.factor,
+          })),
+        splits: [],
+        dividends: state.dividends.filter(
+          (x) => x.date >= range.from && x.date <= range.to,
+        ),
+      }),
+      loadAdjMeta: async (id) => meta.get(id) ?? null,
+      adjStats: async (key) => {
+        const m = f.store.get(key) ?? new Map();
+        const ds = [...m.keys()].sort();
+        return {
+          firstDate: ds[0] ?? null,
+          adjRows: [...m.values()].filter((r) => r.adjClose != null).length,
+        };
+      },
+      rebaseAdj: async (key, adj, m) => {
+        if (opts.failRebase) throw new Error("connection lost during rebase");
+        const rows = f.store.get(key)!;
+        for (const [d, r] of rows)
+          rows.set(d, { ...r, adjClose: adj.get(d) ?? null });
+        meta.set(Number(key.split(":")[1]), m);
+      },
+      setAdjMeta: async (id, m) => void meta.set(id, m),
+    };
+    return { ...f, deps, state, meta, days };
+  }
+  const sync = (deps: SyncDeps, from: string, to: string, dryRun = false) =>
+    syncHistoricalPrices(
+      {
+        symbols: ["BBL"],
+        startDate: from,
+        endDate: to,
+        priceType: "adjusted_close",
+        dryRun,
+      },
+      deps,
+    );
+
+  it("a new dividend rebases EVERY stored row to the new fetch (base date and values), close untouched", async () => {
+    const t = withAdj();
+    await sync(t.deps, "2026-01-01", "2026-01-06");
+    expect(t.meta.get(1)).toEqual({
+      adjBaseDate: "2026-01-31",
+      adjLastEventDate: null,
+    });
+    // A dividend on 01-08 rescales the provider's whole adjusted history.
+    t.state.factor = 0.85;
+    t.state.dividends = [{ date: "2026-01-08", amount: 2 }];
+    t.state.today = "2026-02-15";
+    const r = (await sync(t.deps, "2026-01-07", "2026-01-09")).results[0];
+    expect(r.adjRebase).toMatchObject({ rebased: true, rowsChanged: 3 });
+    expect(t.meta.get(1)).toEqual({
+      adjBaseDate: "2026-02-15",
+      adjLastEventDate: "2026-01-08",
+    });
+    const rows = t.store.get("asset:1")!;
+    expect([...rows.keys()].sort()).toEqual(t.days);
+    for (const [, x] of rows)
+      expect(x.adjClose).toBeCloseTo(x.close * 0.85, 12); // every row on the new base
+    // No jump where the two syncs meet: the adjusted return equals the close return (no dividend here).
+    const a = rows.get("2026-01-06")!;
+    const b = rows.get("2026-01-07")!;
+    expect(b.adjClose! / a.adjClose! - 1).toBeCloseTo(
+      b.close / a.close - 1,
+      12,
+    );
+  });
+  it("same base → no rebase; a dry run reports the rebase without writing", async () => {
+    const t = withAdj();
+    await sync(t.deps, "2026-01-01", "2026-01-06");
+    const same = (await sync(t.deps, "2026-01-05", "2026-01-07")).results[0];
+    expect(same.adjRebase, JSON.stringify(same.adjRebase)).toMatchObject({
+      rebased: false,
+      rowsChanged: 0,
+    });
+    t.state.factor = 0.8;
+    const before = JSON.stringify([...t.store.get("asset:1")!]);
+    const dry = (await sync(t.deps, "2026-01-07", "2026-01-09", true))
+      .results[0]; // overlaps a stored day, like the daily update
+    expect(dry.adjRebase?.rebased).toBe(true);
+    expect(JSON.stringify([...t.store.get("asset:1")!])).toBe(before);
+  });
+  it("a rebase that fails leaves the stored data unchanged", async () => {
+    const t = withAdj({ failRebase: true });
+    t.store.set(
+      "asset:1",
+      new Map(
+        t.days
+          .slice(0, 3)
+          .map((d, i) => [d, { close: 100 + i, adjClose: 50 + i }]),
+      ),
+    ); // unknown old base
+    const before = JSON.stringify([...t.store.get("asset:1")!]);
+    const r = (await sync(t.deps, "2026-01-07", "2026-01-09")).results[0];
+    expect(r.status).toBe("error");
+    expect(JSON.stringify([...t.store.get("asset:1")!])).toBe(before);
+  });
+});

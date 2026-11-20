@@ -23,7 +23,8 @@
     "check:consensus": "tsx src/scripts/consensus-check.ts",
     "check:abnormal-data": "tsx src/scripts/abnormal-data-check.ts",
     "check:abnormal": "tsx src/scripts/abnormal-check.ts",
-    "check:backtest": "tsx src/scripts/backtest-check.ts"
+    "check:backtest": "tsx src/scripts/backtest-check.ts",
+    "check:total-return": "tsx src/scripts/total-return-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

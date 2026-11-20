@@ -1,5 +1,5 @@
 import { chooseBenchmarkBasis } from "@/lib/finance/benchmark-basis";
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { priceInput, today, type PriceInputT } from "@/lib/validation";
 import type { FxHistory, PriceHistory } from "@/lib/finance/portfolio";
@@ -164,4 +164,95 @@ export async function benchmarkForBasis(
   );
   // Settings' own benchmark first among equals (the user's choice wins when its basis matches).
   return chooseBenchmarkBasis(wanted, loaded, from);
+}
+
+/**
+ * Dividend ex-dates by symbol (cash events, not the indicated annual figure) and recorded split dates by
+ * asset id — what decides whether a close can stand for a total return (lib/finance/total-return-policy.ts).
+ */
+export async function loadCorporateActionDates() {
+  const db = getDb();
+  const D = schema.dividendEvents;
+  const T = schema.transactions;
+  const [divs, splits] = await Promise.all([
+    db.select({ symbol: D.symbol, exDate: D.exDate, kind: D.kind }).from(D),
+    db
+      .select({ assetId: T.assetId, date: T.date })
+      .from(T)
+      .where(eq(T.type, "split")),
+  ]);
+  const dividendDates = new Map<string, string[]>();
+  for (const d of divs) {
+    if (!d.exDate || d.kind === "indicated_annual") continue;
+    const k = d.symbol.toUpperCase();
+    dividendDates.set(k, [...(dividendDates.get(k) ?? []), d.exDate]);
+  }
+  const splitDates = new Map<number, string[]>();
+  for (const s of splits)
+    if (s.assetId != null)
+      splitDates.set(s.assetId, [...(splitDates.get(s.assetId) ?? []), s.date]);
+  return {
+    for: (a: { id: number; symbol: string }) => ({
+      dividendDates: dividendDates.get(a.symbol.toUpperCase()) ?? [],
+      splitDates: splitDates.get(a.id) ?? [],
+    }),
+  };
+}
+
+/**
+ * Close + adj_close (window from `from`), recorded cash dividends (ex-date, DPS) and split dates for the
+ * given assets — the input of the adj_close checks (lib/finance/adj-check.ts). Read-only.
+ */
+export async function loadAdjCheckInput(
+  assets: { id: number; symbol: string; assetClass: string }[],
+  from: string,
+) {
+  if (!assets.length) return [];
+  const db = getDb();
+  const P = schema.prices;
+  const D = schema.dividendEvents;
+  const T = schema.transactions;
+  const ids = assets.map((a) => a.id);
+  const [px, divs, splits] = await Promise.all([
+    db
+      .select({
+        assetId: P.assetId,
+        date: P.date,
+        close: P.close,
+        adj: P.adjClose,
+      })
+      .from(P)
+      .where(and(inArray(P.assetId, ids), gte(P.date, from)))
+      .orderBy(asc(P.assetId), asc(P.date)),
+    db
+      .select({
+        symbol: D.symbol,
+        exDate: D.exDate,
+        dps: D.dividendPerShare,
+        kind: D.kind,
+        cashOrStock: D.cashOrStock,
+      })
+      .from(D),
+    db
+      .select({ assetId: T.assetId, date: T.date })
+      .from(T)
+      .where(eq(T.type, "split")),
+  ]);
+  return assets.map((a) => ({
+    symbol: a.symbol,
+    assetClass: a.assetClass,
+    obs: px
+      .filter((r) => r.assetId === a.id)
+      .map((r) => ({ date: r.date, close: r.close, adjClose: r.adj })),
+    dividends: divs
+      .filter(
+        (d) =>
+          d.symbol.toUpperCase() === a.symbol.toUpperCase() &&
+          d.exDate &&
+          d.kind !== "indicated_annual" &&
+          d.cashOrStock !== "stock",
+      )
+      .map((d) => ({ exDate: d.exDate!, dps: d.dps })),
+    splitDates: splits.filter((s) => s.assetId === a.id).map((s) => s.date),
+  }));
 }

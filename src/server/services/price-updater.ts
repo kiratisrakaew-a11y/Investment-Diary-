@@ -1,9 +1,15 @@
 import { desc, eq, max } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { today } from "@/lib/validation";
+import { THAI_GOLD_SYMBOL } from "@/lib/prices/gold";
 import { listAssets } from "./assets";
 import { getSettings } from "./settings";
-import { dbDeps, syncAssetSeries, syncMarketSeries, type SeriesResult } from "./price-sync";
+import {
+  dbDeps,
+  syncAssetSeries,
+  syncMarketSeries,
+  type SeriesResult,
+} from "./price-sync";
 
 const DEFAULT_HISTORY_DAYS = 365 * 3;
 
@@ -33,7 +39,9 @@ export interface UpdateResult {
 }
 
 const toResult = (r: SeriesResult): UpdateResult =>
-  r.status === "ok" || r.status === "no_data" ? { symbol: r.symbol, ok: true, rows: r.fetched } : { symbol: r.symbol, ok: false, error: r.message };
+  r.status === "ok" || r.status === "no_data"
+    ? { symbol: r.symbol, ok: true, rows: r.fetched }
+    : { symbol: r.symbol, ok: false, error: r.message };
 
 /**
  * Incremental daily update of USDTHB, the benchmark and every non-manual asset, through the same
@@ -43,11 +51,30 @@ export async function updateAllPrices(): Promise<UpdateResult[]> {
   const results: UpdateResult[] = [];
   const db = getDb();
   const to = today();
-  const opts = (from: string) => ({ range: { from: from > to ? to : from, to }, priceType: "close" as const, overwrite: true, dryRun: false });
+  const opts = (from: string) => ({
+    range: { from: from > to ? to : from, to },
+    priceType: "close" as "close" | "adjusted_close",
+    overwrite: true,
+    dryRun: false,
+  });
 
   // 1. USD/THB
-  const [lastFx] = await db.select({ d: schema.fxRates.date }).from(schema.fxRates).orderBy(desc(schema.fxRates.date)).limit(1);
-  results.push(toResult(await syncMarketSeries(dbDeps, "fx:USDTHB", "USDTHB", "THB=X", opts(fromDate(lastFx?.d ?? null)))));
+  const [lastFx] = await db
+    .select({ d: schema.fxRates.date })
+    .from(schema.fxRates)
+    .orderBy(desc(schema.fxRates.date))
+    .limit(1);
+  results.push(
+    toResult(
+      await syncMarketSeries(
+        dbDeps,
+        "fx:USDTHB",
+        "USDTHB",
+        "THB=X",
+        opts(fromDate(lastFx?.d ?? null)),
+      ),
+    ),
+  );
 
   // 2. Benchmark
   const settings = await getSettings();
@@ -56,15 +83,39 @@ export async function updateAllPrices(): Promise<UpdateResult[]> {
     .from(schema.benchmarkPrices)
     .where(eq(schema.benchmarkPrices.symbol, settings.benchmarkSymbol));
   const b = settings.benchmarkSymbol;
-  results.push(toResult(await syncMarketSeries(dbDeps, `bench:${b}`, b, b, opts(fromDate(lastBench?.d ?? null)))));
+  results.push(
+    toResult(
+      await syncMarketSeries(
+        dbDeps,
+        `bench:${b}`,
+        b,
+        b,
+        opts(fromDate(lastBench?.d ?? null)),
+      ),
+    ),
+  );
 
   // 3. Assets
   for (const a of await listAssets()) {
     if (a.priceSource === "manual") continue;
     const last = await lastPriceDate(a.id);
     // Fund NAVs come one day per request: only the last week (or month on first run).
-    const from = a.priceSource === "sec_th" ? daysAgo(last ? 7 : 30) : fromDate(last);
-    results.push(toResult(await syncAssetSeries(dbDeps, a, opts(from), false)));
+    const from =
+      a.priceSource === "sec_th" ? daysAgo(last ? 7 : 30) : fromDate(last);
+    // Yahoo stocks / ETFs also keep adj_close current; a provider rebase replaces the whole series (MPT A2).
+    const adjusted =
+      a.priceSource === "yahoo" &&
+      a.providerSymbol?.toUpperCase() !== THAI_GOLD_SYMBOL;
+    results.push(
+      toResult(
+        await syncAssetSeries(
+          dbDeps,
+          a,
+          { ...opts(from), priceType: adjusted ? "adjusted_close" : "close" },
+          false,
+        ),
+      ),
+    );
   }
   return results;
 }

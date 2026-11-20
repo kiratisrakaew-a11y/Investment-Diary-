@@ -38,11 +38,16 @@ import {
 } from "../optimize-schema";
 import { buildConstraints, constraintsInput } from "@/lib/finance/exposure";
 import { selectCandidates } from "./universe";
+import {
+  totalReturnSourceFor,
+  type AssetReturnBasis,
+} from "@/lib/finance/total-return-policy";
 import { getRiskFree } from "./risk-free";
 import { listAssets } from "./assets";
 import {
   benchmarkForBasis,
   loadAdjPriceHistory,
+  loadCorporateActionDates,
   loadFxHistory,
   loadPriceHistory,
 } from "./prices";
@@ -132,7 +137,7 @@ export const backtestInput = z
       .enum(["price_return", "total_return"])
       .default("price_return")
       .describe(
-        "price_return = closes (dividends excluded); total_return = provider dividend-adjusted closes (dividends reinvested), requires full adj_close coverage",
+        "price_return = closes (dividends excluded); total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason",
       ),
     factorSettings: factorSettingsOverride
       .optional()
@@ -275,6 +280,10 @@ export async function loadBacktestData(x: BacktestDataRequest) {
   // only from the provider's adjusted closes; then the common calendar of actual prints.
   const adj =
     x.returnBasis === "total_return" ? await loadAdjPriceHistory() : null;
+  const actions =
+    x.returnBasis === "total_return" ? await loadCorporateActionDates() : null;
+  const returnBasisByAsset: Record<string, AssetReturnBasis> = {};
+  const basisNotes: string[] = [];
   const levels = new Map<
     number,
     { levels: [string, number][]; scale: number }
@@ -282,16 +291,29 @@ export async function loadBacktestData(x: BacktestDataRequest) {
   pool = pool.filter((a) => {
     const window = prices.get(a.id)!.filter(([d]) => d >= start && d <= end);
     const adjMap = adj ? new Map(adj.get(a.id) ?? []) : null;
+    const observations = window.map(([date, close]) => ({
+      date,
+      close,
+      adjClose: adjMap?.get(date) ?? null,
+    }));
+    // Total return per asset class (MPT A3): adj_close, or the close where it already is the total return.
+    const src =
+      x.returnBasis === "total_return"
+        ? totalReturnSourceFor(a, observations, actions!.for(a))
+        : null;
+    if (src && !src.ok) {
+      excluded.push({
+        symbol: a.symbol,
+        reason: `${src.reason}${src.required ? ` — ต้องการ: ${src.required}` : ""}`,
+      });
+      return false;
+    }
+    const useAdj = !!src?.ok && src.source === "adjusted_close";
     const lv = buildLevelSeries({
       label: a.symbol,
-      observations: window.map(([date, close]) => ({
-        date,
-        close,
-        adjClose: adjMap?.get(date) ?? null,
-      })),
-      basis: x.returnBasis,
-      totalReturnSource:
-        x.returnBasis === "total_return" ? "adjusted_close" : undefined,
+      observations,
+      basis: src?.ok && !useAdj ? "price_return" : x.returnBasis,
+      totalReturnSource: useAdj ? "adjusted_close" : undefined,
       currency: a.currency,
       fx,
     });
@@ -305,9 +327,11 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     // Trade at THB prices on the chosen basis: first price (× FX) × index level.
     const first = window[0];
     const p0 =
-      (x.returnBasis === "total_return" ? adjMap!.get(first[0])! : first[1]) *
+      (useAdj ? adjMap!.get(first[0])! : first[1]) *
       (a.currency === "USD" ? (asOf(fx, first[0]) ?? NaN) : 1);
     levels.set(a.id, { levels: lv.levels, scale: p0 });
+    returnBasisByAsset[a.symbol] = src?.ok ? src.basis : "close";
+    if (src?.ok && src.note) basisNotes.push(src.note);
     return true;
   });
   if (!pool.length)
@@ -420,7 +444,10 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     excluded,
     every,
     obsPerYear,
-    dataWarnings,
+    dataWarnings: [...dataWarnings, ...basisNotes],
+    returnBasisByAsset: Object.fromEntries(
+      pool.map((a) => [a.symbol, returnBasisByAsset[a.symbol] ?? "close"]),
+    ),
   };
 }
 
@@ -454,6 +481,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     every,
     obsPerYear,
     dataWarnings,
+    returnBasisByAsset,
   } = await loadBacktestData({
     ...x,
     minObservations: usesWindow ? x.windowDays + 3 : 3,
@@ -759,6 +787,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     },
     universe: symbols,
     excluded,
+    returnBasisByAsset,
     benchmark: benchmark
       ? {
           symbol: benchmark.symbol,

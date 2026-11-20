@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-11-20 — MPT fix, phase 2 (MPT_FIX_SPEC: P0-A2, A3, A4, A5)
+- **A2 — one base for adjusted closes.**
+  - Yahoo rescales the whole adjusted-close history on every dividend / split.
+  - A sync with `priceType: "adjusted_close"` now detects a new base in three cases:
+    - a stored adj_close differs from the provider's on an overlapping day;
+    - a dividend / split is newer than the stored base;
+    - stored adj_close has unknown provenance.
+  - In those cases it re-fetches the asset's whole stored range and replaces adj_close of every row in one transaction (all-or-nothing).
+    - A date the provider no longer returns gets null, never a value from another fetch. close / volume are untouched.
+  - New table `price_adjustment_meta` (migration 0020, additive, rollback file; deleted with the asset) stores `adjBaseDate` / `adjLastEventDate`.
+  - The response has `adjRebase { rebased, reason, rowsChanged }`.
+  - **The daily price updater now stores adj_close for Yahoo stocks / ETFs** (it stored close only — the root cause found in phase 1). PRICE_BASIS_BENCHMARK_SPEC P0 is covered by this phase.
+- **A3 — total return per asset class** (`lib/finance/total-return-policy.ts`, used by optimize / backtest / compare).
+  - adj_close when complete.
+  - Gold and stocks with no dividend / split in the data period use their close (`close_no_dividend`).
+  - Accumulating funds use NAV (`nav`).
+  - A stock that paid dividends but lacks adj_close is skipped with the reason and the sync command (never measured on closes silently).
+  - Every response carries `returnBasisByAsset`.
+- **A4 — adj_close checked against recorded dividends** (`lib/finance/adj-check.ts`): `ADJ_DIVIDEND_MISMATCH`, `ADJ_MISSING_DIVIDEND`, `ADJ_UNEXPLAINED_CHANGE`, `POSSIBLE_UNRECORDED_SPLIT`. Reported as `adjFlags` after an adjusted sync and in data quality.
+- **A5 — data quality "ราคาปรับปันผล"**: coverage of adj_close and the A4 flags for the assets that need adj_close (3-year window), with the exact sync command.
+- Numbers:
+  - price_return results unchanged (identical on optimize max Sharpe / min variance, backtest, compare).
+  - total_return now keeps gold and dividend-free stocks that it used to drop.
+- Bug found while testing (fixed before release): the A4 check queried from "0000-01-01", an invalid Postgres date, which turned a completed sync into an error. The check now starts at 1900-01-01 and can no longer fail a sync.
+- Checks: `npm run check:total-return` (local DB, stubbed provider, TEST-LOCAL data), A2 sync tests, A3/A4 unit tests.
+
 ## 2026-11-20 — Backtest fix, phase B (BACKTEST_SPEC: BT-4, BT-8, BT-6)
 - **BT-4 constraints.**
   - `backtest_portfolio` takes `constraints` (the same schema and builder as optimize_portfolio: groups, maxPerSector, maxPerIssuer, maxPerCurrency, assetBounds …), applied at every rebalance.

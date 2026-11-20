@@ -150,6 +150,7 @@ export async function comparePortfolioModels(
     excluded: d.excluded,
     riskFreeRate: d.rf,
     riskFreeInfo: d.riskFreeInfo,
+    returnBasisByAsset: d.returnBasisByAsset,
     benchmark: d.benchmark
       ? {
           symbol: d.benchmark.symbol,
@@ -202,6 +203,7 @@ export function summarizeModelComparison(r: Full) {
     riskFreeRate: r.riskFreeRate,
     benchmark: r.benchmark,
     excluded: r.excluded,
+    returnBasisByAsset: r.returnBasisByAsset,
     split: r.split && {
       train: r.split.train,
       test: r.split.test,

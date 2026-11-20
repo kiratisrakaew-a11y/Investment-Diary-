@@ -384,3 +384,58 @@ export function detectUnrecordedSplits(
   }
   return out;
 }
+
+/**
+ * Yahoo rebases the whole adjusted-close series on every new dividend / split. Decide whether the
+ * stored adj_close of an asset must be replaced as a whole (one fetch, one base) — never mixed:
+ *  - the provider's adj_close differs from the stored one on any overlapping date (new base);
+ *  - a dividend / split newer than the last event the stored base includes;
+ *  - stored adj_close of unknown provenance (no metadata yet).
+ */
+export function adjRebaseDecision(
+  existing: Map<string, { adjClose: number | null }>,
+  fetched: PricePoint[],
+  o: {
+    meta: { adjLastEventDate: string | null } | null;
+    storedAdjRows: number;
+    eventDates: string[];
+  },
+): { rebase: boolean; reason: string } {
+  let differ = 0;
+  for (const f of fetched) {
+    const cur = existing.get(f.date);
+    if (cur?.adjClose == null || f.adjClose == null) continue;
+    if (
+      Math.abs(cur.adjClose - f.adjClose) >
+      1e-6 * Math.max(1, Math.abs(f.adjClose))
+    )
+      differ++;
+  }
+  if (differ)
+    return {
+      rebase: true,
+      reason: `adj_close ที่เก็บไว้ต่างจากผู้ให้ข้อมูล ${differ} วัน (ผู้ให้ข้อมูลปรับฐานใหม่)`,
+    };
+  // Events after the last one the stored base includes (none recorded = every event is new).
+  const newer = o.meta
+    ? o.eventDates.filter(
+        (d) => o.meta!.adjLastEventDate == null || d > o.meta!.adjLastEventDate,
+      )
+    : [];
+  if (o.meta && newer.length)
+    return {
+      rebase: true,
+      reason: `มีปันผล/แตกพาร์ใหม่ ${newer.sort().join(", ")} หลังฐานเดิม (${o.meta.adjLastEventDate})`,
+    };
+  if (!o.meta && o.storedAdjRows > 0)
+    return {
+      rebase: true,
+      reason: `adj_close ที่เก็บไว้ ${o.storedAdjRows} วันไม่ทราบว่ามาจากการดึงครั้งใด — ดึงใหม่ทั้งชุดให้อยู่ฐานเดียวกัน`,
+    };
+  return {
+    rebase: false,
+    reason: o.meta
+      ? "ฐานเดิมยังตรงกับผู้ให้ข้อมูล"
+      : "ยังไม่มี adj_close ที่เก็บไว้",
+  };
+}

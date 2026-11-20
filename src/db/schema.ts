@@ -559,6 +559,20 @@ export const analystConsensus = pgTable(
 );
 
 /**
+ * Provenance of an asset's adjusted closes (Yahoo rebases the whole series on every dividend / split):
+ * every stored adj_close of the asset comes from the fetch made on adjBaseDate, and includes the
+ * corporate actions up to adjLastEventDate. Deleted with the asset.
+ */
+export const priceAdjustmentMeta = pgTable("price_adjustment_meta", {
+  assetId: integer("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  adjBaseDate: date("adj_base_date").notNull(),
+  adjLastEventDate: date("adj_last_event_date"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
  * Shares outstanding effective from a date (capital increases / buybacks change it). Turnover uses the
  * value effective on each day; nothing is assumed when no row covers a date.
  */

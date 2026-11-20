@@ -1,4 +1,8 @@
 import { selectCandidates } from "./universe";
+import {
+  totalReturnSourceFor,
+  type AssetReturnBasis,
+} from "@/lib/finance/total-return-policy";
 import { DEFAULT_RETURN_METHOD } from "../optimize-schema";
 import {
   buildSnapshot,
@@ -30,6 +34,7 @@ import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
 import {
   loadAdjPriceHistory,
+  loadCorporateActionDates,
   loadBenchmark,
   loadFxHistory,
   loadPriceHistory,
@@ -113,6 +118,8 @@ export interface OptimizerUniverse {
   periodsPerYear: number;
   covarianceWarnings: string[];
   returnBasis?: ReturnBasis;
+  /** How each asset's return was measured (MPT A3): close, adj_close, close_no_dividend, nav or bond_schedule. */
+  returnBasisByAsset?: Record<string, AssetReturnBasis>;
   /** Sampling of the common calendar: daily (default) or last actual observation per week / month. */
   frequency?: SampleFrequency;
   /** Aligned periodic returns (only with `withSeries`): per asset, the benchmark, and price dates (returns end on dates[t + 1]). */
@@ -149,6 +156,11 @@ export async function loadUniverse(
     basis === "total_return" ? loadAdjPriceHistory() : Promise.resolve(null),
     getYieldCurve(),
   ]);
+  const actions =
+    basis === "total_return" ? await loadCorporateActionDates() : null;
+  const returnBasisByAsset: Record<string, AssetReturnBasis> = {};
+  const basisNotes: string[] = [];
+  const basisById = new Map<number, AssetReturnBasis>();
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   // Portfolio Rf from the resolver (curve → Settings fallback); without a curve this equals Settings as before.
   const rfInfo = await getRiskFree({ purpose: "portfolio", ...opts.riskFree });
@@ -217,19 +229,39 @@ export async function loadUniverse(
           currency: a.currency,
           fx,
         })
-      : buildLevelSeries({
-          label: a.symbol,
-          observations: window.map(([date, close]) => ({
+      : (() => {
+          const observations = window.map(([date, close]) => ({
             date,
             close,
             adjClose: adjMap?.get(date) ?? null,
-          })),
-          basis,
-          totalReturnSource:
-            basis === "total_return" ? "adjusted_close" : undefined,
-          currency: a.currency,
-          fx,
-        });
+          }));
+          // Total return per asset class (MPT A3): adj_close, or the close where it already is the total return.
+          const src =
+            basis === "total_return"
+              ? totalReturnSourceFor(a, observations, actions!.for(a))
+              : null;
+          if (src && !src.ok)
+            return {
+              ok: false as const,
+              status: "unavailable" as const,
+              label: a.symbol,
+              reason: src.reason,
+              required: src.required,
+            };
+          if (src?.ok && src.note) basisNotes.push(src.note);
+          if (src?.ok) basisById.set(a.id, src.basis);
+          return buildLevelSeries({
+            label: a.symbol,
+            observations,
+            basis: src?.ok && src.source === "close" ? "price_return" : basis,
+            totalReturnSource:
+              src?.ok && src.source === "adjusted_close"
+                ? "adjusted_close"
+                : undefined,
+            currency: a.currency,
+            fx,
+          });
+        })();
     if (!lv.ok) {
       skipped.push({
         symbol: a.symbol,
@@ -255,6 +287,12 @@ export async function loadUniverse(
       return false;
     }
     levelsById.set(a.id, levels);
+    returnBasisByAsset[a.symbol] =
+      basis !== "total_return"
+        ? "close"
+        : bondTr?.ok
+          ? "bond_schedule"
+          : (basisById.get(a.id) ?? "adj_close");
     return true;
   });
 
@@ -322,8 +360,13 @@ export async function loadUniverse(
     covShrunk,
     shrinkage: lw.intensity,
     periodsPerYear: N,
-    covarianceWarnings: [...covarianceWarnings, ...seriesWarnings],
+    covarianceWarnings: [
+      ...covarianceWarnings,
+      ...seriesWarnings,
+      ...basisNotes,
+    ],
     returnBasis: basis,
+    returnBasisByAsset,
     frequency,
     ...(opts.withSeries
       ? { series: { returns: series, benchmark: benchReturns, dates } }
@@ -788,6 +831,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
       beta: a.beta,
     })),
     skipped: u.skipped,
+    returnBasisByAsset: u.returnBasisByAsset,
     objective: r.objective,
     allocations: r.allocations,
     ...(r.riskBased

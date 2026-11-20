@@ -17,6 +17,8 @@ import { loadBenchmark, loadPriceHistory } from "./prices";
 import { getSettings } from "./settings";
 import { listValuations, valueChangedSinceSave } from "./valuations";
 import { abnormalDataQuality } from "@/lib/finance/abnormal/quality";
+import { adjReadiness } from "@/lib/finance/adj-check";
+import { loadAdjCheckInput } from "./prices";
 import { DEFAULT_TRI_SYMBOL } from "./abnormal";
 import { sql } from "drizzle-orm";
 
@@ -117,6 +119,16 @@ export async function dataQualityReport() {
     .slice(0, 10);
   const bench = await loadBenchmark(settings.benchmarkSymbol);
   const abnormal = await abnormalReadiness(settings.benchmarkSymbol);
+  // adj_close coverage / consistency over the optimizer's default look-back (3 years), non-archived assets.
+  const adjFrom = new Date(Date.now() - 365 * 3 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const adjClose = adjReadiness(
+    await loadAdjCheckInput(
+      assets.filter((a) => !a.archivedAt && a.assetClass !== "cash"),
+      adjFrom,
+    ),
+  );
   const held = new Set(
     summary.positions.filter((p) => p.quantity > 0).map((p) => p.assetId),
   );
@@ -163,6 +175,7 @@ export async function dataQualityReport() {
         ).map((s) => ({ symbol: a.symbol, date: s.date, factor: s.factor })),
       ),
     abnormal,
+    adjClose,
     history: assets
       .filter((a) => held.has(a.id) && a.assetClass !== "cash")
       .map((a) => ({
@@ -173,5 +186,5 @@ export async function dataQualityReport() {
       })),
   });
   // Per-stock detail behind the abnormal-trading check (MCP / REST readers).
-  return { ...report, abnormalTrading: abnormal };
+  return { ...report, abnormalTrading: abnormal, adjClose };
 }

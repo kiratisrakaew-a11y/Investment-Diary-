@@ -16,6 +16,7 @@ export function summarizeBacktest(r: Full) {
     universe: r.universe,
     excluded: r.excluded,
     benchmark: r.benchmark,
+    returnBasisByAsset: r.returnBasisByAsset,
     riskFreeInfo: r.riskFreeInfo && {
       rate: r.riskFreeInfo.rate,
       source: r.riskFreeInfo.source,

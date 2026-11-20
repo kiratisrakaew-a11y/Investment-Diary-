@@ -15,6 +15,7 @@ import {
   corporateActionWarnings,
   coverage,
   planWrites,
+  adjRebaseDecision,
   resolveSyncRange,
   withRetry,
   type Coverage,
@@ -24,7 +25,12 @@ import {
 } from "@/lib/finance/price-coverage";
 import { today as todayIso } from "@/lib/validation";
 import { getAssetBySymbol } from "./assets";
-import { loadFxHistory } from "./prices";
+import { loadAdjCheckInput, loadFxHistory } from "./prices";
+import {
+  checkAdjAgainstDividends,
+  type AdjFlag,
+  type AdjReadinessAsset,
+} from "@/lib/finance/adj-check";
 import { getSettings } from "./settings";
 
 export const MAX_SYNC_SYMBOLS = 50;
@@ -111,6 +117,30 @@ export interface SyncDeps {
     fills: { date: string; volume: number }[],
   ): Promise<number>;
   loadFx(): Promise<[string, number][]>;
+  /** Adjusted-close provenance (MPT A2); optional for test doubles that do not exercise it. */
+  loadAdjMeta?(
+    assetId: number,
+  ): Promise<{ adjBaseDate: string; adjLastEventDate: string | null } | null>;
+  /** First stored date and number of stored adj_close values of an asset series. */
+  adjStats?(
+    key: string,
+  ): Promise<{ firstDate: string | null; adjRows: number }>;
+  /**
+   * Replace the adj_close of EVERY stored row of the asset in one transaction: the given value, or null
+   * for a date the provider no longer returns (never a value from another fetch); upsert the metadata.
+   * close / volume untouched. Returns nothing; all-or-nothing.
+   */
+  rebaseAdj?(
+    key: string,
+    adj: Map<string, number | null>,
+    meta: { adjBaseDate: string; adjLastEventDate: string | null },
+  ): Promise<void>;
+  setAdjMeta?(
+    assetId: number,
+    meta: { adjBaseDate: string; adjLastEventDate: string | null },
+  ): Promise<void>;
+  /** Stored close / adj_close + recorded dividends and splits of one asset (A4 checks after an adjusted sync). */
+  adjCheckInput?(asset: AssetLike): Promise<AdjReadinessAsset | null>;
   sleep(ms: number): Promise<void>;
   eligibility(
     symbols: string[],
@@ -156,6 +186,10 @@ export interface SeriesResult {
   adjCloseRebased?: number;
   /** Days in the range with an adjusted close ÷ days with a close (after this sync; dry run = what it would be). */
   adjCloseCoverage?: { withAdjClose: number; withClose: number; ratio: number };
+  /** Whole-series adj_close rebase (adjusted_close syncs): done or not, why, and how many stored rows changed. */
+  adjRebase?: { rebased: boolean; reason: string; rowsChanged: number };
+  /** adj_close vs recorded dividends / splits after an adjusted sync (MPT A4). */
+  adjFlags?: AdjFlag[];
   unchanged: number;
   /** Stored rows that received a volume (prices unchanged). */
   volumeFilled?: number;
@@ -283,6 +317,103 @@ function weekdays(range: SyncRange) {
 }
 
 /** Sync one asset's price series from its configured source. */
+/**
+ * MPT A2: keep one base for an asset's adjusted closes. When the provider rebased (or the stored base is
+ * unknown / older than a new dividend or split), fetch the WHOLE stored range again and replace adj_close
+ * for every stored row in one transaction. The rows of the requested range then come from that same fetch.
+ */
+async function rebaseAdjIfNeeded(
+  deps: SyncDeps,
+  asset: AssetLike,
+  provider: string,
+  history: DailyHistory,
+  o: Opts,
+) {
+  if (
+    !deps.loadAdjMeta ||
+    !deps.adjStats ||
+    !deps.rebaseAdj ||
+    !deps.setAdjMeta
+  )
+    return null;
+  const key = `asset:${asset.id}`;
+  const meta = await deps.loadAdjMeta(asset.id);
+  const stats = await deps.adjStats(key);
+  const existing = await deps.loadExisting(key, o.range);
+  const eventDates = [
+    ...history.dividends.map((d) => d.date),
+    ...history.splits.map((x) => x.date),
+  ];
+  const decision = adjRebaseDecision(existing, history.rows, {
+    meta,
+    storedAdjRows: stats.adjRows,
+    eventDates,
+  });
+  const lastEvent = (dates: string[]) =>
+    dates.reduce<string | null>(
+      (m, d) => (m == null || d > m ? d : m),
+      meta?.adjLastEventDate ?? null,
+    );
+  if (!decision.rebase) {
+    // First adjusted sync of this asset: record the base it starts on.
+    if (!o.dryRun && !meta && history.rows.some((r) => r.adjClose != null))
+      await deps.setAdjMeta(asset.id, {
+        adjBaseDate: deps.today(),
+        adjLastEventDate: lastEvent(eventDates),
+      });
+    return {
+      history,
+      report: { rebased: false, reason: decision.reason, rowsChanged: 0 },
+    };
+  }
+  const from =
+    stats.firstDate && stats.firstDate < o.range.from
+      ? stats.firstDate
+      : o.range.from;
+  const full =
+    from < o.range.from
+      ? await retry(deps, () =>
+          deps.fetchHistory(provider, { from, to: o.range.to }),
+        )
+      : history;
+  const adj = new Map(
+    full.rows.map(
+      (r) => [r.date, r.adjClose ?? null] as [string, number | null],
+    ),
+  );
+  const stored = await deps.loadExisting(key, { from, to: o.range.to });
+  let rowsChanged = 0;
+  for (const [d, cur] of stored) {
+    const next = adj.get(d) ?? null;
+    if (
+      !(cur.adjClose == null
+        ? next == null
+        : next != null &&
+          Math.abs(cur.adjClose - next) <= 1e-9 * Math.max(1, Math.abs(next)))
+    )
+      rowsChanged++;
+  }
+  if (!o.dryRun)
+    await deps.rebaseAdj(key, adj, {
+      adjBaseDate: deps.today(),
+      adjLastEventDate: lastEvent([
+        ...full.dividends.map((d) => d.date),
+        ...full.splits.map((x) => x.date),
+      ]),
+    });
+  // The requested range from the same fetch, so new rows share the base.
+  const inRange = {
+    ...full,
+    rows: full.rows.filter(
+      (r) => r.date >= o.range.from && r.date <= o.range.to,
+    ),
+  };
+  return {
+    history: inRange,
+    report: { rebased: true, reason: decision.reason, rowsChanged },
+  };
+}
+
 export async function syncAssetSeries(
   deps: SyncDeps,
   asset: AssetLike,
@@ -378,10 +509,27 @@ export async function syncAssetSeries(
     const history = await retry(deps, () =>
       deps.fetchHistory(provider, o.range),
     );
-    const r = await applySeries(deps, key, asset.symbol, history, o, held, {
-      source: "yahoo",
-      providerSymbol: provider,
-    });
+    const rebase =
+      o.priceType === "adjusted_close"
+        ? await rebaseAdjIfNeeded(deps, asset, provider, history, o)
+        : null;
+    const r = await applySeries(
+      deps,
+      key,
+      asset.symbol,
+      rebase?.history ?? history,
+      o,
+      held,
+      {
+        source: "yahoo",
+        providerSymbol: provider,
+      },
+    );
+    if (rebase) {
+      r.adjRebase = rebase.report;
+      // A rebase replaces the stored values itself (the range plan then finds them equal).
+      if (rebase.report.rebased) r.adjCloseRebased = rebase.report.rowsChanged;
+    }
     if (!o.dryRun && history.dividends.length && deps.saveDividendEvents) {
       const d = await deps.saveDividendEvents(
         asset.symbol,
@@ -394,11 +542,37 @@ export async function syncAssetSeries(
           `${asset.symbol}: บันทึกเหตุการณ์ปันผลจาก Yahoo ${d.inserted} ใหม่ / ${d.updated} แก้ไข (ข้อมูลผู้ออก — ไม่ใช่รายการรับเงินในบัญชี)`,
         );
     }
-    if (o.priceType === "adjusted_close" && r.status === "ok") {
-      r.warnings.push(
-        `${asset.symbol}: adjusted close ของ Yahoo ถูกปรับย้อนหลังทุกครั้งที่มีปันผลใหม่ — ควร sync ทั้งช่วงพร้อม overwriteExisting เพื่อให้ทั้งชุดอยู่บนฐานเดียวกัน`,
-      );
+    if (
+      o.priceType === "adjusted_close" &&
+      !o.dryRun &&
+      r.status === "ok" &&
+      deps.adjCheckInput
+    ) {
+      // Diagnostic only: a failed check is reported, never turns a completed sync into an error.
+      try {
+        const input = await deps.adjCheckInput(asset);
+        if (input) {
+          r.adjFlags = checkAdjAgainstDividends(
+            input.symbol,
+            input.obs,
+            input.dividends,
+            input.splitDates,
+          );
+          if (r.adjFlags.length)
+            r.warnings.push(
+              `${asset.symbol}: adj_close ไม่สอดคล้องกับข้อมูลปันผล/แตกพาร์ ${r.adjFlags.length} จุด — ${r.adjFlags[0].message}`,
+            );
+        }
+      } catch (e) {
+        r.warnings.push(
+          `${asset.symbol}: ตรวจ adj_close กับข้อมูลปันผลไม่สำเร็จ (${e instanceof Error ? e.message : String(e)}) — ราคาบันทึกแล้วตามปกติ`,
+        );
+      }
     }
+    if (rebase?.report.rebased)
+      r.warnings.push(
+        `${asset.symbol}: ${o.dryRun ? "จะ" : ""}ปรับ adj_close ทั้งชุดเป็นฐานใหม่ (${rebase.report.reason}) — ${rebase.report.rowsChanged} วันเปลี่ยน`,
+      );
     return r;
   } catch (e) {
     return {
@@ -814,17 +988,15 @@ export const dbDeps: SyncDeps = {
         const part = rows.slice(i, i + CHUNK);
         if (kind === "asset") {
           const t = schema.prices;
-          const q = db
-            .insert(t)
-            .values(
-              part.map((r) => ({
-                assetId: Number(id),
-                date: r.date,
-                close: r.close,
-                adjClose: r.adjClose,
-                volume: r.volume ?? null,
-              })),
-            );
+          const q = db.insert(t).values(
+            part.map((r) => ({
+              assetId: Number(id),
+              date: r.date,
+              close: r.close,
+              adjClose: r.adjClose,
+              volume: r.volume ?? null,
+            })),
+          );
           await (update
             ? q.onConflictDoUpdate({
                 target: [t.assetId, t.date],
@@ -836,16 +1008,14 @@ export const dbDeps: SyncDeps = {
             : q.onConflictDoNothing());
         } else if (kind === "bench") {
           const t = schema.benchmarkPrices;
-          const q = db
-            .insert(t)
-            .values(
-              part.map((r) => ({
-                symbol: id,
-                date: r.date,
-                close: r.close,
-                adjClose: r.adjClose,
-              })),
-            );
+          const q = db.insert(t).values(
+            part.map((r) => ({
+              symbol: id,
+              date: r.date,
+              close: r.close,
+              adjClose: r.adjClose,
+            })),
+          );
           await (update
             ? q.onConflictDoUpdate({
                 target: [t.symbol, t.date],
@@ -871,6 +1041,89 @@ export const dbDeps: SyncDeps = {
         }
       }
     }
+  },
+  async loadAdjMeta(assetId) {
+    const [m] = await getDb()
+      .select()
+      .from(schema.priceAdjustmentMeta)
+      .where(eq(schema.priceAdjustmentMeta.assetId, assetId));
+    return m
+      ? { adjBaseDate: m.adjBaseDate, adjLastEventDate: m.adjLastEventDate }
+      : null;
+  },
+  async adjStats(key) {
+    const { kind, id } = tableFor(key);
+    if (kind !== "asset") return { firstDate: null, adjRows: 0 };
+    const t = schema.prices;
+    const [r] = await getDb()
+      .select({
+        first: sql<string | null>`min(${t.date})`,
+        adj: sql<number>`count(${t.adjClose})::int`,
+      })
+      .from(t)
+      .where(eq(t.assetId, Number(id)));
+    return { firstDate: r?.first ?? null, adjRows: r?.adj ?? 0 };
+  },
+  async rebaseAdj(key, adj, meta) {
+    const { kind, id } = tableFor(key);
+    if (kind !== "asset") return;
+    const t = schema.prices;
+    const assetId = Number(id);
+    const payload = JSON.stringify(
+      [...adj].filter(([, a]) => a != null).map(([d, a]) => ({ d, a })),
+    );
+    // One transaction: every stored adj_close of the asset comes from this fetch or is null — never mixed.
+    await getDb().transaction(async (tx) => {
+      await tx.execute(sql`
+        update ${t} set adj_close = (x->>'a')::double precision
+        from jsonb_array_elements(${payload}::jsonb) x
+        where ${t.assetId} = ${assetId} and ${t.date} = (x->>'d')::date`);
+      await tx.execute(sql`
+        update ${t} set adj_close = null
+        where ${t.assetId} = ${assetId} and adj_close is not null
+          and ${t.date} not in (select (x->>'d')::date from jsonb_array_elements(${payload}::jsonb) x)`);
+      await tx
+        .insert(schema.priceAdjustmentMeta)
+        .values({
+          assetId,
+          adjBaseDate: meta.adjBaseDate,
+          adjLastEventDate: meta.adjLastEventDate,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: schema.priceAdjustmentMeta.assetId,
+          set: {
+            adjBaseDate: meta.adjBaseDate,
+            adjLastEventDate: meta.adjLastEventDate,
+            updatedAt: new Date(),
+          },
+        });
+    });
+  },
+  async setAdjMeta(assetId, meta) {
+    await getDb()
+      .insert(schema.priceAdjustmentMeta)
+      .values({
+        assetId,
+        adjBaseDate: meta.adjBaseDate,
+        adjLastEventDate: meta.adjLastEventDate,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.priceAdjustmentMeta.assetId,
+        set: {
+          adjBaseDate: meta.adjBaseDate,
+          adjLastEventDate: meta.adjLastEventDate,
+          updatedAt: new Date(),
+        },
+      });
+  },
+  async adjCheckInput(asset) {
+    const [x] = await loadAdjCheckInput(
+      [{ id: asset.id, symbol: asset.symbol, assetClass: asset.assetClass }],
+      "1900-01-01",
+    );
+    return x ?? null;
   },
   async fillVolume(key, fills) {
     const { kind, id } = tableFor(key);

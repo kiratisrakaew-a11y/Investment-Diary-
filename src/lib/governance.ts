@@ -4,6 +4,7 @@
  * dashboard, settings page, MCP and REST.
  */
 import type { AbnormalDataQuality } from "./finance/abnormal/quality";
+import type { AdjReadiness } from "./finance/adj-check";
 import { z } from "zod";
 import { valuationInput, type ValuationInput } from "./valuation-schemas";
 import type { InputMeta } from "./finance/valuation";
@@ -324,6 +325,8 @@ export interface DataQualityInput {
   splits?: { symbol: string; date: string; factor: number }[];
   /** Readiness of Thai stocks for abnormal-trading analysis (abnormalDataQuality). */
   abnormal?: AbnormalDataQuality;
+  /** adj_close coverage and consistency with dividends for total return (MPT A5). */
+  adjClose?: AdjReadiness;
 }
 
 const ABNORMAL_ISSUE_LABEL: Record<
@@ -535,6 +538,40 @@ export function assessDataQuality(d: DataQualityInput) {
       "warn",
       parts.join(" · "),
       "หุ้นไทยทุกตัวมี volume, จำนวนหุ้น, ประวัติพอ และมี TRI",
+      "/holdings",
+    );
+  }
+
+  if (d.adjClose) {
+    const a = d.adjClose;
+    const lack = a.assets.filter((x) => x.coverage < 1);
+    const parts = [
+      lack.length &&
+        `adj_close ไม่ครบ: ${lack
+          .slice(0, 8)
+          .map((x) => `${x.symbol} (${x.withAdjClose}/${x.days} วัน)`)
+          .join(
+            ", ",
+          )}${lack.length > 8 ? ` และอีก ${lack.length - 8} ตัว` : ""} — sync_historical_prices symbols:[${lack
+          .slice(0, 8)
+          .map((x) => `"${x.symbol}"`)
+          .join(", ")}] priceType:"adjusted_close"`,
+      ...a.assets
+        .filter((x) => x.flags.length)
+        .slice(0, 4)
+        .map(
+          (x) =>
+            `${x.flags[0].message}${x.flags.length > 1 ? ` (และอีก ${x.flags.length - 1} ข้อ)` : ""}`,
+        ),
+    ].filter(Boolean);
+    add(
+      "ราคาปรับปันผล",
+      !a.ok,
+      "warn",
+      parts.join(" · "),
+      a.assets.length
+        ? `adj_close ครบและสอดคล้องกับปันผล (${a.assets.length} สินทรัพย์)`
+        : "ไม่มีสินทรัพย์ที่ต้องใช้ adj_close",
       "/holdings",
     );
   }

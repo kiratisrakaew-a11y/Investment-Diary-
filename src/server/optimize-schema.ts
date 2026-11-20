@@ -113,7 +113,7 @@ export const optimizeInput = z
       .enum(["price_return", "total_return"])
       .optional()
       .describe(
-        "Return series for μ/Σ: price_return (closes, default) or total_return (provider dividend-adjusted closes; assets without full adj_close coverage are skipped)",
+        "Return series for μ/Σ: price_return (closes, default) or total_return per asset (returnBasisByAsset): adj_close when complete; gold, accumulating funds (NAV) and stocks without dividends / splits in the period use their close (already their total return); a stock that paid dividends without full adj_close is skipped with the reason",
       ),
     returnMethod: z
       .enum(["historical", "capm", "blend", "black_litterman"])

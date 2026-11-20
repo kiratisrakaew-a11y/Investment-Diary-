@@ -141,6 +141,13 @@
       "when": 1795168808998,
       "tag": "0019_backtest_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795171107897,
+      "tag": "0020_price_adjustment_meta",
+      "breakpoints": true
     }
   ]
 }
