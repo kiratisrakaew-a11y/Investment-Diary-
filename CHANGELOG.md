@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-20 — Backtest fix, phase B (BACKTEST_SPEC: BT-4, BT-8, BT-6)
+- **BT-4 constraints.**
+  - `backtest_portfolio` takes `constraints` (the same schema and builder as optimize_portfolio: groups, maxPerSector, maxPerIssuer, maxPerCurrency, assetBounds …), applied at every rebalance.
+  - Sectors / issuers are today's values; this is stated in `limitations`.
+  - A round the optimizer cannot solve no longer stops the whole backtest. That round keeps the current holdings and a dated warning names the reason.
+  - Root cause: `decide()` returned an error and the backtest failed outright.
+- **BT-8 calendar rebalancing.**
+  - New `rebalanceAnchor`, default `calendar`: rebalance on the last trading day of each month / quarter / half / year. The first purchase is on the start date.
+  - `periods` keeps the old "every N observations".
+  - New `rebalanceLog`: date, target, weights after trading, turnover, cost, skip reason. Its length equals `period.rebalances`.
+  - compare_portfolio_models has the same option.
+- **BT-6.**
+  - The default `returnMethod` of backtest and compare is now the optimizer's default (`blend`), from one constant (`DEFAULT_RETURN_METHOD`). The backtest / compare pages start on blend too.
+- **Numbers change for calls that rely on the defaults**: rebalance dates are now calendar-anchored and μ is estimated with blend instead of historical.
+  - Passing `rebalanceAnchor: "periods"` and `returnMethod: "historical"` reproduces the previous results exactly (verified identical on 6 cases: equal weight, max Sharpe, min variance, min CVaR, risk parity, compare).
+- Tests: calendar dates (quarterly / monthly), log contents, constraint caps in every round, an optimizer failure in one round, and check:backtest on the local DB (maxPerSector 35%, infeasible groups, quarter-ends, default blend).
+
 ## 2026-11-20 — Backtest fix, phase A (spec BACKTEST_SPEC: BT-1, BT-2, BT-3, BT-5, BT-9)
 - **BT-1 dividends without a payment date.**
   - New Settings value `dividendPaymentLagDays`, default 21 calendar days. It is labelled as an assumption, and migration 0019 is additive, with a rollback file.

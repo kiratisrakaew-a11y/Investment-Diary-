@@ -93,7 +93,12 @@ async function main() {
       );
     let s = 5;
     const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647 - 0.5;
-    const mk = async (symbol: string, from: number, archived = false) => {
+    const mk = async (
+      symbol: string,
+      from: number,
+      archived = false,
+      sector: string | null = null,
+    ) => {
       const [a] = await db
         .insert(schema.assets)
         .values({
@@ -102,6 +107,7 @@ async function main() {
           assetClass: "thai_stock",
           priceSource: "manual",
           ...(archived ? { archivedAt: new Date() } : {}),
+          ...(sector ? { sector } : {}),
         })
         .returning();
       let p = 30;
@@ -121,6 +127,11 @@ async function main() {
     await mk("TLB-B", 0);
     await mk("TLB-IPO", bench.length - 120);
     await mk("TLB-ARC", 0, true);
+    await mk("TLB-S1", 0, false, "Bank");
+    await mk("TLB-S2", 0, false, "Bank");
+    await mk("TLB-S3", 0, false, "Commerce");
+    await mk("TLB-S4", 0, false, "Commerce");
+    await mk("TLB-S5", 0, false, "Energy");
     // Dividends of TLB-A: three without a payment date (as Yahoo provides), one with a real payment date.
     const exAt = (i: number) => bench[i].date;
     const ev = (i: number, dps: number, pay: string | null, id: string) => ({
@@ -200,15 +211,13 @@ async function main() {
       r2p.benchmark?.basis === "price" &&
         !r2p.warnings.some((w) => /basis ไม่ตรง/.test(w)),
     );
-    await db
-      .insert(schema.benchmarkPrices)
-      .values(
-        bench.map((b, i) => ({
-          symbol: "SETTRI",
-          date: b.date,
-          close: b.close * 6 * 1.0001 ** i,
-        })),
-      );
+    await db.insert(schema.benchmarkPrices).values(
+      bench.map((b, i) => ({
+        symbol: "SETTRI",
+        date: b.date,
+        close: b.close * 6 * 1.0001 ** i,
+      })),
+    );
     addedTri = true;
     const r2t = await backtestPortfolio({
       strategy: "equal_weight",
@@ -277,6 +286,71 @@ async function main() {
     check(
       "BT-9 limitations no longer carry the uncounted-dividend note (moved to warnings)",
       !r1n.limitations.some((l) => /ไม่ถูกนับ/.test(l)),
+    );
+
+    // BT-4 / BT-6 / BT-8 through the service.
+    const SEC = ["TLB-S1", "TLB-S2", "TLB-S3", "TLB-S4", "TLB-S5"];
+    const bank = ["TLB-S1", "TLB-S2"];
+    const comm = ["TLB-S3", "TLB-S4"];
+    const r4 = await backtestPortfolio({
+      strategy: "max_sharpe",
+      symbols: SEC,
+      windowDays: 120,
+      constraints: { maxPerSector: 0.35 },
+    });
+    const sum = (w: Record<string, number> | null, g: string[]) =>
+      g.reduce((a, s) => a + (w?.[s] ?? 0), 0);
+    check(
+      "BT-4 constraints.maxPerSector 0.35 → every rebalance in rebalanceLog has each sector ≤ 35%",
+      r4.rebalanceLog.length > 3 &&
+        r4.rebalanceLog.every(
+          (row) =>
+            row.skipped != null ||
+            (sum(row.target, bank) <= 0.35 + 1e-9 &&
+              sum(row.target, comm) <= 0.35 + 1e-9 &&
+              (row.target?.["TLB-S5"] ?? 0) <= 0.35 + 1e-9),
+        ),
+      `${r4.rebalanceLog.length} rebalances`,
+    );
+    check(
+      "BT-4 limitation says sectors are today's values",
+      r4.limitations.some((l) => /ข้อมูล ณ ปัจจุบัน/.test(l)),
+    );
+    const r4i = await backtestPortfolio({
+      strategy: "min_variance",
+      symbols: SEC,
+      windowDays: 120,
+      constraints: { groups: [{ name: "Bank", symbols: bank, min: 0.9 }] },
+      maxWeight: 0.3,
+    });
+    check(
+      "BT-4 infeasible constraints → backtest finishes, every round held with a dated warning",
+      r4i.rebalanceLog.every((row) => row.skipped != null) &&
+        r4i.warnings.filter((w) => /ถือพอร์ตเดิม/.test(w)).length ===
+          r4i.rebalanceLog.length,
+    );
+    const r8 = await backtestPortfolio({
+      strategy: "equal_weight",
+      symbols: AB,
+      rebalance: "quarterly",
+    });
+    const qEnd = (d: string) =>
+      ["03", "06", "09", "12"].includes(d.slice(5, 7));
+    check(
+      "BT-8 quarterly + calendar (default) → rebalances after the first purchase are quarter-ends; log length = rebalances",
+      r8.rebalanceLog.length === r8.period.rebalances &&
+        r8.rebalanceLog.slice(1).every((row) => qEnd(row.date)),
+      r8.rebalanceLog.map((x) => x.date).join(","),
+    );
+    const r6 = await backtestPortfolio({
+      strategy: "max_sharpe",
+      symbols: AB,
+      windowDays: 120,
+    });
+    check(
+      "BT-6 returnMethod omitted → blend, the optimizer's default (stated in methodology)",
+      r6.input.returnMethod === "blend" &&
+        r6.methodology.some((m) => m.includes("μ (blend")),
     );
 
     // Compare uses the same data loader: archived skipped, Rf / benchmark from the same helpers.

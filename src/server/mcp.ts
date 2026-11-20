@@ -482,7 +482,7 @@ export function createMcpServer() {
     {
       title: "Walk-forward backtest",
       description:
-        "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends). Rf from the same resolver as optimize_portfolio (riskFree, returned as riskFreeInfo); the benchmark matches the portfolio's basis (SET TRI when dividends are included, else the price index; a mismatch is a warning); dividend events without a payment date use the Settings lag (paymentLagDays null = not credited, valued in warnings); archived assets are skipped; a too-short common period names the limiting assets (historyPolicy drop_short removes them). warnings = issues that bias the numbers, with their size; limitations = method.",
+        "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends). Rf from the same resolver as optimize_portfolio (riskFree, returned as riskFreeInfo); the benchmark matches the portfolio's basis (SET TRI when dividends are included, else the price index; a mismatch is a warning); dividend events without a payment date use the Settings lag (paymentLagDays null = not credited, valued in warnings); archived assets are skipped; a too-short common period names the limiting assets (historyPolicy drop_short removes them). warnings = issues that bias the numbers, with their size; limitations = method. constraints = the same schema as optimize_portfolio, applied at every rebalance (a round the optimizer cannot solve keeps the holdings and is reported); rebalanceAnchor calendar (default) = last trading day of each period, periods = every N observations; rebalanceLog lists every rebalance. returnMethod defaults to blend like optimize_portfolio.",
       inputSchema: backtestInput.shape,
       annotations: { readOnlyHint: true },
     },
@@ -852,12 +852,10 @@ export function createMcpServer() {
         symbol: z.string(),
         currency: z.string().optional(),
         years: z.array(
-          financialYearSchema
-            .partial()
-            .extend({
-              fiscalYear: z.number().int(),
-              publishedAt: isoDate.optional(),
-            }),
+          financialYearSchema.partial().extend({
+            fiscalYear: z.number().int(),
+            publishedAt: isoDate.optional(),
+          }),
         ),
       },
     },

@@ -31,7 +31,12 @@ import {
   type FactorStrategyId,
 } from "@/lib/finance/factor-strategies";
 import { lotFor, tradingCostsSchema } from "@/lib/finance/rebalance";
-import { blackLittermanInput, riskFreeInput } from "../optimize-schema";
+import {
+  DEFAULT_RETURN_METHOD,
+  blackLittermanInput,
+  riskFreeInput,
+} from "../optimize-schema";
+import { buildConstraints, constraintsInput } from "@/lib/finance/exposure";
 import { selectCandidates } from "./universe";
 import { getRiskFree } from "./risk-free";
 import { listAssets } from "./assets";
@@ -84,7 +89,7 @@ export const backtestInput = z
     blackLitterman: blackLittermanInput.optional(),
     returnMethod: z
       .enum(["historical", "capm", "blend"])
-      .default("historical")
+      .default(DEFAULT_RETURN_METHOD)
       .describe("μ estimate in each training window (max_sharpe)"),
     covMethod: z.enum(["sample", "ledoit_wolf"]).default("ledoit_wolf"),
     windowDays: z
@@ -97,6 +102,17 @@ export const backtestInput = z
     rebalance: z
       .enum(["monthly", "quarterly", "semiannual", "annual"])
       .default("quarterly"),
+    rebalanceAnchor: z
+      .enum(["calendar", "periods"])
+      .default("calendar")
+      .describe(
+        "calendar = last trading day of each month / quarter / half / year (first purchase on the start date); periods = every N observations (previous behaviour)",
+      ),
+    constraints: constraintsInput
+      .optional()
+      .describe(
+        "Same constraints as optimize_portfolio (groups, maxPerSector, maxPerIssuer, maxPerCurrency, assetBounds …), applied at every rebalance; sectors / issuers are today's values",
+      ),
     minWeight: z.number().min(0).max(1).default(0),
     maxWeight: z.number().min(0).max(1).default(1),
     initialCapital: z.number().positive().default(1_000_000),
@@ -661,6 +677,38 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     };
   }
 
+  // Constraints: the optimizer's builder on today's asset metadata (no sector / issuer history).
+  const built = buildConstraints(
+    pool.map((a) => ({
+      symbol: a.symbol,
+      assetClass: a.assetClass,
+      issuer: a.issuer ?? null,
+      sector: a.sector ?? null,
+      rating: a.assetClass === "bond" ? "unrated" : null,
+      modifiedDuration: null,
+      currency: a.currency,
+    })),
+    { min: x.minWeight, max: x.maxWeight },
+    x.constraints,
+    x.initialCapital,
+  );
+  if (built.unsupported.length)
+    throw new Error(
+      `ข้อจำกัดที่ backtest ไม่รองรับ: ${built.unsupported.join(" · ")}`,
+    );
+  if (x.constraints) dataWarnings.push(...built.warnings);
+  const constraintLimits: string[] = [];
+  if (x.constraints && (built.bounds.linear?.length ?? 0) > 0)
+    constraintLimits.push(
+      "ข้อจำกัดหมวด / ผู้ออก / สกุลเงินใช้ข้อมูล ณ ปัจจุบันกับทุกรอบในอดีต (ไม่มีประวัติการจัดหมวด)",
+    );
+  if (
+    x.constraints &&
+    (built.unclassified.sector.length || built.unclassified.issuer.length)
+  )
+    dataWarnings.push(
+      `สินทรัพย์ที่ไม่มีหมวด / ผู้ออก ไม่ถูกนับในเพดานนั้น: ${[...built.unclassified.sector, ...built.unclassified.issuer].filter((v, i, a) => a.indexOf(v) === i).join(", ")}`,
+    );
   const r = backtest({
     symbols,
     dates,
@@ -680,7 +728,9 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     covMethod: x.covMethod,
     window: x.windowDays,
     rebalanceEvery: every,
-    bounds: { min: x.minWeight, max: x.maxWeight },
+    rebalanceCalendar:
+      x.rebalanceAnchor === "calendar" ? x.rebalance : undefined,
+    bounds: built.bounds,
     rf,
     erp: settings.equityRiskPremium / 100,
     initialCapital: x.initialCapital,
@@ -750,6 +800,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
           ]
         : []),
       `ปฏิทินร่วม: ใช้เฉพาะวันที่ทุกสินทรัพย์มีราคา (${dates.length} วัน)${excluded.length ? ` · ไม่รวม ${excluded.map((e) => e.symbol).join(", ")}` : ""}`,
+      ...constraintLimits,
       "ผลในอดีตไม่รับประกันผลในอนาคต",
     ],
   };

@@ -68,6 +68,9 @@ export const blackLittermanInput = z.object({
 });
 
 /** Input for the Markowitz optimizer tools (MCP / REST / advisor). */
+/** Default μ estimator for every tool (optimize, backtest, compare): one place, so the tools agree. */
+export const DEFAULT_RETURN_METHOD = "blend" as const;
+
 /** Risk-free resolver options shared by optimize / compare / backtest (same resolver, riskFreeInfo returned). */
 export const riskFreeInput = z
   .object({

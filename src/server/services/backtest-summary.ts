@@ -61,6 +61,27 @@ export function summarizeBacktest(r: Full) {
     turnover: r.turnover,
     trades: r.trades.length,
     latestWeights: r.weights.at(-1) ?? null,
+    // Every rebalance (BT-8): target / after-trade weights rounded to 0.01%, turnover, cost, why skipped.
+    rebalanceLog: r.rebalanceLog.map((x) => ({
+      date: x.date,
+      target:
+        x.target &&
+        Object.fromEntries(
+          Object.entries(x.target).map(([k, v]) => [
+            k,
+            Math.round(v * 10_000) / 10_000,
+          ]),
+        ),
+      actual: Object.fromEntries(
+        Object.entries(x.actual).map(([k, v]) => [
+          k,
+          Math.round(v * 10_000) / 10_000,
+        ]),
+      ),
+      turnover: Math.round(x.turnover * 10_000) / 10_000,
+      cost: Math.round(x.cost),
+      skipped: x.skipped,
+    })),
     equityCurveMonthEnd: monthEnd.map((v) => ({
       date: v.date,
       value: Math.round(v.value),

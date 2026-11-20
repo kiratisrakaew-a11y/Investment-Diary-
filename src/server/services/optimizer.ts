@@ -1,4 +1,5 @@
 import { selectCandidates } from "./universe";
+import { DEFAULT_RETURN_METHOD } from "../optimize-schema";
 import {
   buildSnapshot,
   type AssetInput,
@@ -516,7 +517,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     return { ok: false as const, reason: u.reason, skipped: u.skipped };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
-  const method = p.returnMethod ?? "blend";
+  const method = p.returnMethod ?? DEFAULT_RETURN_METHOD;
   const bondMethod = p.bondReturnMethod ?? "same_as_other";
   let mu = expectedReturns(u, method, p.overrides, bondMethod);
   let cov = baseCov;

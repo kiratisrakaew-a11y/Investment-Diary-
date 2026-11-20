@@ -19,6 +19,7 @@ import {
 import { blackLitterman, type BlView } from "./black-litterman";
 import { rebalance, type CostBreakdown, type TradingCosts } from "./rebalance";
 import { beta as calcBeta } from "./risk";
+import type { Bounds } from "./optimizer";
 import { mean } from "./stats";
 import { computeMetrics, type PerformanceMetrics } from "./metrics";
 import { alignWithBenchmark } from "./return-series";
@@ -99,7 +100,13 @@ export interface BacktestInput {
   window: number;
   /** Rebalance every k observations (≥ 1). */
   rebalanceEvery: number;
-  bounds: { min: number; max: number };
+  /** Same constraint set as the optimizer (box, per-asset, linear groups / sectors / issuers). */
+  bounds: Bounds;
+  /**
+   * Calendar anchor: rebalance on the last trading day of each month / quarter / half / year (the first
+   * purchase is on the start date). Absent = every `rebalanceEvery` observations (original behaviour).
+   */
+  rebalanceCalendar?: "monthly" | "quarterly" | "semiannual" | "annual";
   rf: number;
   erp: number;
   initialCapital: number;
@@ -151,6 +158,15 @@ export interface BacktestResult {
     shareOfInitial: number;
   };
   turnover: { total: number; annualized: number | null; perRebalance: number };
+  /** One row per rebalance date: targets, weights after lot rounding, turnover, cost, or why it was skipped. */
+  rebalanceLog: {
+    date: string;
+    target: Record<string, number> | null;
+    actual: Record<string, number>;
+    turnover: number;
+    cost: number;
+    skipped: string | null;
+  }[];
   metrics: PerformanceMetrics;
   methodology: string[];
   warnings: string[];
@@ -291,7 +307,7 @@ export function backtest(x: BacktestInput): BacktestResult {
         selected?: string[];
         diagnostics?: string[];
       }
-    | { error: string } => {
+    | { error: string; hold?: true } => {
     if (isProviderStrategy)
       return provider!({ t, cutoff: x.dates[t - 1], tradeDate: x.dates[t] });
     if (x.strategy === "equal_weight") return { w: Array(n).fill(1 / n) };
@@ -365,14 +381,31 @@ export function backtest(x: BacktestInput): BacktestResult {
             note: `ไม่มีพอร์ตที่ผลตอบแทนคาดหวังเกิน Rf — ใช้ minimum variance แทน`,
           };
       }
-      return { error: r.issue.message };
+      // Infeasible / failed optimization in this window only: keep the current holdings (reported).
+      return { error: r.issue.message, hold: true as const };
     }
     return { w: r.risky.weights };
   };
 
   const rebalanceIdx: number[] = [];
   if (x.strategy === "buy_and_hold") rebalanceIdx.push(start);
-  else
+  else if (x.rebalanceCalendar) {
+    // Period key per date; the last trading day of a period is the day before the key changes.
+    const key = (d: string) => {
+      const y = d.slice(0, 4);
+      const m = Number(d.slice(5, 7));
+      return x.rebalanceCalendar === "monthly"
+        ? d.slice(0, 7)
+        : x.rebalanceCalendar === "quarterly"
+          ? `${y}Q${Math.ceil(m / 3)}`
+          : x.rebalanceCalendar === "semiannual"
+            ? `${y}H${m <= 6 ? 1 : 2}`
+            : y;
+    };
+    rebalanceIdx.push(start);
+    for (let t = start + 1; t < T - 1; t++)
+      if (key(x.dates[t]) !== key(x.dates[t + 1])) rebalanceIdx.push(t);
+  } else
     for (let t = start; t < T; t += Math.max(1, x.rebalanceEvery))
       rebalanceIdx.push(t);
   const isRebal = new Set(rebalanceIdx);
@@ -392,6 +425,7 @@ export function backtest(x: BacktestInput): BacktestResult {
   const trades: BacktestResult["trades"] = [];
   const notes = new Map<string, number>();
   const decisions: NonNullable<BacktestResult["decisions"]> = [];
+  const rebalanceLog: BacktestResult["rebalanceLog"] = [];
 
   // Dividend cashflows: index of the first trading date on/after the ex-date and the payment date.
   const firstIdx = (d: string) => {
@@ -523,60 +557,97 @@ export function backtest(x: BacktestInput): BacktestResult {
     }
     if (isRebal.has(t)) {
       const d = decide(t);
-      if ("error" in d) return fail(`${x.dates[t]}: ${d.error}`);
-      if (d.note) notes.set(d.note, (notes.get(d.note) ?? 0) + 1);
-      if (isProviderStrategy)
-        decisions.push({
+      if ("error" in d && !("hold" in d && d.hold))
+        return fail(`${x.dates[t]}: ${d.error}`);
+      if ("error" in d) {
+        const navH = q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash;
+        const why = `optimizer ใช้ไม่ได้ในรอบนี้ (${d.error}) — ถือพอร์ตเดิม`;
+        warnings.push(`${x.dates[t]}: ${why}`);
+        rebalanceLog.push({
           date: x.dates[t],
-          cutoff: x.dates[t - 1],
-          selected: d.selected ?? x.symbols.filter((_, i) => d.w[i] > 0),
-          diagnostics: d.diagnostics ?? [],
+          target: null,
+          actual: Object.fromEntries(
+            x.symbols.map((s, i) => [
+              s,
+              navH > 0 ? (q[i] * x.prices[i][t]) / navH : 0,
+            ]),
+          ),
+          turnover: 0,
+          cost: 0,
+          skipped: why,
         });
-      lastTarget = d.w;
-      const r = rebalance({
-        assets: x.symbols.map((s, i) => ({
-          symbol: s,
-          price: x.prices[i][t],
-          quantity: q[i],
-          lot: x.useLots ? (x.lots[s] ?? 1) : 1e-6,
-          target: d.w[i],
-        })),
-        cash,
-        extraCash: 0,
-        cashReserve: 0,
-        costs: x.costs,
-        objective: "track",
-        noTradeBand: 0,
-        allowSell: true,
-        cov: null,
-        fractional: !x.useLots,
-      });
-      if (!r.ok) return fail(`${x.dates[t]}: ${r.violations.join(" · ")}`);
-      for (const tr of r.trades) {
-        if (tr.side === "hold") continue;
-        trades.push({
+      } else {
+        if (d.note) notes.set(d.note, (notes.get(d.note) ?? 0) + 1);
+        if (isProviderStrategy)
+          decisions.push({
+            date: x.dates[t],
+            cutoff: x.dates[t - 1],
+            selected: d.selected ?? x.symbols.filter((_, i) => d.w[i] > 0),
+            diagnostics: d.diagnostics ?? [],
+          });
+        lastTarget = d.w;
+        const r = rebalance({
+          assets: x.symbols.map((s, i) => ({
+            symbol: s,
+            price: x.prices[i][t],
+            quantity: q[i],
+            lot: x.useLots ? (x.lots[s] ?? 1) : 1e-6,
+            target: d.w[i],
+          })),
+          cash,
+          extraCash: 0,
+          cashReserve: 0,
+          costs: x.costs,
+          objective: "track",
+          noTradeBand: 0,
+          allowSell: true,
+          cov: null,
+          fractional: !x.useLots,
+        });
+        if (!r.ok) return fail(`${x.dates[t]}: ${r.violations.join(" · ")}`);
+        for (const tr of r.trades) {
+          if (tr.side === "hold") continue;
+          trades.push({
+            date: x.dates[t],
+            symbol: tr.symbol,
+            side: tr.side,
+            quantity: tr.quantity,
+            price: tr.price ?? 0,
+            value: tr.value,
+            cost: tr.cost.total,
+          });
+          costSum = addCost(costSum, tr.cost);
+          traded += tr.value;
+        }
+        q = r.trades.map((tr) => tr.finalQuantity);
+        cash = settle(r.cash.end);
+        const nav = q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash;
+        weights.push({
           date: x.dates[t],
-          symbol: tr.symbol,
-          side: tr.side,
-          quantity: tr.quantity,
-          price: tr.price ?? 0,
-          value: tr.value,
-          cost: tr.cost.total,
+          target: Object.fromEntries(x.symbols.map((s, i) => [s, d.w[i]])),
+          actual: Object.fromEntries(
+            x.symbols.map((s, i) => [s, (q[i] * x.prices[i][t]) / nav]),
+          ),
+          cash: cash / nav,
         });
-        costSum = addCost(costSum, tr.cost);
-        traded += tr.value;
+        const tradedNow = r.trades.reduce(
+          (a, tr) => a + (tr.side === "hold" ? 0 : tr.value),
+          0,
+        );
+        rebalanceLog.push({
+          date: x.dates[t],
+          target: Object.fromEntries(x.symbols.map((s, i) => [s, d.w[i]])),
+          actual: Object.fromEntries(
+            x.symbols.map((s, i) => [s, (q[i] * x.prices[i][t]) / nav]),
+          ),
+          turnover: nav > 0 ? tradedNow / nav : 0,
+          cost: r.trades.reduce(
+            (a, tr) => a + (tr.side === "hold" ? 0 : tr.cost.total),
+            0,
+          ),
+          skipped: null,
+        });
       }
-      q = r.trades.map((tr) => tr.finalQuantity);
-      cash = settle(r.cash.end);
-      const nav = q.reduce((s, qi, i) => s + qi * x.prices[i][t], 0) + cash;
-      weights.push({
-        date: x.dates[t],
-        target: Object.fromEntries(x.symbols.map((s, i) => [s, d.w[i]])),
-        actual: Object.fromEntries(
-          x.symbols.map((s, i) => [s, (q[i] * x.prices[i][t]) / nav]),
-        ),
-        cash: cash / nav,
-      });
     }
     // NAV includes dividends receivable (entitled on the ex-date, not yet paid).
     values.push({
@@ -661,6 +732,7 @@ export function backtest(x: BacktestInput): BacktestResult {
     drawdown,
     weights,
     trades,
+    rebalanceLog,
     costs: { ...costSum, shareOfInitial: costSum.total / x.initialCapital },
     turnover: {
       total: traded / x.initialCapital,
@@ -678,7 +750,7 @@ export function backtest(x: BacktestInput): BacktestResult {
           : x.strategy === "buy_and_hold"
             ? "Buy and hold: ซื้อตามน้ำหนักเริ่มต้นครั้งเดียว ไม่ปรับพอร์ต"
             : "ปรับกลับสู่น้ำหนักเป้าหมายทุกรอบ ที่ราคาปิดวันปรับพอร์ต",
-      `ปรับพอร์ตทุก ${x.rebalanceEvery} งวด · ระหว่างรอบถือจำนวนหน่วยเท่าเดิม (น้ำหนักลอยตามราคา) · เงินสดได้ Rf ${(x.rf * 100).toFixed(2)}%`,
+      `${x.rebalanceCalendar ? `ปรับพอร์ตวันทำการสุดท้ายของทุก${({ monthly: "เดือน", quarterly: "ไตรมาส", semiannual: "ครึ่งปี", annual: "ปี" } as const)[x.rebalanceCalendar]} (ซื้อครั้งแรกวันเริ่ม)` : `ปรับพอร์ตทุก ${x.rebalanceEvery} งวด`} · ระหว่างรอบถือจำนวนหน่วยเท่าเดิม (น้ำหนักลอยตามราคา) · เงินสดได้ Rf ${(x.rf * 100).toFixed(2)}%`,
       `ต้นทุนตาม cost model (ค่าคอม/VAT/slippage/ภาษีขาย) ${x.useLots ? "และ lot จริง" : "ซื้อเศษหน่วยได้ (ไม่ปัด lot)"}`,
       "ตัวชี้วัดจาก computeMetrics ตัวเดียวกับหน้าผลการดำเนินงาน",
       ...(x.dividendCashflows

@@ -10,7 +10,7 @@ import {
 } from "@/lib/finance/model-comparison";
 import { lotFor, tradingCostsSchema } from "@/lib/finance/rebalance";
 import { loadBacktestData } from "./backtest";
-import { riskFreeInput } from "../optimize-schema";
+import { DEFAULT_RETURN_METHOD, riskFreeInput } from "../optimize-schema";
 
 export const modelComparisonInput = z.object({
   symbols: z
@@ -51,11 +51,17 @@ export const modelComparisonInput = z.object({
   rebalance: z
     .enum(["monthly", "quarterly", "semiannual", "annual"])
     .default("quarterly"),
+  rebalanceAnchor: z
+    .enum(["calendar", "periods"])
+    .default("calendar")
+    .describe(
+      "calendar = last trading day of each period; periods = every N observations (previous behaviour)",
+    ),
   minWeight: z.number().min(0).max(1).default(0),
   maxWeight: z.number().min(0).max(1).default(1),
   returnMethod: z
     .enum(["historical", "capm", "blend"])
-    .default("historical")
+    .default(DEFAULT_RETURN_METHOD)
     .describe(
       "μ estimate (used by max_sharpe and by the ex-ante numbers of every model)",
     ),
@@ -127,6 +133,8 @@ export async function comparePortfolioModels(
     splitFraction: x.splitPct / 100,
     window: x.windowDays,
     rebalanceEvery: d.every,
+    rebalanceCalendar:
+      x.rebalanceAnchor === "calendar" ? x.rebalance : undefined,
     cvarConfidence: x.cvarConfidence,
     models: x.models,
   });

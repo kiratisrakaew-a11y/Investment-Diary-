@@ -144,3 +144,163 @@ describe("BT-7: dividends are never counted twice", () => {
     ).not.toThrow();
   });
 });
+
+// ------------------------------------------------------------------ BT-4 / BT-8
+function businessDays(from: string, to: string) {
+  const out: string[] = [];
+  for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
+    const d = new Date(t);
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6)
+      out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+let sd = 9;
+const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647 - 0.5;
+function market(dts: string[], n: number) {
+  return Array.from({ length: n }, (_, i) => {
+    let p = 50 + i * 5;
+    return dts.map((_, t) =>
+      t === 0 ? p : (p *= 1 + 0.004 * (i % 3) + rnd() * 0.03),
+    );
+  });
+}
+
+describe("BT-8: calendar-anchored rebalances and rebalanceLog", () => {
+  const dts = businessDays("2024-01-01", "2024-12-31");
+  const cal = {
+    ...base,
+    symbols: ["A", "B", "C"],
+    dates: dts,
+    prices: market(dts, 3),
+    lots: {},
+    rebalanceCalendar: "quarterly" as const,
+  };
+  it("quarterly: every rebalance after the first purchase is the last trading day of Mar / Jun / Sep (Dec is the data end)", () => {
+    const r = backtest(cal);
+    expect(r.ok).toBe(true);
+    const later = r.rebalanceLog.slice(1).map((x) => x.date);
+    expect(later).toEqual(["2024-03-29", "2024-06-28", "2024-09-30"]);
+    expect(r.rebalanceLog).toHaveLength(r.period.rebalances);
+    expect(r.methodology.join(" ")).toMatch(/วันทำการสุดท้ายของทุกไตรมาส/);
+  });
+  it("monthly: last trading day of each month; without the anchor the old every-N behaviour is unchanged", () => {
+    const m = backtest({ ...cal, rebalanceCalendar: "monthly" });
+    expect(
+      m.rebalanceLog
+        .slice(1)
+        .every(
+          (x) =>
+            dts[dts.indexOf(x.date) + 1]?.slice(0, 7) !== x.date.slice(0, 7),
+        ),
+    ).toBe(true);
+    expect(m.rebalanceLog).toHaveLength(12); // first purchase + Jan … Nov month-ends
+    const p = backtest({
+      ...cal,
+      rebalanceCalendar: undefined,
+      rebalanceEvery: 60,
+    });
+    expect(p.rebalanceLog.map((x) => dts.indexOf(x.date))).toEqual([
+      0, 60, 120, 180, 240,
+    ]);
+  });
+  it("rebalanceLog rows carry target, weights after trading, turnover and cost", () => {
+    const r = backtest({
+      ...cal,
+      costs: { ...base.costs, commissionPct: 0.1 },
+    });
+    const row = r.rebalanceLog[0];
+    expect(row.target).toEqual({ A: 1 / 3, B: 1 / 3, C: 1 / 3 });
+    expect(
+      Object.values(row.actual).reduce((a, b) => a + b, 0),
+    ).toBeGreaterThan(0.99);
+    expect(row.turnover).toBeGreaterThan(0.99); // the first purchase trades the whole portfolio
+    expect(row.cost).toBeGreaterThan(0);
+  });
+});
+
+describe("BT-4: constraints at every rebalance", () => {
+  const dts = businessDays("2023-01-02", "2024-12-31");
+  const syms = ["B1", "B2", "B3", "C1", "C2", "C3", "P1", "P2"];
+  const run = (
+    bounds: BacktestInput["bounds"],
+    strategy: BacktestInput["strategy"] = "min_variance",
+  ) =>
+    backtest({
+      ...base,
+      symbols: syms,
+      dates: dts,
+      prices: market(dts, syms.length),
+      lots: {},
+      strategy,
+      window: 120,
+      rebalanceCalendar: "quarterly",
+      bounds,
+    });
+  const grp = (name: string, members: string[], hi: number) => ({
+    name,
+    a: syms.map((s) => (members.includes(s) ? 1 : 0)),
+    hi,
+  });
+  const load = (w: Record<string, number> | null, members: string[]) =>
+    members.reduce((a, s) => a + (w?.[s] ?? 0), 0);
+  it("maxPerSector-style caps (35%) hold in every rebalance", () => {
+    const linear = [
+      grp("Bank", ["B1", "B2", "B3"], 0.35),
+      grp("Commerce", ["C1", "C2", "C3"], 0.35),
+      grp("Property", ["P1", "P2"], 0.35),
+    ];
+    const r = run({ min: 0, max: 1, linear }, "max_sharpe");
+    expect(r.ok).toBe(true);
+    expect(r.rebalanceLog.length).toBeGreaterThan(4);
+    for (const row of r.rebalanceLog)
+      for (const g of [
+        ["B1", "B2", "B3"],
+        ["C1", "C2", "C3"],
+        ["P1", "P2"],
+      ])
+        expect(load(row.target, g)).toBeLessThanOrEqual(0.35 + 1e-9);
+  });
+  it("four groups with a 25% per-asset cap pass in every rebalance", () => {
+    const linear = [
+      grp("G1", ["B1", "B2"], 0.3),
+      grp("G2", ["B3", "C1"], 0.3),
+      grp("G3", ["C2", "C3"], 0.3),
+      grp("G4", ["P1", "P2"], 0.3),
+    ];
+    const r = run({ min: 0, max: 0.25, linear });
+    expect(
+      r.rebalanceLog.every(
+        (row) =>
+          row.skipped == null &&
+          Math.max(...Object.values(row.target!)) <= 0.25 + 1e-9,
+      ),
+    ).toBe(true);
+  });
+  it("an optimizer failure in one rebalance keeps the holdings and warns with the date; the backtest finishes", () => {
+    // B2 does not move during the first training window (zero volatility → max diversification fails there only).
+    const prices = market(dts, syms.length);
+    for (let t = 0; t <= 121; t++) prices[1][t] = 70;
+    const r = backtest({
+      ...base,
+      symbols: syms,
+      dates: dts,
+      prices,
+      lots: {},
+      strategy: "max_diversification",
+      window: 120,
+      rebalanceCalendar: "quarterly",
+      bounds: { min: 0, max: 1 },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.rebalanceLog[0].skipped).toMatch(/ถือพอร์ตเดิม/);
+    expect(r.rebalanceLog.slice(1).some((row) => row.skipped == null)).toBe(
+      true,
+    );
+    expect(
+      r.warnings.some(
+        (w) => w.startsWith(r.rebalanceLog[0].date) && /ถือพอร์ตเดิม/.test(w),
+      ),
+    ).toBe(true);
+  });
+});
