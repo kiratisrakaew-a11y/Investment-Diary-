@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "dividend_payment_lag_days" integer DEFAULT 21;

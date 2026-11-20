@@ -1,28 +1,46 @@
+import { chooseBenchmarkBasis } from "@/lib/finance/benchmark-basis";
 import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { priceInput, today, type PriceInputT } from "@/lib/validation";
 import type { FxHistory, PriceHistory } from "@/lib/finance/portfolio";
 import { getAssetBySymbol } from "./assets";
 
-export async function upsertPrice(assetId: number, date: string, close: number) {
+export async function upsertPrice(
+  assetId: number,
+  date: string,
+  close: number,
+) {
   await getDb()
     .insert(schema.prices)
     .values({ assetId, date, close })
-    .onConflictDoUpdate({ target: [schema.prices.assetId, schema.prices.date], set: { close } });
+    .onConflictDoUpdate({
+      target: [schema.prices.assetId, schema.prices.date],
+      set: { close },
+    });
 }
 
 export async function upsertFx(date: string, rate: number, pair = "USDTHB") {
   await getDb()
     .insert(schema.fxRates)
     .values({ pair, date, rate })
-    .onConflictDoUpdate({ target: [schema.fxRates.pair, schema.fxRates.date], set: { rate } });
+    .onConflictDoUpdate({
+      target: [schema.fxRates.pair, schema.fxRates.date],
+      set: { rate },
+    });
 }
 
-export async function upsertBenchmark(symbol: string, date: string, close: number) {
+export async function upsertBenchmark(
+  symbol: string,
+  date: string,
+  close: number,
+) {
   await getDb()
     .insert(schema.benchmarkPrices)
     .values({ symbol, date, close })
-    .onConflictDoUpdate({ target: [schema.benchmarkPrices.symbol, schema.benchmarkPrices.date], set: { close } });
+    .onConflictDoUpdate({
+      target: [schema.benchmarkPrices.symbol, schema.benchmarkPrices.date],
+      set: { close },
+    });
 }
 
 /** Manual / AI price update by symbol. */
@@ -38,7 +56,11 @@ export async function recordPrice(input: PriceInputT) {
 /** Provider dividend-adjusted closes (adj_close) where stored; assets without them are absent or partial. */
 export async function loadAdjPriceHistory(): Promise<PriceHistory> {
   const rows = await getDb()
-    .select({ assetId: schema.prices.assetId, date: schema.prices.date, adj: schema.prices.adjClose })
+    .select({
+      assetId: schema.prices.assetId,
+      date: schema.prices.date,
+      adj: schema.prices.adjClose,
+    })
     .from(schema.prices)
     .orderBy(asc(schema.prices.assetId), asc(schema.prices.date));
   const map: PriceHistory = new Map();
@@ -52,7 +74,11 @@ export async function loadAdjPriceHistory(): Promise<PriceHistory> {
 
 export async function loadPriceHistory(): Promise<PriceHistory> {
   const rows = await getDb()
-    .select({ assetId: schema.prices.assetId, date: schema.prices.date, close: schema.prices.close })
+    .select({
+      assetId: schema.prices.assetId,
+      date: schema.prices.date,
+      close: schema.prices.close,
+    })
     .from(schema.prices)
     .orderBy(asc(schema.prices.assetId), asc(schema.prices.date));
   const map: PriceHistory = new Map();
@@ -82,12 +108,19 @@ export async function latestFx(pair = "USDTHB"): Promise<number | null> {
   return row?.rate ?? null;
 }
 
-export async function loadBenchmark(symbol: string, from?: string): Promise<[string, number][]> {
+export async function loadBenchmark(
+  symbol: string,
+  from?: string,
+): Promise<[string, number][]> {
   const b = schema.benchmarkPrices;
   const rows = await getDb()
     .select({ date: b.date, close: b.close })
     .from(b)
-    .where(from ? and(eq(b.symbol, symbol), gte(b.date, from)) : eq(b.symbol, symbol))
+    .where(
+      from
+        ? and(eq(b.symbol, symbol), gte(b.date, from))
+        : eq(b.symbol, symbol),
+    )
     .orderBy(asc(b.date));
   return rows.map((r) => [r.date, r.close]);
 }
@@ -98,4 +131,37 @@ export async function priceHistoryFor(assetId: number) {
     .from(schema.prices)
     .where(eq(schema.prices.assetId, assetId))
     .orderBy(asc(schema.prices.date));
+}
+
+/**
+ * Benchmark whose return basis matches the portfolio (see lib/finance/benchmark-basis.ts): Settings'
+ * benchmark (its own kind), the SET TRI series when imported, and ^SET.BK as the price index fallback.
+ */
+export async function benchmarkForBasis(
+  wanted: "price" | "total_return",
+  from: string,
+  settings: {
+    benchmarkSymbol: string;
+    benchmarkKind: "price_index" | "total_return";
+  },
+) {
+  const own =
+    settings.benchmarkKind === "total_return" ? "total_return" : "price";
+  const seen = new Set<string>();
+  const cands: { symbol: string; basis: "price" | "total_return" }[] = [
+    { symbol: settings.benchmarkSymbol, basis: own },
+    { symbol: "SETTRI", basis: "total_return" },
+    { symbol: "^SET.BK", basis: "price" },
+  ].filter((c) => !seen.has(c.symbol) && seen.add(c.symbol)) as {
+    symbol: string;
+    basis: "price" | "total_return";
+  }[];
+  const loaded = await Promise.all(
+    cands.map(async (c) => ({
+      ...c,
+      series: await loadBenchmark(c.symbol, from),
+    })),
+  );
+  // Settings' own benchmark first among equals (the user's choice wins when its basis matches).
+  return chooseBenchmarkBasis(wanted, loaded, from);
 }

@@ -5,12 +5,37 @@ type Full = Awaited<ReturnType<typeof backtestPortfolio>>;
 /** Compact result for AI tools: summary metrics, costs, month-end equity curve and the latest weights. */
 export function summarizeBacktest(r: Full) {
   const m = r.metrics;
-  const monthEnd = r.values.filter((v, i) => i === r.values.length - 1 || r.values[i + 1].date.slice(0, 7) !== v.date.slice(0, 7));
+  const monthEnd = r.values.filter(
+    (v, i) =>
+      i === r.values.length - 1 ||
+      r.values[i + 1].date.slice(0, 7) !== v.date.slice(0, 7),
+  );
   return {
     strategy: r.strategy,
     period: r.period,
     universe: r.universe,
     excluded: r.excluded,
+    benchmark: r.benchmark,
+    riskFreeInfo: r.riskFreeInfo && {
+      rate: r.riskFreeInfo.rate,
+      source: r.riskFreeInfo.source,
+      label: r.riskFreeInfo.label,
+      asOf: r.riskFreeInfo.asOf,
+    },
+    ...(r.assumedPaymentDates
+      ? { assumedPaymentDates: r.assumedPaymentDates }
+      : {}),
+    ...(r.dividends
+      ? {
+          dividends: {
+            netReceived: r.dividends.netReceived,
+            events: r.dividends.events,
+            entitledEvents: r.dividends.entitledEvents,
+            incomeReturn: r.dividends.incomeReturn,
+            uncredited: r.dividends.uncredited,
+          },
+        }
+      : {}),
     performance: {
       cumulativeReturn: m.cumulativeReturn,
       annualizedReturn: m.annualizedReturn,
@@ -36,7 +61,10 @@ export function summarizeBacktest(r: Full) {
     turnover: r.turnover,
     trades: r.trades.length,
     latestWeights: r.weights.at(-1) ?? null,
-    equityCurveMonthEnd: monthEnd.map((v) => ({ date: v.date, value: Math.round(v.value) })),
+    equityCurveMonthEnd: monthEnd.map((v) => ({
+      date: v.date,
+      value: Math.round(v.value),
+    })),
     methodology: r.methodology,
     limitations: r.limitations,
     warnings: r.warnings,

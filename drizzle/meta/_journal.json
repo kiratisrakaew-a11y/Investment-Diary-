@@ -134,6 +134,13 @@
       "when": 1794983433910,
       "tag": "0018_abnormal_trading",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795168808998,
+      "tag": "0019_backtest_settings",
+      "breakpoints": true
     }
   ]
 }

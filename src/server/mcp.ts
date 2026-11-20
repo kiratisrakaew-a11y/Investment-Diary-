@@ -6,33 +6,94 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MODEL_VERSION } from "@/lib/governance";
-import { assetInput, assetProfileInput, isoDate, noteInput, priceInput, transactionInput } from "@/lib/validation";
-import { createAsset, getAssetBySymbol, listAssets, updateAssetProfile } from "./services/assets";
+import {
+  assetInput,
+  assetProfileInput,
+  isoDate,
+  noteInput,
+  priceInput,
+  transactionInput,
+} from "@/lib/validation";
+import {
+  createAsset,
+  getAssetBySymbol,
+  listAssets,
+  updateAssetProfile,
+} from "./services/assets";
 import { createNote, listNotes } from "./services/notes";
 import { recordPrice } from "./services/prices";
 import { createTransaction, listTransactions } from "./services/transactions";
-import { getAllocation, getMptAnalysis, getPerformance, getPortfolioSummary } from "./services/portfolio";
-import { bondSchema, evaluate, multiStageRiToolInput, valuationInput } from "@/lib/valuation-schemas";
-import { analyzeRequest, analyzeValuation, hasScenarios } from "@/lib/valuation-analyze";
+import {
+  getAllocation,
+  getMptAnalysis,
+  getPerformance,
+  getPortfolioSummary,
+} from "./services/portfolio";
+import {
+  bondSchema,
+  evaluate,
+  multiStageRiToolInput,
+  valuationInput,
+} from "@/lib/valuation-schemas";
+import {
+  analyzeRequest,
+  analyzeValuation,
+  hasScenarios,
+} from "@/lib/valuation-analyze";
 import { SCENARIO_PATHS } from "@/lib/valuation-scenarios";
 import { optimizeInput } from "./optimize-schema";
 import { loadUniverse, optimizePortfolio } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
-import { importPrices, importPricesInput, syncHistoricalPrices, syncHistoricalPricesInput } from "./services/price-sync";
+import {
+  importPrices,
+  importPricesInput,
+  syncHistoricalPrices,
+  syncHistoricalPricesInput,
+} from "./services/price-sync";
 import { getRiskFree } from "./services/risk-free";
 import { changeAssetLifecycle } from "./services/asset-lifecycle";
-import { bondHoldings, bondLadderInput, planBondLadder } from "./services/bonds";
+import {
+  bondHoldings,
+  bondLadderInput,
+  planBondLadder,
+} from "./services/bonds";
 import { rebalanceInput, rebalancePortfolio } from "./services/rebalance";
 import { stressInput, stressTestPortfolio } from "./services/stress";
 import { recordSplit, recordSplitInput } from "./services/splits";
 import { backtestInput, backtestPortfolio } from "./services/backtest";
-import { dividendIncomeInput, getDividendIncome, screenDividendInput, screenDividendStocks, screenFactorInput, screenFactorStocks, summarizeDividendScreen } from "./services/strategies";
-import { dividendEventInput, listDividendEvents, upsertDividendEvents } from "./services/dividends";
+import {
+  dividendIncomeInput,
+  getDividendIncome,
+  screenDividendInput,
+  screenDividendStocks,
+  screenFactorInput,
+  screenFactorStocks,
+  summarizeDividendScreen,
+} from "./services/strategies";
+import {
+  dividendEventInput,
+  listDividendEvents,
+  upsertDividendEvents,
+} from "./services/dividends";
 import { summarizeBacktest } from "./services/backtest-summary";
-import { comparePortfolioModels, modelComparisonInput, summarizeModelComparison } from "./services/model-comparison";
-import { consensusSummary, deleteConsensus, latestConsensusFor, recordConsensus, refreshConsensusFromYahoo } from "./services/consensus";
+import {
+  comparePortfolioModels,
+  modelComparisonInput,
+  summarizeModelComparison,
+} from "./services/model-comparison";
+import {
+  consensusSummary,
+  deleteConsensus,
+  latestConsensusFor,
+  recordConsensus,
+  refreshConsensusFromYahoo,
+} from "./services/consensus";
 import { consensusInput } from "@/lib/consensus";
-import { listValuations, multiStageResidualIncome, saveValuation } from "./services/valuations";
+import {
+  listValuations,
+  multiStageResidualIncome,
+  saveValuation,
+} from "./services/valuations";
 import { saveYears, statementsSummary } from "./services/statements";
 import { emptyYear, financialYearSchema } from "@/lib/financials";
 import { ZodError } from "zod";
@@ -40,7 +101,9 @@ import { MetricError } from "./services/asset-metrics";
 import { registerAssetMetricTools } from "./mcp-asset-metrics";
 import { registerAbnormalTools } from "./mcp-abnormal";
 
-const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
+const json = (data: unknown) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+});
 
 export function safe<A>(fn: (args: A) => Promise<unknown>) {
   return async (args: A) => {
@@ -49,12 +112,48 @@ export function safe<A>(fn: (args: A) => Promise<unknown>) {
     } catch (e) {
       // Typed errors keep the existing "Error: … [CODE]" text and add a machine-readable code / detail.
       if (e instanceof MetricError)
-        return { content: [{ type: "text" as const, text: `Error: ${e.message} [${e.code}]` }, { type: "text" as const, text: JSON.stringify({ code: e.code, ...(e.detail ? { detail: e.detail } : {}) }) }], isError: true };
+        return {
+          content: [
+            { type: "text" as const, text: `Error: ${e.message} [${e.code}]` },
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                code: e.code,
+                ...(e.detail ? { detail: e.detail } : {}),
+              }),
+            },
+          ],
+          isError: true,
+        };
       if (e instanceof ZodError)
-        return { content: [{ type: "text" as const, text: `Error: ${e.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")} [VALIDATION_ERROR]` }, { type: "text" as const, text: JSON.stringify({ code: "VALIDATION_ERROR" }) }], isError: true };
-      const suggestion = (e as { issue?: { code?: string; suggestion?: string } }).issue;
-      const extra = suggestion?.code ? ` [${suggestion.code}]${suggestion.suggestion ? ` — ${suggestion.suggestion}` : ""}` : "";
-      return { content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}${extra}` }], isError: true };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error: ${e.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")} [VALIDATION_ERROR]`,
+            },
+            {
+              type: "text" as const,
+              text: JSON.stringify({ code: "VALIDATION_ERROR" }),
+            },
+          ],
+          isError: true,
+        };
+      const suggestion = (
+        e as { issue?: { code?: string; suggestion?: string } }
+      ).issue;
+      const extra = suggestion?.code
+        ? ` [${suggestion.code}]${suggestion.suggestion ? ` — ${suggestion.suggestion}` : ""}`
+        : "";
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${e instanceof Error ? e.message : String(e)}${extra}`,
+          },
+        ],
+        isError: true,
+      };
     }
   };
 }
@@ -66,7 +165,9 @@ export function serverVersion() {
 
 /** Names of the tools the current build registers. */
 export function mcpToolNames(): string[] {
-  const s = createMcpServer() as unknown as { _registeredTools?: Record<string, unknown> };
+  const s = createMcpServer() as unknown as {
+    _registeredTools?: Record<string, unknown>;
+  };
   return Object.keys(s._registeredTools ?? {}).sort();
 }
 
@@ -100,10 +201,13 @@ export function createMcpServer() {
     "search_notes",
     {
       title: "Search journal notes",
-      description: "Search the diary timeline by text, type, tag, symbol or date range.",
+      description:
+        "Search the diary timeline by text, type, tag, symbol or date range.",
       inputSchema: {
         q: z.string().optional(),
-        type: z.enum(["idea", "thesis", "review", "lesson", "market"]).optional(),
+        type: z
+          .enum(["idea", "thesis", "review", "lesson", "market"])
+          .optional(),
         tag: z.string().optional(),
         symbol: z.string().optional(),
         from: z.string().optional(),
@@ -138,12 +242,18 @@ export function createMcpServer() {
     {
       title: "List transactions",
       description: "Recent transactions, optionally for one symbol.",
-      inputSchema: { symbol: z.string().optional(), limit: z.number().int().max(500).optional() },
+      inputSchema: {
+        symbol: z.string().optional(),
+        limit: z.number().int().max(500).optional(),
+      },
       annotations: { readOnlyHint: true },
     },
     safe(async ({ symbol, limit }) => {
       const asset = symbol ? await getAssetBySymbol(symbol) : null;
-      const rows = await listTransactions({ assetId: asset?.id, limit: limit ?? 50 });
+      const rows = await listTransactions({
+        assetId: asset?.id,
+        limit: limit ?? 50,
+      });
       return rows.map((r) => ({ ...r.tx, symbol: r.symbol }));
     }),
   );
@@ -164,7 +274,11 @@ export function createMcpServer() {
 
   server.registerTool(
     "list_assets",
-    { title: "List assets", description: "All registered assets.", annotations: { readOnlyHint: true } },
+    {
+      title: "List assets",
+      description: "All registered assets.",
+      annotations: { readOnlyHint: true },
+    },
     safe(async () => listAssets()),
   );
 
@@ -172,7 +286,8 @@ export function createMcpServer() {
     "update_price",
     {
       title: "Update price",
-      description: "Set the closing price / NAV of an asset for a date (defaults to today).",
+      description:
+        "Set the closing price / NAV of an asset for a date (defaults to today).",
       inputSchema: priceInput.shape,
     },
     safe(async (args) => recordPrice(args)),
@@ -198,7 +313,7 @@ export function createMcpServer() {
       title: "Import many prices",
       description:
         "Store many prices at once for assets already in the app: rows [{symbol, date, close, adjClose?, volume?}] (≤ 50,000) or csv text " +
-        "(a volume column is kept when present). target \"benchmark\" stores an index series instead, e.g. SETTRI (SET Total Return Index) for event studies. " +
+        '(a volume column is kept when present). target "benchmark" stores an index series instead, e.g. SETTRI (SET Total Return Index) for event studies. ' +
         "(symbol,date,close · or date,SYM1,SYM2,… · or a one-symbol export with `symbol`). Day-first and Buddhist-era dates are understood. " +
         "Keeps stored prices unless overwriteExisting; dryRun validates only. Unknown symbols are reported, not created.",
       inputSchema: importPricesInput.shape,
@@ -220,30 +335,54 @@ export function createMcpServer() {
         confirmSymbol: z.string().optional(),
       },
     },
-    safe(async ({ assetId, action, confirmSymbol }) => changeAssetLifecycle({ assetId, action, confirmSymbol, source: "mcp" })),
+    safe(async ({ assetId, action, confirmSymbol }) =>
+      changeAssetLifecycle({ assetId, action, confirmSymbol, source: "mcp" }),
+    ),
   );
 
   server.registerTool(
     "update_asset_profile",
-    { title: "Update asset risk profile", description: "Set an asset's risk metadata used by credit analytics, stress tests and exposure limits: issuer (economic issuer shared by its stocks and bonds), sector with source and date, and a bond credit profile (rating with agency/date; PD with type hypothetical|historical|market_implied, source, asOf and annual or cumulative; LGD with source/date). Only enter what the user provides — never invent ratings, PDs or LGDs. null clears a field. Does not touch prices or transactions.", inputSchema: assetProfileInput.shape },
+    {
+      title: "Update asset risk profile",
+      description:
+        "Set an asset's risk metadata used by credit analytics, stress tests and exposure limits: issuer (economic issuer shared by its stocks and bonds), sector with source and date, and a bond credit profile (rating with agency/date; PD with type hypothetical|historical|market_implied, source, asOf and annual or cumulative; LGD with source/date). Only enter what the user provides — never invent ratings, PDs or LGDs. null clears a field. Does not touch prices or transactions.",
+      inputSchema: assetProfileInput.shape,
+    },
     safe(async (x) => updateAssetProfile(x)),
   );
 
   server.registerTool(
     "record_split",
-    { title: "Record stock split", description: "Record a stock split or reverse split (แตกพาร์ / รวมพาร์) for an asset the user holds: splitFrom:splitTo (1:2 doubles the shares, 10:1 reverse). Units are multiplied, total cost is unchanged (average cost divided), no cash or P&L. With adjustPrices (default) stored prices before the date are divided by the ratio only if they are still at the old level (checked; idempotent). Use dryRun first and record only when the user confirms the date and ratio.", inputSchema: recordSplitInput.omit({ source: true }).shape },
+    {
+      title: "Record stock split",
+      description:
+        "Record a stock split or reverse split (แตกพาร์ / รวมพาร์) for an asset the user holds: splitFrom:splitTo (1:2 doubles the shares, 10:1 reverse). Units are multiplied, total cost is unchanged (average cost divided), no cash or P&L. With adjustPrices (default) stored prices before the date are divided by the ratio only if they are still at the old level (checked; idempotent). Use dryRun first and record only when the user confirms the date and ratio.",
+      inputSchema: recordSplitInput.omit({ source: true }).shape,
+    },
     safe(async (x) => recordSplit({ ...x, source: "claude" })),
   );
 
   server.registerTool(
     "rebalance_portfolio",
-    { title: "Rebalancing proposal (no trades recorded)", description: "Turn target weights into whole-lot buy/sell proposals for the current holdings, after trading costs from Settings (commission with minimum, VAT, slippage, sell tax), cash, minimum trade, no-trade band and turnover cap. Targets: custom {symbol: weight} or omit to use optimize_portfolio (pass optimizer params). Returns quantities, values, costs, remaining cash, final weights, tracking error before/after and violations. PROPOSAL ONLY — never records transactions; record trades with record_transaction only after the user actually trades and asks.", inputSchema: rebalanceInput.shape, annotations: { readOnlyHint: true } },
+    {
+      title: "Rebalancing proposal (no trades recorded)",
+      description:
+        "Turn target weights into whole-lot buy/sell proposals for the current holdings, after trading costs from Settings (commission with minimum, VAT, slippage, sell tax), cash, minimum trade, no-trade band and turnover cap. Targets: custom {symbol: weight} or omit to use optimize_portfolio (pass optimizer params). Returns quantities, values, costs, remaining cash, final weights, tracking error before/after and violations. PROPOSAL ONLY — never records transactions; record trades with record_transaction only after the user actually trades and asks.",
+      inputSchema: rebalanceInput.shape,
+      annotations: { readOnlyHint: true },
+    },
     safe(async (x) => rebalancePortfolio(x)),
   );
 
   server.registerTool(
     "stress_test_portfolio",
-    { title: "Stress test", description: "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.", inputSchema: stressInput.shape, annotations: { readOnlyHint: true } },
+    {
+      title: "Stress test",
+      description:
+        "Stress test current holdings: equity shock × beta, rate shock via bond duration/convexity, FX shock on USD assets, company/group shocks, liquidity haircuts, correlation shock (σ and VaR), plus the worst historical day/month of current weights. Omit scenarios to run presets. Assumptions are returned with the results.",
+      inputSchema: stressInput.shape,
+      annotations: { readOnlyHint: true },
+    },
     safe(async (x) => stressTestPortfolio(x)),
   );
 
@@ -263,13 +402,25 @@ export function createMcpServer() {
 
   server.registerTool(
     "screen_factor_stocks",
-    { title: "Factor screener", description: "Factor screen: value (earnings yield, book/price, margin of safety from valuations saved by asOf) | quality (ROE, CFO/NI, net debt/EBITDA, FCF stability, sector rules) | momentum (12–1 month, optional ÷ volatility) | multi_factor (adjustable family weights, compared with standalone factors). Absolute or sector-neutral percentile ranks, factor_data_coverage, exclusions, target weights. Data known at asOf only. Read-only.", inputSchema: screenFactorInput.shape, annotations: { readOnlyHint: true } },
+    {
+      title: "Factor screener",
+      description:
+        "Factor screen: value (earnings yield, book/price, margin of safety from valuations saved by asOf) | quality (ROE, CFO/NI, net debt/EBITDA, FCF stability, sector rules) | momentum (12–1 month, optional ÷ volatility) | multi_factor (adjustable family weights, compared with standalone factors). Absolute or sector-neutral percentile ranks, factor_data_coverage, exclusions, target weights. Data known at asOf only. Read-only.",
+      inputSchema: screenFactorInput.shape,
+      annotations: { readOnlyHint: true },
+    },
     safe(async (x) => screenFactorStocks(x)),
   );
 
   server.registerTool(
     "plan_bond_ladder",
-    { title: "Bond ladder", description: "Bond ladder plan from the app's bond assets: yearly maturity rungs (1–N years), equal budget per rung, issuer cap, credit filters (min rating, max 1-year PD, unrated toggle), whole units at the dirty price. Returns holdings, empty rungs, coupon vs principal cashflows by year, XIRR, duration, DV01 and an optional reinvestment scenario. Forward scenario only — no historical bond backtest; proposal only.", inputSchema: bondLadderInput.shape, annotations: { readOnlyHint: true } },
+    {
+      title: "Bond ladder",
+      description:
+        "Bond ladder plan from the app's bond assets: yearly maturity rungs (1–N years), equal budget per rung, issuer cap, credit filters (min rating, max 1-year PD, unrated toggle), whole units at the dirty price. Returns holdings, empty rungs, coupon vs principal cashflows by year, XIRR, duration, DV01 and an optional reinvestment scenario. Forward scenario only — no historical bond backtest; proposal only.",
+      inputSchema: bondLadderInput.shape,
+      annotations: { readOnlyHint: true },
+    },
     safe(async (x) => planBondLadder(x)),
   );
 
@@ -297,7 +448,20 @@ export function createMcpServer() {
     },
     safe(async ({ events }) => {
       const r = await upsertDividendEvents(events);
-      return { inserted: r.inserted, updated: r.updated, unchanged: r.unchanged, events: r.events.map((e) => ({ id: e.id, symbol: e.symbol, exDate: e.exDate, paymentDate: e.paymentDate, dividendPerShare: e.dividendPerShare, kind: e.kind, source: e.source })) };
+      return {
+        inserted: r.inserted,
+        updated: r.updated,
+        unchanged: r.unchanged,
+        events: r.events.map((e) => ({
+          id: e.id,
+          symbol: e.symbol,
+          exDate: e.exDate,
+          paymentDate: e.paymentDate,
+          dividendPerShare: e.dividendPerShare,
+          kind: e.kind,
+          source: e.source,
+        })),
+      };
     }),
   );
 
@@ -305,7 +469,8 @@ export function createMcpServer() {
     "list_dividend_events",
     {
       title: "List dividend events",
-      description: "Stored issuer dividend events (from Yahoo sync or recorded announcements) with dates, DPS, kind, source and revision history.",
+      description:
+        "Stored issuer dividend events (from Yahoo sync or recorded announcements) with dates, DPS, kind, source and revision history.",
       inputSchema: { symbols: z.array(z.string()).optional() },
       annotations: { readOnlyHint: true },
     },
@@ -314,7 +479,13 @@ export function createMcpServer() {
 
   server.registerTool(
     "backtest_portfolio",
-    { title: "Walk-forward backtest", description: "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends).", inputSchema: backtestInput.shape, annotations: { readOnlyHint: true } },
+    {
+      title: "Walk-forward backtest",
+      description:
+        "Walk-forward backtest on stored prices: buy_and_hold | equal_weight | min_variance | max_sharpe | black_litterman | custom | risk_parity | max_diversification | min_cvar | value | quality | momentum | multi_factor | dividend_sustainable_income | dividend_growth | dividend_quality_total_return (dividend strategies select with data known at each decision date, simulate dividend cash on payment dates from ex-date entitlement, and refuse with NOT_BACKTESTABLE_NO_ASOF_DATA when needed statements lack publication dates). Each rebalance (monthly…annual) estimates μ/Σ from the training window ending before that day (no look-ahead), optimizes with the existing optimizer, trades at that close after costs from Settings. Returns CAGR, volatility, Sharpe, Sortino, max drawdown, beta/alpha/TE/IR vs the benchmark, turnover, cost breakdown, month-end equity curve, methodology and limitations (survivorship, prices without dividends). Rf from the same resolver as optimize_portfolio (riskFree, returned as riskFreeInfo); the benchmark matches the portfolio's basis (SET TRI when dividends are included, else the price index; a mismatch is a warning); dividend events without a payment date use the Settings lag (paymentLagDays null = not credited, valued in warnings); archived assets are skipped; a too-short common period names the limiting assets (historyPolicy drop_short removes them). warnings = issues that bias the numbers, with their size; limitations = method.",
+      inputSchema: backtestInput.shape,
+      annotations: { readOnlyHint: true },
+    },
     safe(async (x) => summarizeBacktest(await backtestPortfolio(x))),
   );
 
@@ -327,14 +498,17 @@ export function createMcpServer() {
       inputSchema: modelComparisonInput.shape,
       annotations: { readOnlyHint: true },
     },
-    safe(async (x) => summarizeModelComparison(await comparePortfolioModels(x))),
+    safe(async (x) =>
+      summarizeModelComparison(await comparePortfolioModels(x)),
+    ),
   );
 
   server.registerTool(
     "get_portfolio_summary",
     {
       title: "Portfolio summary",
-      description: "Holdings with quantity, average cost, market value, unrealized/realized P&L and weights (THB).",
+      description:
+        "Holdings with quantity, average cost, market value, unrealized/realized P&L and weights (THB).",
       annotations: { readOnlyHint: true },
     },
     safe(async () => getPortfolioSummary()),
@@ -344,7 +518,8 @@ export function createMcpServer() {
     "get_allocation",
     {
       title: "Asset allocation",
-      description: "Actual vs. target asset allocation by asset class with drift and rebalance amounts (THB).",
+      description:
+        "Actual vs. target asset allocation by asset class with drift and rebalance amounts (THB).",
       annotations: { readOnlyHint: true },
     },
     safe(async () => getAllocation()),
@@ -407,7 +582,12 @@ export function createMcpServer() {
     },
     safe(async ({ valuation }) => {
       const r = evaluate(valuation);
-      return hasScenarios(valuation) ? { ...r, scenarioAnalysis: analyzeValuation({ valuation }).scenarioAnalysis } : r;
+      return hasScenarios(valuation)
+        ? {
+            ...r,
+            scenarioAnalysis: analyzeValuation({ valuation }).scenarioAnalysis,
+          }
+        : r;
     }),
   );
 
@@ -418,7 +598,9 @@ export function createMcpServer() {
       description:
         "Same evaluator as value_security. Scenarios: valuation.assumptions.scenarioSet {mode custom|from_segments, scenarios [{id, name, probability (decimal, Σ = 1 within 1e-8), inputOverrides {path: value}, rationale?, sources?, noteTh?}]} " +
         "or the `scenarios` argument. Returns baseCaseValue (the unmodified inputs) and probabilityWeightedValue separately, per-scenario value / upside / margin of safety, qualityStatus and a generated Thai note per scenario. " +
-        "Paths per method: " + JSON.stringify(SCENARIO_PATHS) + ". SOTP segments are targeted by id/entity/name, never by index. " +
+        "Paths per method: " +
+        JSON.stringify(SCENARIO_PATHS) +
+        ". SOTP segments are targeted by id/entity/name, never by index. " +
         "sensitivity: 'default' or {x:{path, mode shift|absolute|pct, values}, y?}; reverse: 'default' or {path, lo, hi, targetPrice?} (DCF / SOTP DCF segments only); " +
         "monteCarlo: 'saved' or {seed, draws ≤ 10000, variables [{path, mode, dist uniform|triangular|normal|empirical}], correlation?}. Analysis only — not a recommendation.",
       inputSchema: analyzeRequest.shape,
@@ -433,7 +615,12 @@ export function createMcpServer() {
       title: "Save valuation",
       description:
         "Save a valuation (method + assumptions) to the app so it appears on the Valuation page. For multi-stage residual income use multi_stage_residual_income with save: true (or residual_income with model: multi_stage). SOTP: method sotp (same input as value_security).",
-      inputSchema: { symbol: z.string(), title: z.string().optional(), note: z.string().optional(), valuation: valuationInput },
+      inputSchema: {
+        symbol: z.string(),
+        title: z.string().optional(),
+        note: z.string().optional(),
+        valuation: valuationInput,
+      },
     },
     safe(async (v) => saveValuation({ ...v, source: "claude" })),
   );
@@ -462,12 +649,32 @@ export function createMcpServer() {
     },
     safe(async ({ symbol }) => {
       const valuations = await listValuations({ symbol, limit: 50 });
-      const symbols = [...new Set(valuations.map((v) => v.symbol.toUpperCase()).concat(symbol ? [symbol.toUpperCase()] : []))];
+      const symbols = [
+        ...new Set(
+          valuations
+            .map((v) => v.symbol.toUpperCase())
+            .concat(symbol ? [symbol.toUpperCase()] : []),
+        ),
+      ];
       const latest = await latestConsensusFor(symbols);
       return {
         valuations,
         analystConsensus: Object.fromEntries(
-          [...latest].map(([k, r]) => [k, { asOf: r.asOf, source: r.source, sourceNote: r.sourceNote, currency: r.currency, targetMean: r.targetMean, targetMedian: r.targetMedian, targetLow: r.targetLow, targetHigh: r.targetHigh, analysts: r.analysts, recommendation: r.recommendationKey }]),
+          [...latest].map(([k, r]) => [
+            k,
+            {
+              asOf: r.asOf,
+              source: r.source,
+              sourceNote: r.sourceNote,
+              currency: r.currency,
+              targetMean: r.targetMean,
+              targetMedian: r.targetMedian,
+              targetLow: r.targetLow,
+              targetHigh: r.targetHigh,
+              analysts: r.analysts,
+              recommendation: r.recommendationKey,
+            },
+          ]),
         ),
       };
     }),
@@ -479,10 +686,24 @@ export function createMcpServer() {
       title: "Analyst consensus target price",
       description:
         "Latest analyst consensus target price found for one or more stocks (from Yahoo or a report the user cited), with source, as-of date, data age, upside vs the last stored price, and optional history. It is other analysts' opinion, not the user's valuation. If nothing is stored, call refresh_analyst_consensus (Yahoo) or ask the user for a cited source — never invent targets.",
-      inputSchema: { symbols: z.array(z.string().min(1)).min(1).max(30).describe("Symbols as stored in the app, e.g. [\"PTT\", \"BBL\"]"), history: z.boolean().default(false).describe("Include stored history (up to 20 rows per symbol)") },
+      inputSchema: {
+        symbols: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(30)
+          .describe('Symbols as stored in the app, e.g. ["PTT", "BBL"]'),
+        history: z
+          .boolean()
+          .default(false)
+          .describe("Include stored history (up to 20 rows per symbol)"),
+      },
       annotations: { readOnlyHint: true },
     },
-    safe(async ({ symbols, history }) => ({ results: await Promise.all(symbols.map((s) => consensusSummary(s, { history }))) })),
+    safe(async ({ symbols, history }) => ({
+      results: await Promise.all(
+        symbols.map((s) => consensusSummary(s, { history })),
+      ),
+    })),
   );
 
   server.registerTool(
@@ -491,7 +712,14 @@ export function createMcpServer() {
       title: "Refresh analyst consensus from Yahoo",
       description:
         "Fetch the analyst consensus (mean / median / high / low target, number of analysts, rating) from Yahoo Finance now and store it as today's Yahoo entry. Yahoo is unofficial and often has no data for Thai stocks: then status is NO_COVERAGE (or FETCH_FAILED), nothing is overwritten, and the latest consensus found earlier is returned.",
-      inputSchema: { symbol: z.string().min(1).describe("Symbol as stored in the app; the asset's price code (e.g. PTT.BK) is used for Yahoo") },
+      inputSchema: {
+        symbol: z
+          .string()
+          .min(1)
+          .describe(
+            "Symbol as stored in the app; the asset's price code (e.g. PTT.BK) is used for Yahoo",
+          ),
+      },
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     safe(async ({ symbol }) => refreshConsensusFromYahoo(symbol)),
@@ -513,8 +741,16 @@ export function createMcpServer() {
     "delete_analyst_consensus",
     {
       title: "Delete analyst consensus entry",
-      description: "Permanently delete one stored consensus entry by id (ids from get_analyst_consensus with history). Requires confirmDelete: true. Only when the user asks.",
-      inputSchema: { id: z.number().int().positive(), symbol: z.string().min(1).describe("Symbol the entry belongs to (checked)"), confirmDelete: z.literal(true) },
+      description:
+        "Permanently delete one stored consensus entry by id (ids from get_analyst_consensus with history). Requires confirmDelete: true. Only when the user asks.",
+      inputSchema: {
+        id: z.number().int().positive(),
+        symbol: z
+          .string()
+          .min(1)
+          .describe("Symbol the entry belongs to (checked)"),
+        confirmDelete: z.literal(true),
+      },
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
     safe(async ({ id, symbol }) => deleteConsensus(id, symbol)),
@@ -524,7 +760,8 @@ export function createMcpServer() {
     "analyze_bond",
     {
       title: "Bond analytics",
-      description: "Price ↔ yield to maturity, accrued interest, current yield, Macaulay/modified duration, convexity, DV01, yield to call. Prices per 100 face.",
+      description:
+        "Price ↔ yield to maturity, accrued interest, current yield, Macaulay/modified duration, convexity, DV01, yield to call. Prices per 100 face.",
       inputSchema: bondSchema.shape,
       annotations: { readOnlyHint: true },
     },
@@ -533,7 +770,12 @@ export function createMcpServer() {
 
   server.registerTool(
     "get_bond_holdings",
-    { title: "Bond holdings", description: "YTM and duration of the user's bonds and the portfolio-weighted bond duration.", annotations: { readOnlyHint: true } },
+    {
+      title: "Bond holdings",
+      description:
+        "YTM and duration of the user's bonds and the portfolio-weighted bond duration.",
+      annotations: { readOnlyHint: true },
+    },
     safe(async () => bondHoldings()),
   );
 
@@ -559,8 +801,11 @@ export function createMcpServer() {
     "get_investment_universe",
     {
       title: "Investment universe",
-      description: "Assets with enough history: historical return, volatility, beta and CAPM expected return (THB, annual).",
-      inputSchema: { lookbackDays: z.number().int().min(90).max(3650).optional() },
+      description:
+        "Assets with enough history: historical return, volatility, beta and CAPM expected return (THB, annual).",
+      inputSchema: {
+        lookbackDays: z.number().int().min(90).max(3650).optional(),
+      },
       annotations: { readOnlyHint: true },
     },
     safe(async ({ lookbackDays }) => {
@@ -587,7 +832,8 @@ export function createMcpServer() {
     "get_financial_statements",
     {
       title: "Historical financial statements",
-      description: "The company's stored historical statements (millions; EPS/DPS in currency units) with derived ratios: growth, margins, capex %, NWC %, tax, ROE, payout.",
+      description:
+        "The company's stored historical statements (millions; EPS/DPS in currency units) with derived ratios: growth, margins, capex %, NWC %, tax, ROE, payout.",
       inputSchema: { symbol: z.string() },
       annotations: { readOnlyHint: true },
     },
@@ -605,14 +851,32 @@ export function createMcpServer() {
       inputSchema: {
         symbol: z.string(),
         currency: z.string().optional(),
-        years: z.array(financialYearSchema.partial().extend({ fiscalYear: z.number().int(), publishedAt: isoDate.optional() })),
+        years: z.array(
+          financialYearSchema
+            .partial()
+            .extend({
+              fiscalYear: z.number().int(),
+              publishedAt: isoDate.optional(),
+            }),
+        ),
       },
     },
     safe(async ({ symbol, currency, years }) =>
       saveYears(
         symbol,
-        years.map(({ publishedAt: _p, ...y }) => ({ ...emptyYear(y.fiscalYear), ...y })),
-        { source: "claude", currency, publishedAt: Object.fromEntries(years.filter((y) => y.publishedAt).map((y) => [y.fiscalYear, y.publishedAt!])) },
+        years.map(({ publishedAt: _p, ...y }) => ({
+          ...emptyYear(y.fiscalYear),
+          ...y,
+        })),
+        {
+          source: "claude",
+          currency,
+          publishedAt: Object.fromEntries(
+            years
+              .filter((y) => y.publishedAt)
+              .map((y) => [y.fiscalYear, y.publishedAt!]),
+          ),
+        },
       ),
     ),
   );
@@ -625,10 +889,18 @@ export function createMcpServer() {
     "get_server_info",
     {
       title: "Server version and tools",
-      description: "Which build of Investment Diary is live (formula version, commit) and the tools it offers. Use it to check whether a newly added tool exists before saying it is unavailable.",
+      description:
+        "Which build of Investment Diary is live (formula version, commit) and the tools it offers. Use it to check whether a newly added tool exists before saying it is unavailable.",
       annotations: { readOnlyHint: true },
     },
-    safe(async () => ({ version: serverVersion(), commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null, tools: Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools).sort() })),
+    safe(async () => ({
+      version: serverVersion(),
+      commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+      tools: Object.keys(
+        (server as unknown as { _registeredTools: Record<string, unknown> })
+          ._registeredTools,
+      ).sort(),
+    })),
   );
 
   return server;

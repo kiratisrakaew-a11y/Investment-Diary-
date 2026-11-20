@@ -25,7 +25,11 @@ export const assetClassEnum = pgEnum("asset_class", [
   "cash",
 ]);
 export const currencyEnum = pgEnum("currency", ["THB", "USD"]);
-export const priceSourceEnum = pgEnum("price_source", ["yahoo", "sec_th", "manual"]);
+export const priceSourceEnum = pgEnum("price_source", [
+  "yahoo",
+  "sec_th",
+  "manual",
+]);
 export const txTypeEnum = pgEnum("tx_type", [
   "buy",
   "sell",
@@ -37,8 +41,19 @@ export const txTypeEnum = pgEnum("tx_type", [
   /** Stock split / reverse split: quantity = new shares per old share; price = 0. */
   "split",
 ]);
-export const noteTypeEnum = pgEnum("note_type", ["idea", "thesis", "review", "lesson", "market"]);
-export const noteSourceEnum = pgEnum("note_source", ["web", "claude", "chatgpt", "api"]);
+export const noteTypeEnum = pgEnum("note_type", [
+  "idea",
+  "thesis",
+  "review",
+  "lesson",
+  "market",
+]);
+export const noteSourceEnum = pgEnum("note_source", [
+  "web",
+  "claude",
+  "chatgpt",
+  "api",
+]);
 
 export const assets = pgTable("assets", {
   id: serial("id").primaryKey(),
@@ -110,7 +125,10 @@ export const assetMetricDefinitions = pgTable(
     name: text("name").notNull(),
     unit: text("unit").notNull(),
     description: text("description"),
-    frequency: text("frequency").$type<"daily" | "monthly" | "quarterly" | "annual" | "irregular">().notNull().default("irregular"),
+    frequency: text("frequency")
+      .$type<"daily" | "monthly" | "quarterly" | "annual" | "irregular">()
+      .notNull()
+      .default("irregular"),
     decimals: integer("decimals").notNull().default(2),
     /** One of the theme series tokens (series-1 … series-6), never free CSS. */
     chartColor: text("chart_color"),
@@ -125,8 +143,15 @@ export const assetMetricDefinitions = pgTable(
   },
   (t) => [
     uniqueIndex("asset_metric_def_asset_key_uq").on(t.assetId, t.key),
-    index("asset_metric_def_asset_active_idx").on(t.assetId, t.isActive, t.displayOrder),
-    check("asset_metric_def_frequency_ck", sql`${t.frequency} in ('daily','monthly','quarterly','annual','irregular')`),
+    index("asset_metric_def_asset_active_idx").on(
+      t.assetId,
+      t.isActive,
+      t.displayOrder,
+    ),
+    check(
+      "asset_metric_def_frequency_ck",
+      sql`${t.frequency} in ('daily','monthly','quarterly','annual','irregular')`,
+    ),
     check("asset_metric_def_decimals_ck", sql`${t.decimals} between 0 and 8`),
   ],
 );
@@ -149,7 +174,13 @@ export const assetMetricObservations = pgTable(
     recordedAt: timestamp("recorded_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("asset_metric_obs_metric_date_uq").on(t.metricId, t.observedOn), index("asset_metric_obs_metric_date_idx").on(t.metricId, t.observedOn.desc())],
+  (t) => [
+    uniqueIndex("asset_metric_obs_metric_date_uq").on(t.metricId, t.observedOn),
+    index("asset_metric_obs_metric_date_idx").on(
+      t.metricId,
+      t.observedOn.desc(),
+    ),
+  ],
 );
 
 export const assetMetricThresholdVersions = pgTable(
@@ -159,7 +190,9 @@ export const assetMetricThresholdVersions = pgTable(
     metricId: integer("metric_id")
       .references(() => assetMetricDefinitions.id, { onDelete: "cascade" })
       .notNull(),
-    ruleType: text("rule_type").$type<"lower_is_better" | "higher_is_better" | "target_range">().notNull(),
+    ruleType: text("rule_type")
+      .$type<"lower_is_better" | "higher_is_better" | "target_range">()
+      .notNull(),
     effectiveFrom: date("effective_from").notNull(),
     /** Exclusive; null = open-ended. */
     effectiveTo: date("effective_to"),
@@ -175,9 +208,18 @@ export const assetMetricThresholdVersions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("asset_metric_thr_metric_from_uq").on(t.metricId, t.effectiveFrom),
-    check("asset_metric_thr_rule_ck", sql`${t.ruleType} in ('lower_is_better','higher_is_better','target_range')`),
-    check("asset_metric_thr_range_ck", sql`${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`),
+    uniqueIndex("asset_metric_thr_metric_from_uq").on(
+      t.metricId,
+      t.effectiveFrom,
+    ),
+    check(
+      "asset_metric_thr_rule_ck",
+      sql`${t.ruleType} in ('lower_is_better','higher_is_better','target_range')`,
+    ),
+    check(
+      "asset_metric_thr_range_ck",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -221,7 +263,9 @@ export const transactions = pgTable(
     id: serial("id").primaryKey(),
     date: date("date").notNull(),
     /** Null for pure cash movements (deposit / withdraw). */
-    assetId: integer("asset_id").references(() => assets.id, { onDelete: "cascade" }),
+    assetId: integer("asset_id").references(() => assets.id, {
+      onDelete: "cascade",
+    }),
     type: txTypeEnum("type").notNull(),
     quantity: doublePrecision("quantity").notNull().default(0),
     /** Price per unit in the asset currency; for cash flows the total amount. */
@@ -229,7 +273,9 @@ export const transactions = pgTable(
     fee: doublePrecision("fee").notNull().default(0),
     /** THB per 1 unit of the transaction currency at trade time. 1 for THB. */
     fxRate: doublePrecision("fx_rate").notNull().default(1),
-    noteId: integer("note_id").references(() => notes.id, { onDelete: "set null" }),
+    noteId: integer("note_id").references(() => notes.id, {
+      onDelete: "set null",
+    }),
     memo: text("memo"),
     source: noteSourceEnum("source").notNull().default("web"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -290,13 +336,24 @@ export const settings = pgTable("settings", {
   riskFreeRate: doublePrecision("risk_free_rate").notNull().default(2.0),
   benchmarkSymbol: text("benchmark_symbol").notNull().default("^SET.BK"),
   /** Expected equity risk premium (%) used for CAPM expected returns and cost of equity. */
-  equityRiskPremium: doublePrecision("equity_risk_premium").notNull().default(6.0),
+  equityRiskPremium: doublePrecision("equity_risk_premium")
+    .notNull()
+    .default(6.0),
   /** strict: reject buys/fees without enough recorded cash; infer_with_warning: allow with an explicit inferred deposit. */
-  cashFlowPolicy: text("cash_flow_policy").$type<"strict" | "infer_with_warning">().notNull().default("strict"),
+  cashFlowPolicy: text("cash_flow_policy")
+    .$type<"strict" | "infer_with_warning">()
+    .notNull()
+    .default("strict"),
   /** How external flows are timed in TWR sub-periods. */
-  twrFlowTiming: text("twr_flow_timing").$type<"start_of_day" | "end_of_day" | "modified_dietz">().notNull().default("start_of_day"),
+  twrFlowTiming: text("twr_flow_timing")
+    .$type<"start_of_day" | "end_of_day" | "modified_dietz">()
+    .notNull()
+    .default("start_of_day"),
   /** Whether the benchmark series includes dividends. */
-  benchmarkKind: text("benchmark_kind").$type<"price_index" | "total_return">().notNull().default("price_index"),
+  benchmarkKind: text("benchmark_kind")
+    .$type<"price_index" | "total_return">()
+    .notNull()
+    .default("price_index"),
   baseCurrency: currencyEnum("base_currency").notNull().default("THB"),
   /** Provenance of the market inputs; null source = illustrative default. */
   rfSource: text("rf_source"),
@@ -312,6 +369,11 @@ export const settings = pgTable("settings", {
   timestampPolicy: jsonb("timestamp_policy"),
   /** Sortino minimum acceptable return, annual %; null = the risk-free rate. */
   sortinoMarPct: doublePrecision("sortino_mar_pct"),
+  /**
+   * Assumption for dividend events without a payment date (backtests): pay = ex-date + N calendar days.
+   * Not official data; null = such events are not credited.
+   */
+  dividendPaymentLagDays: integer("dividend_payment_lag_days").default(21),
 });
 
 export const valuationMethodEnum = pgEnum("valuation_method", [
@@ -329,7 +391,9 @@ export const valuations = pgTable(
   "valuations",
   {
     id: serial("id").primaryKey(),
-    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    assetId: integer("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     symbol: text("symbol").notNull(),
     date: date("date").notNull(),
     method: valuationMethodEnum("method").notNull(),
@@ -352,7 +416,9 @@ export const financialStatements = pgTable(
   {
     id: serial("id").primaryKey(),
     symbol: text("symbol").notNull(),
-    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    assetId: integer("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     fiscalYear: integer("fiscal_year").notNull(),
     currency: text("currency").notNull().default("THB"),
     data: jsonb("data").$type<Record<string, number | null>>().notNull(),
@@ -373,7 +439,9 @@ export const dividendEvents = pgTable(
   {
     id: serial("id").primaryKey(),
     symbol: text("symbol").notNull(),
-    assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    assetId: integer("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     issuer: text("issuer"),
     declarationDate: date("declaration_date"),
     exDate: date("ex_date"),
@@ -394,17 +462,27 @@ export const dividendEvents = pgTable(
     /** First time the event was publicly known; null = unknown (not usable point-in-time). */
     announcedAt: date("announced_at"),
     /** verified | provider | unverified */
-    dataQualityStatus: text("data_quality_status").notNull().default("unverified"),
+    dataQualityStatus: text("data_quality_status")
+      .notNull()
+      .default("unverified"),
     /** as_reported (share basis on the ex-date) | provider_split_adjusted (already on the latest basis) */
-    splitAdjustmentPolicy: text("split_adjustment_policy").notNull().default("as_reported"),
+    splitAdjustmentPolicy: text("split_adjustment_policy")
+      .notNull()
+      .default("as_reported"),
     withholdingTaxRate: doublePrecision("withholding_tax_rate"),
     withholdingSource: text("withholding_source"),
     note: text("note"),
     /** Previous values kept on correction: [{ at, values }]. */
-    revisions: jsonb("revisions").$type<{ at: string; values: Record<string, unknown> }[]>().notNull().default([]),
+    revisions: jsonb("revisions")
+      .$type<{ at: string; values: Record<string, unknown> }[]>()
+      .notNull()
+      .default([]),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("div_source_event_uq").on(t.source, t.sourceEventId), index("div_symbol_ex_idx").on(t.symbol, t.exDate)],
+  (t) => [
+    uniqueIndex("div_source_event_uq").on(t.source, t.sourceEventId),
+    index("div_symbol_ex_idx").on(t.symbol, t.exDate),
+  ],
 );
 
 /** Audit trail of statement files read by AI (the files themselves are not stored). */
@@ -451,16 +529,32 @@ export const analystConsensus = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("analyst_consensus_symbol_source_asof_uq").on(t.symbol, t.source, t.asOf),
+    uniqueIndex("analyst_consensus_symbol_source_asof_uq").on(
+      t.symbol,
+      t.source,
+      t.asOf,
+    ),
     index("analyst_consensus_symbol_idx").on(t.symbol),
-    check("analyst_consensus_source_ck", sql`${t.source} in ('yahoo','manual','mcp')`),
-    check("analyst_consensus_has_target_ck", sql`${t.targetMean} is not null or ${t.targetMedian} is not null`),
+    check(
+      "analyst_consensus_source_ck",
+      sql`${t.source} in ('yahoo','manual','mcp')`,
+    ),
+    check(
+      "analyst_consensus_has_target_ck",
+      sql`${t.targetMean} is not null or ${t.targetMedian} is not null`,
+    ),
     check(
       "analyst_consensus_positive_ck",
       sql`coalesce(${t.targetMean}, 1) > 0 and coalesce(${t.targetMedian}, 1) > 0 and coalesce(${t.targetHigh}, 1) > 0 and coalesce(${t.targetLow}, 1) > 0`,
     ),
-    check("analyst_consensus_range_ck", sql`${t.targetLow} is null or ${t.targetHigh} is null or ${t.targetLow} <= ${t.targetHigh}`),
-    check("analyst_consensus_analysts_ck", sql`${t.analysts} is null or ${t.analysts} >= 0`),
+    check(
+      "analyst_consensus_range_ck",
+      sql`${t.targetLow} is null or ${t.targetHigh} is null or ${t.targetLow} <= ${t.targetHigh}`,
+    ),
+    check(
+      "analyst_consensus_analysts_ck",
+      sql`${t.analysts} is null or ${t.analysts} >= 0`,
+    ),
   ],
 );
 
@@ -479,7 +573,13 @@ export const sharesOutstanding = pgTable(
     note: text("note"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("shares_outstanding_symbol_date_uq").on(t.symbol, t.effectiveDate), check("shares_outstanding_positive_ck", sql`${t.shares} > 0`)],
+  (t) => [
+    uniqueIndex("shares_outstanding_symbol_date_uq").on(
+      t.symbol,
+      t.effectiveDate,
+    ),
+    check("shares_outstanding_positive_ck", sql`${t.shares} > 0`),
+  ],
 );
 
 /** Company events for event studies and scan context (earnings, M&A, XD, news). XD also comes from dividend_events. */
@@ -494,14 +594,23 @@ export const stockEvents = pgTable(
     source: text("source"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("stock_events_symbol_date_idx").on(t.symbol, t.eventDate), check("stock_events_type_ck", sql`${t.eventType} in ('earnings','ma','xd','news','other')`)],
+  (t) => [
+    index("stock_events_symbol_date_idx").on(t.symbol, t.eventDate),
+    check(
+      "stock_events_type_ck",
+      sql`${t.eventType} in ('earnings','ma','xd','news','other')`,
+    ),
+  ],
 );
 
 /** In-app AI advisor conversations (text turns only). */
 export const advisorThreads = pgTable("advisor_threads", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  messages: jsonb("messages").$type<{ role: "user" | "assistant"; content: string }[]>().notNull().default([]),
+  messages: jsonb("messages")
+    .$type<{ role: "user" | "assistant"; content: string }[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

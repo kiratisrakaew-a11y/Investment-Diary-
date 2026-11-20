@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-20 — Backtest fix, phase A (spec BACKTEST_SPEC: BT-1, BT-2, BT-3, BT-5, BT-9)
+- **BT-1 dividends without a payment date.**
+  - New Settings value `dividendPaymentLagDays`, default 21 calendar days. It is labelled as an assumption, and migration 0019 is additive, with a rollback file.
+  - When `paymentLagDays` is omitted, the Settings value is used. An explicit `null` keeps the old behaviour (not credited).
+  - A recorded payment date always wins over the assumption.
+  - The response carries `assumedPaymentDates` (count / lag / by symbol).
+  - Events that are still not credited are valued at the units held on the ex-date (count, THB, share of capital) and reported in `warnings`, not only `limitations`.
+- **BT-2 benchmark basis.**
+  - A portfolio that includes dividends (dividend cash flows / total return) is compared with a total-return index: Settings if it is one, else the imported SETTRI. A price-only portfolio is compared with a price index.
+  - With no matching series, the other series is used and a "benchmark basis ไม่ตรง" warning is added.
+  - The response has `benchmark: { symbol, basis, wanted }`. The same rule applies in compare_portfolio_models.
+- **BT-3 universe / data period.**
+  - One candidate rule (`services/universe.ts`) for optimize / compare / backtest: archived assets are skipped (fixes compare including TISCO, MPT P0-B5).
+  - Root cause of the unexplained error: without a start date, every series was cut to the latest asset's first date before the common calendar was built, so the limiting asset could not be identified.
+  - Series now keep their full history. A too-short common period names the limiting assets with their first dates and the largest `windowDays` that fits.
+  - New `historyPolicy: "drop_short"` drops them (listed in `excluded`).
+  - Results of runs that already worked are unchanged (verified identical on 5 cases).
+- **BT-5 risk-free.**
+  - `riskFree` (same schema and resolver as optimize_portfolio) for backtest and compare. It drives cash accrual and Sharpe, and is returned as `riskFreeInfo`.
+  - The Settings rate without a source is a warning.
+- **BT-9.** `warnings` now carry what biases the numbers: excluded assets / shorter period, benchmark basis, illustrative Rf, uncounted dividends, stock dividends not simulated. `limitations` stay methodological.
+- Checks: `npm run check:backtest` (local DB, TEST-LOCAL data) and `src/lib/finance/backtest-spec.test.ts`.
+
 ## 2026-11-20 — MPT fix, phase 1 (spec MPT_FIX_SPEC: P0-B1, P0-A1)
 - **P0-B1 — false `INFEASIBLE_CONSTRAINTS`.** Root cause differs from the spec's hypothesis (multi-constraint working set).
   - Real cause: `feasibleReturnRange` found the LP max/min of μᵀw with a QP whose linear term was doubled up to huge values. The dual active-set solver broke down numerically and reported "infeasible".

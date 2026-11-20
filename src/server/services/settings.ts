@@ -4,7 +4,11 @@ import type { AssetClass } from "@/db/schema";
 import { tradingCostsSchema, type TradingCosts } from "@/lib/finance/rebalance";
 import { yieldCurveInput } from "@/lib/validation";
 import type { z } from "zod";
-import { readTimestampPolicy, timestampPolicySchema, type TimestampPolicy } from "@/lib/governance";
+import {
+  readTimestampPolicy,
+  timestampPolicySchema,
+  type TimestampPolicy,
+} from "@/lib/governance";
 
 export async function getSettings() {
   const [row] = await getDb().select().from(schema.settings);
@@ -27,6 +31,7 @@ export async function getSettings() {
       yieldCurve: null as unknown,
       timestampPolicy: null as unknown,
       sortinoMarPct: null as number | null,
+      dividendPaymentLagDays: 21 as number | null,
     }
   );
 }
@@ -44,10 +49,13 @@ export async function saveSettings(input: {
   erpSource?: string | null;
   erpAsOf?: string | null;
   sortinoMarPct?: number | null;
+  dividendPaymentLagDays?: number | null;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
-  const defined = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+  const defined = Object.fromEntries(
+    Object.entries(input).filter(([, v]) => v !== undefined),
+  );
   const data = settingsInput.parse({
     riskFreeRate: current.riskFreeRate,
     benchmarkSymbol: current.benchmarkSymbol,
@@ -61,6 +69,7 @@ export async function saveSettings(input: {
     erpSource: current.erpSource,
     erpAsOf: current.erpAsOf,
     sortinoMarPct: current.sortinoMarPct ?? null,
+    dividendPaymentLagDays: current.dividendPaymentLagDays ?? null,
     ...defined,
   });
   await getDb()
@@ -77,34 +86,49 @@ export async function getTradingCosts(): Promise<TradingCosts> {
 }
 
 export async function saveTradingCosts(input: Partial<TradingCosts>) {
-  const data = tradingCostsSchema.parse({ ...(await getTradingCosts()), ...input });
+  const data = tradingCostsSchema.parse({
+    ...(await getTradingCosts()),
+    ...input,
+  });
   await getSettings().then((s) =>
     getDb()
       .insert(schema.settings)
       .values({ ...s, id: 1, tradingCosts: data })
-      .onConflictDoUpdate({ target: schema.settings.id, set: { tradingCosts: data } }),
+      .onConflictDoUpdate({
+        target: schema.settings.id,
+        set: { tradingCosts: data },
+      }),
   );
   return data;
 }
 
 /** Government zero curve for spread analytics, or null (spread metrics are then unavailable). */
-export async function getYieldCurve(): Promise<z.infer<typeof yieldCurveInput> | null> {
+export async function getYieldCurve(): Promise<z.infer<
+  typeof yieldCurveInput
+> | null> {
   const s = await getSettings();
   const parsed = yieldCurveInput.safeParse(s.yieldCurve);
   return parsed.success ? parsed.data : null;
 }
 
-export async function saveYieldCurve(input: z.input<typeof yieldCurveInput> | null) {
+export async function saveYieldCurve(
+  input: z.input<typeof yieldCurveInput> | null,
+) {
   const data = input == null ? null : yieldCurveInput.parse(input);
   const s = await getSettings();
   await getDb()
     .insert(schema.settings)
     .values({ ...s, id: 1, yieldCurve: data })
-    .onConflictDoUpdate({ target: schema.settings.id, set: { yieldCurve: data } });
+    .onConflictDoUpdate({
+      target: schema.settings.id,
+      set: { yieldCurve: data },
+    });
   return data;
 }
 
-export async function getTargets(): Promise<Partial<Record<AssetClass, number>>> {
+export async function getTargets(): Promise<
+  Partial<Record<AssetClass, number>>
+> {
   const rows = await getDb().select().from(schema.allocationTargets);
   return Object.fromEntries(rows.map((r) => [r.assetClass, r.targetPct]));
 }
@@ -112,13 +136,17 @@ export async function getTargets(): Promise<Partial<Record<AssetClass, number>>>
 export async function saveTargets(input: Partial<Record<AssetClass, number>>) {
   const data = targetsInput.parse(input);
   const sum = Object.values(data).reduce((a, b) => a + (b ?? 0), 0);
-  if (Math.abs(sum - 100) > 0.01) throw new Error(`Targets must add up to 100% (got ${sum}%)`);
+  if (Math.abs(sum - 100) > 0.01)
+    throw new Error(`Targets must add up to 100% (got ${sum}%)`);
   const db = getDb();
   await db.transaction(async (tx) => {
     await tx.delete(schema.allocationTargets);
     const rows = Object.entries(data)
       .filter(([, v]) => (v ?? 0) > 0)
-      .map(([assetClass, targetPct]) => ({ assetClass: assetClass as AssetClass, targetPct: targetPct! }));
+      .map(([assetClass, targetPct]) => ({
+        assetClass: assetClass as AssetClass,
+        targetPct: targetPct!,
+      }));
     if (rows.length) await tx.insert(schema.allocationTargets).values(rows);
   });
 }
@@ -129,11 +157,17 @@ export async function getTimestampPolicy(): Promise<TimestampPolicy> {
 }
 
 export async function saveTimestampPolicy(input: Partial<TimestampPolicy>) {
-  const data = timestampPolicySchema.parse({ ...(await getTimestampPolicy()), ...input });
+  const data = timestampPolicySchema.parse({
+    ...(await getTimestampPolicy()),
+    ...input,
+  });
   const s = await getSettings();
   await getDb()
     .insert(schema.settings)
     .values({ ...s, id: 1, timestampPolicy: data })
-    .onConflictDoUpdate({ target: schema.settings.id, set: { timestampPolicy: data } });
+    .onConflictDoUpdate({
+      target: schema.settings.id,
+      set: { timestampPolicy: data },
+    });
   return data;
 }
