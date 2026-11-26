@@ -358,7 +358,7 @@ export default async function AssetPage({
                     <td>{tx.date}</td>
                     <td>{TX_TYPE_LABEL[tx.type]}</td>
                     <td className="num">
-                      {tx.quantity ? fmtQty(tx.quantity) : "–"}
+                      {tx.quantity ? fmtQty(tx.quantity) : "—"}
                     </td>
                     <td className="num">{fmtNum(tx.price)}</td>
                   </tr>

@@ -87,7 +87,7 @@ export function RimHorizonPanel({
                     <Row k="CV / มูลค่า" v={fmtPct(r.terminalShareOfValue, 1)} />
                     <Row k="Implied P/BV" v={`${fmtNum(r.impliedPBV, 2)}x`} />
                     <Row k="Ke" v={fmtPct(r.ke, 2)} />
-                    <Row k="ROE หลังปี h" v={r.terminalRoe != null ? fmtPct(r.terminalRoe, 1) : "–"} />
+                    <Row k="ROE หลังปี h" v={r.terminalRoe != null ? fmtPct(r.terminalRoe, 1) : "—"} />
                   </dl>
                   {r.warnings.length > 0 && (
                     <ul className="mt-2 space-y-0.5 text-xs text-warn">

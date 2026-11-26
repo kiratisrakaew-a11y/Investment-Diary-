@@ -186,11 +186,11 @@ export function RebalancePanel({
                 {res.trades.map((t) => (
                   <tr key={t.symbol}>
                     <td className="font-medium">{t.symbol}</td>
-                    <td className={clsx(t.side === "buy" ? "text-pos" : t.side === "sell" ? "text-neg" : "text-muted")}>{t.side === "buy" ? "ซื้อ" : t.side === "sell" ? "ขาย" : "–"}</td>
-                    <td className="num">{t.side === "hold" ? "–" : fmtNum(t.quantity, t.quantity % 1 ? 4 : 0)}</td>
+                    <td className={clsx(t.side === "buy" ? "text-pos" : t.side === "sell" ? "text-neg" : "text-muted")}>{t.side === "buy" ? "ซื้อ" : t.side === "sell" ? "ขาย" : "—"}</td>
+                    <td className="num">{t.side === "hold" ? "—" : fmtNum(t.quantity, t.quantity % 1 ? 4 : 0)}</td>
                     <td className="num">{fmtNum(t.price)}</td>
-                    <td className="num">{t.side === "hold" ? "–" : fmtThb(t.value)}</td>
-                    <td className="num">{t.cost.total ? fmtNum(t.cost.total) : "–"}</td>
+                    <td className="num">{t.side === "hold" ? "—" : fmtThb(t.value)}</td>
+                    <td className="num">{t.cost.total ? fmtNum(t.cost.total) : "—"}</td>
                     <td className="num">
                       {fmtPct(t.currentWeight, 1)} → {fmtPct(t.finalWeight, 1)} ({t.targetWeight != null ? fmtPct(t.targetWeight, 1) : "คงไว้"})
                     </td>

@@ -111,11 +111,11 @@ export default async function TransactionsPage() {
                       <td>{tx.date}</td>
                       <td>{TX_TYPE_LABEL[tx.type]}</td>
                       <td className="font-medium">{symbol ?? "เงินสด"}</td>
-                      <td className="num">{tx.type === "split" ? `×${fmtQty(tx.quantity)}` : tx.quantity ? fmtQty(tx.quantity) : "–"}</td>
+                      <td className="num">{tx.type === "split" ? `×${fmtQty(tx.quantity)}` : tx.quantity ? fmtQty(tx.quantity) : "—"}</td>
                       <td className="num">
                         {fmtNum(tx.price)} <span className="text-xs text-muted">{currency ?? "THB"}</span>
                       </td>
-                      <td className="num">{tx.fee ? fmtNum(tx.fee) : "–"}</td>
+                      <td className="num">{tx.fee ? fmtNum(tx.fee) : "—"}</td>
                       <td className="num">{fmtThb(gross * tx.fxRate)}</td>
                       <td className="max-w-48 truncate text-xs text-muted">
                         {tx.source !== "web" && <Badge className="mr-1">{tx.source}</Badge>}

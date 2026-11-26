@@ -72,7 +72,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
             v={fmtNum(avg)}
             sub={group ? `มัธยฐาน ${fmtNum(group.median)} · ${group.methods.length} วิธี · ${group.count} ครั้ง` : "ยังไม่มี"}
           />
-          <Metric k="ช่วงมูลค่า" v={group?.low != null ? `${fmtNum(group.low)} – ${fmtNum(group.high)}` : "–"} />
+          <Metric k="ช่วงมูลค่า" v={group?.low != null ? `${fmtNum(group.low)} – ${fmtNum(group.high)}` : "—"} />
           <Metric
             k="Upside จากค่าเฉลี่ย"
             v={fmtPct(upside, 1)}

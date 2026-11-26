@@ -24,7 +24,7 @@ export function CoverageTable({
             {rows.map((r) => (
               <tr key={r.symbol} className="border-t border-border">
                 <td className="py-1 font-medium">{r.symbol}</td>
-                <td className="tabular-nums">{r.firstDate ?? "–"}</td>
+                <td className="tabular-nums">{r.firstDate ?? "—"}</td>
                 <td className="text-right tabular-nums">{r.observations}</td>
                 <td className={tone[r.status]} title={r.reason}>
                   {label[r.status]}

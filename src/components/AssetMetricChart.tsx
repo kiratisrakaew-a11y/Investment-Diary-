@@ -6,6 +6,7 @@
  * tooltip for that metric only. Real date x-axis, raw observations only (gaps stay gaps). Threshold
  * status is a ring on each point and text in the tooltip — never the line colour.
  */
+import { fmtNum, formatNumber } from "@/lib/format";
 import {
   CartesianGrid,
   Line,
@@ -62,13 +63,9 @@ const ts = (d: string) => Date.parse(`${d}T00:00:00Z`);
 /** Axis ticks: whole numbers for large magnitudes, short decimals otherwise. */
 const tick = (v: number) =>
   Math.abs(v) >= 1000
-    ? Math.round(v).toLocaleString("en-US")
+    ? fmtNum(v, 0)
     : Number(v.toPrecision(3)).toString();
-const fmt = (v: number, d: number) =>
-  v.toLocaleString("en-US", {
-    minimumFractionDigits: Math.min(d, 2),
-    maximumFractionDigits: d,
-  });
+const fmt = (v: number, d: number) => fmtNum(v, d);
 
 function StatusDot(props: {
   cx?: number;
@@ -130,7 +127,7 @@ function Tip({
               ? `– (ค่าจริง ${raw})`
               : mode === "indexed"
                 ? `${fmt(row.value, 1)} (ค่าจริง ${raw})`
-                : `${row.value >= 0 ? "+" : ""}${fmt(row.value, 1)}% (ค่าจริง ${raw})`}
+                : `${formatNumber(row.value, 1, { signed: true })}% (ค่าจริง ${raw})`}
         </span>
       </div>
       {row.value == null && row.reason && (

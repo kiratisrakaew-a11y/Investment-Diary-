@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtNum } from "@/lib/format";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -83,7 +84,7 @@ export function PriceImport() {
         <div className="space-y-2 text-sm">
           <p className={result.dryRun ? "text-muted" : "text-pos"}>
             {result.dryRun ? "ผลตรวจสอบ (ยังไม่บันทึก)" : "บันทึกแล้ว"} · รูปแบบ {result.format ? FORMAT_LABEL[result.format] ?? result.format : "-"} · {s.rows.toLocaleString()} แถว {s.symbols} สัญลักษณ์ ·
-            {result.dryRun ? " จะเพิ่ม" : " เพิ่ม"} {s.inserted.toLocaleString()} · {result.dryRun ? "จะแก้" : "แก้"} {s.updated.toLocaleString()} · คงราคาเดิม {s.skippedExisting.toLocaleString()}
+            {result.dryRun ? " จะเพิ่ม" : " เพิ่ม"} {fmtNum(s.inserted, 0)} · {result.dryRun ? "จะแก้" : "แก้"} {fmtNum(s.updated, 0)} · คงราคาเดิม {fmtNum(s.skippedExisting, 0)}
             {s.unknown ? ` · ไม่รู้จัก ${s.unknown} สัญลักษณ์` : ""}
           </p>
           <div className="overflow-x-auto">

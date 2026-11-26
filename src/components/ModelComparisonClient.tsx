@@ -13,7 +13,7 @@ import { ModelLinesChart } from "./charts";
 import { NumField, SelectField, Toggle } from "./fields";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
-import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb } from "@/lib/format";
+import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, formatNumber } from "@/lib/format";
 import {
   COMPARISON_MODELS,
   MODEL_LABEL,
@@ -209,7 +209,7 @@ export function ModelComparisonClient({
   const ret = (o: RealisedStats | null) =>
     o
       ? `${fmtPct(o.annualReturn, 1)}${o.annualised === "extrapolated" ? "*" : ""}`
-      : "–";
+      : "—";
   const anyExtrapolated = (view?.results ?? []).some(
     (m) =>
       m.outOfSample?.annualised === "extrapolated" ||
@@ -469,7 +469,7 @@ export function ModelComparisonClient({
                                 {w > 0.0005 ? (
                                   fmtPct(w, 1)
                                 ) : (
-                                  <span className="text-muted">–</span>
+                                  <span className="text-muted">—</span>
                                 )}
                               </td>
                             );
@@ -646,11 +646,11 @@ export function ModelComparisonClient({
                                 )}
                               >
                                 {m.gap?.sharpe != null
-                                  ? `${m.gap.sharpe >= 0 ? "+" : ""}${fmtRatio(m.gap.sharpe)}`
-                                  : "–"}
+                                  ? formatNumber(m.gap.sharpe, 2, { signed: true })
+                                  : "—"}
                               </td>
                               <td className="num">
-                                {m.costs != null ? fmtThb(m.costs) : "–"}
+                                {m.costs != null ? fmtThb(m.costs) : "—"}
                               </td>
                             </>
                           ) : (
@@ -711,7 +711,7 @@ export function ModelComparisonClient({
                                   {fmtPct(m.turnoverAnnual, 0)}
                                 </td>
                                 <td className="num">
-                                  {m.costs != null ? fmtThb(m.costs) : "–"}
+                                  {m.costs != null ? fmtThb(m.costs) : "—"}
                                 </td>
                               </>
                             ) : (

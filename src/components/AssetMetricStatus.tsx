@@ -7,7 +7,7 @@ const STATUS_STYLE: Record<MetricStatus, { text: string; icon: string }> = {
   YELLOW: { text: "text-warn", icon: "▲" },
   RED: { text: "text-neg", icon: "■" },
   NO_THRESHOLD: { text: "text-muted", icon: "○" },
-  NO_DATA: { text: "text-muted", icon: "–" },
+  NO_DATA: { text: "text-muted", icon: "—" },
 };
 
 export function StatusBadge({ status, title }: { status: MetricStatus; title?: string }) {

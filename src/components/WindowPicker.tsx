@@ -8,6 +8,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { WindowPreset, WindowRequest } from "@/lib/finance/window";
+import { fmtNum } from "@/lib/format";
 
 export interface WindowValue {
   preset: WindowPreset;
@@ -147,11 +148,11 @@ export function WindowBanner({
     <p className="flex flex-wrap items-center gap-2 text-xs text-muted" data-testid="window-banner">
       <span className={`rounded-md px-1.5 py-0.5 font-medium ${tone}`}>{info.quality}</span>
       <span>
-        ขอ {info.requested.preset === "max" ? "ทั้งหมด" : reqYears != null ? `${reqYears.toFixed(1)} ปี` : info.requested.preset}
-        {e ? ` · ใช้จริง ${e.years.toFixed(1)} ปี (${e.observations} ${unit}, ${e.startDate} → ${e.endDate})` : " · ใช้ไม่ได้"}
+        ขอ {info.requested.preset === "max" ? "ทั้งหมด" : reqYears != null ? `${fmtNum(reqYears, 1)} ปี` : info.requested.preset}
+        {e ? ` · ใช้จริง ${fmtNum(e.years, 1)} ปี (${e.observations} ${unit}, ${e.startDate} → ${e.endDate})` : " · ใช้ไม่ได้"}
         {info.limitedBy.length ? ` เพราะ ${info.limitedBy.map((l) => `${l.symbol} เริ่ม ${l.firstDate}`).join(", ")}` : ""}
-        {` · ${info.obsPerAsset.toFixed(1)} งวด/สินทรัพย์`}
-        {Math.abs(info.muYears - info.sigmaYears) > 0.05 ? ` · μ จาก ${info.muYears.toFixed(1)} ปี, Σ จาก ${info.sigmaYears.toFixed(1)} ปี` : ""}
+        {` · ${fmtNum(info.obsPerAsset, 1)} งวด/สินทรัพย์`}
+        {Math.abs(info.muYears - info.sigmaYears) > 0.05 ? ` · μ จาก ${fmtNum(info.muYears, 1)} ปี, Σ จาก ${fmtNum(info.sigmaYears, 1)} ปี` : ""}
       </span>
     </p>
   );

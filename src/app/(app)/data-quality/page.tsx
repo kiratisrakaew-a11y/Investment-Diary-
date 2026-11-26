@@ -3,6 +3,7 @@ import { dataQualityReport } from "@/server/services/data-quality";
 import { PageHeader, Section } from "@/components/ui";
 import { compact } from "@/lib/explain-data";
 import { BENCHMARK_KIND_LABEL, RETURN_BASIS_SHORT } from "@/lib/finance/price-basis";
+import { fmtPct } from "@/lib/format";
 
 const ICON = { ok: "✅", warn: "⚠️", error: "❌" } as const;
 
@@ -80,7 +81,7 @@ export default async function DataQualityPage() {
                   <td className="text-right tabular-nums">
                     {a.withAdjClose} / {a.days}
                   </td>
-                  <td className={`text-right tabular-nums ${a.ratio < 1 ? "text-warn" : ""}`}>{(a.ratio * 100).toFixed(0)}%</td>
+                  <td className={`text-right tabular-nums ${a.ratio < 1 ? "text-warn" : ""}`}>{fmtPct(a.ratio, 0)}</td>
                 </tr>
               ))}
             </tbody>

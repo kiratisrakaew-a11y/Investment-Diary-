@@ -340,12 +340,12 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                   <AreaGradient id="gBondCurve" color="var(--series-1)" via="var(--series-5)" top={0.75} />
                 </defs>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="ytm" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
+                <XAxis dataKey="ytm" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => `${fmtPct(v, 1)}`} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis domain={["auto", "auto"]} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} width={44} />
                 <Tooltip
                   contentStyle={{ background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" }}
                   formatter={(v) => [fmtNum(Number(v), 3), "ราคา clean"]}
-                  labelFormatter={(v) => `YTM ${(Number(v) * 100).toFixed(2)}%`}
+                  labelFormatter={(v) => `YTM ${fmtPct(Number(v), 2)}`}
                 />
                 <Area type="monotone" dataKey="price" stroke="var(--series-1)" fill="url(#gBondCurve)" baseValue="dataMin" strokeWidth={2} isAnimationActive={false} />
                 <ReferenceDot x={r.a.ytm} y={r.a.cleanPrice} r={6} fill="var(--series-2)" stroke="var(--panel-solid)" strokeWidth={2} />
@@ -402,7 +402,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 <Row k="ผลตอบแทนรวม" v={fmtPct(horizon.totalReturn, 2)} />
                 <Row k="ผลตอบแทนต่อปี (ทบตามงวดคูปอง เทียบกับ YTM ได้)" v={fmtPct(horizon.annualizedReturn, 3)} strong />
                 <p className="mt-2 text-xs text-muted">
-                  YTM {r.ok ? fmtPct(r.a.ytm, 3) : "–"} คือผลตอบแทนถ้าถือจนครบกำหนดและนำคูปองไปลงทุนต่อที่ YTM เท่านั้น — ผลตอบแทนจริงเมื่อขายก่อนครบกำหนดขึ้นกับ yield ตอนขายและอัตราลงทุนต่อ จึงไม่รับประกัน
+                  YTM {r.ok ? fmtPct(r.a.ytm, 3) : "—"} คือผลตอบแทนถ้าถือจนครบกำหนดและนำคูปองไปลงทุนต่อที่ YTM เท่านั้น — ผลตอบแทนจริงเมื่อขายก่อนครบกำหนดขึ้นกับ yield ตอนขายและอัตราลงทุนต่อ จึงไม่รับประกัน
                 </p>
               </div>
             )}

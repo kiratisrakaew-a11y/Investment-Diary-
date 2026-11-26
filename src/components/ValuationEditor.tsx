@@ -210,7 +210,7 @@ export function ValuationEditor({
       if (!r.ok) return setBetaMsg({ ok: false, text: r.error });
       setShared("beta", r.beta);
       setMeta("betaSource", r.betaSource);
-      setBetaMsg({ ok: true, text: `β = ${r.beta.toFixed(2)}` });
+      setBetaMsg({ ok: true, text: `β = ${fmtNum(r.beta, 2)}` });
     });
   const setShared = (k: "riskFree" | "beta" | "equityRiskPremium" | "extraPremium" | "currentPrice", v: number) => {
     setDcfA((a) => ({ ...a, [k]: v }));
@@ -846,7 +846,7 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
                 {r.label} {warn && <span title={r.explanation!.warnings.join("\n")}>⚠️</span>}
               </span>
               <span className="tabular-nums">
-                {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "–"} <span className="text-accent">›</span>
+                {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "—"} <span className="text-accent">›</span>
               </span>
             </div>
             <div className="relative h-2.5 rounded-full bg-border/50">
@@ -1005,7 +1005,7 @@ function ReverseDcf({ r }: { r?: { rate: number | null; status: string; candidat
         ? `หลายคำตอบ: ${r.candidates.map((c) => fmtPct(c, 1)).join(", ")}`
         : r.status === "no_root"
           ? "ไม่มี growth ในช่วง −50%…100% ที่ให้ราคานี้"
-          : "–";
+          : "—";
   const shift = r.basis === "stage_shift";
   return <KV k={shift ? "Growth ที่ต้องบวก/ลบทุกช่วงให้ได้ราคาตลาด (reverse DCF)" : "Growth ที่ราคาตลาดสะท้อน (reverse DCF)"} v={shift && r.status === "ok" && r.rate != null ? `${r.rate >= 0 ? "+" : "−"}${fmtPct(Math.abs(r.rate), 1)} จุด` : v} />;
 }
@@ -1038,7 +1038,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
           ["FCFE", (y) => fmt(y.fcfe)],
         ] as [string, (y: Y) => string][])
       : []),
-    ["Discount factor", (y) => y.discountFactor.toFixed(4)],
+    ["Discount factor", (y) => fmtNum(y.discountFactor, 4)],
     ["PV", (y) => fmt(y.pv)],
   ];
   const t = r.terminal;

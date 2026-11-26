@@ -85,7 +85,7 @@ export default async function DividendsPage() {
                   </td>
                   <td className="num">{fmtNum(r.gross, 2)}</td>
                   <td className="num text-muted">{fmtPct(r.withholdingRate, 0)}</td>
-                  <td className="num">{r.netThb == null ? "–" : fmtThb(r.netThb)}</td>
+                  <td className="num">{r.netThb == null ? "—" : fmtThb(r.netThb)}</td>
                   <td className="num">{r.receivedThb == null ? "" : fmtThb(r.receivedThb)}</td>
                 </tr>
               ))}

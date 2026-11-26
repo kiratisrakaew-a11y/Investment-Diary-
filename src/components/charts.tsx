@@ -19,7 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { useId, useRef, useState } from "react";
-import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtThb } from "@/lib/format";
+import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtThb, fmtNum, fmtPct } from "@/lib/format";
 import type { AssetClass } from "@/db/schema";
 
 /** Vertical fill under a line: strong colour at the top fading to transparent (optionally via a second colour). */
@@ -45,8 +45,8 @@ const tooltipStyle = {
   contentStyle: { background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" },
   labelStyle: { color: "var(--muted)" },
 };
-const compactThb = (v: number) => (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : `${v}`);
-const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+const compactThb = (v: number) => (Math.abs(v) >= 1e6 ? `${fmtNum(v / 1e6, 1)}M` : Math.abs(v) >= 1e3 ? `${fmtNum(v / 1e3, 0)}k` : `${v}`);
+const pct = (v: number) => `${fmtPct(v, 0)}`;
 
 export function AllocationDonut({ rows }: { rows: { assetClass: AssetClass; value: number; actualPct: number }[] }) {
   const data = rows.filter((r) => r.value > 0);
@@ -64,7 +64,7 @@ export function AllocationDonut({ rows }: { rows: { assetClass: AssetClass; valu
         />
         <Tooltip
           {...tooltipStyle}
-          formatter={(v, _n, item) => [`${fmtThb(Number(v))} (${(item.payload as { actualPct: number }).actualPct.toFixed(1)}%)`, ASSET_CLASS_LABEL[(item.payload as { assetClass: AssetClass }).assetClass]]}
+          formatter={(v, _n, item) => [`${fmtThb(Number(v))} (${fmtNum((item.payload as { actualPct: number }).actualPct, 1)}%)`, ASSET_CLASS_LABEL[(item.payload as { assetClass: AssetClass }).assetClass]]}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -87,7 +87,7 @@ export function GrowthChart({ data, benchmark }: { data: { date: string; portfol
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
-        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtPct(Number(v), 2), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {benchmark && <Area type="monotone" dataKey="benchmark" name={benchmark} stroke="var(--series-2)" fill={`url(#${gb})`} strokeWidth={2} connectNulls isAnimationActive={false} />}
         <Area type="monotone" dataKey="portfolio" name="พอร์ต (TWR)" stroke="var(--series-1)" fill={`url(#${gp})`} strokeWidth={2.5} isAnimationActive={false} />
@@ -127,7 +127,7 @@ export function PriceChart({ data, currency }: { data: { date: string; close: nu
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} domain={["auto", "auto"]} width={56} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()} ${currency}`, "ราคา"]} />
+        <Tooltip {...tooltipStyle} formatter={(v) => [`${fmtNum(Number(v), 2)} ${currency}`, "ราคา"]} />
         <Area type="monotone" dataKey="close" stroke="var(--series-1)" fill={`url(#${g})`} baseValue="dataMin" strokeWidth={2} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -156,7 +156,7 @@ export function FrontierChart({
 }) {
   const maxVol = Math.max(...assets.map((a) => a.volatility), current.volatility, tangency?.volatility ?? 0) * 1.1;
   const cmlLine = cml ? [0, maxVol].map((v) => ({ volatility: v, expectedReturn: cml.intercept + cml.slope * v })) : [];
-  const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const fmt = (v: number) => `${fmtPct(v, 1)}`;
   return (
     <ResponsiveContainer width="100%" height={360}>
       <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
@@ -210,7 +210,7 @@ function BulletTip({
 }) {
   const p = payload?.[0]?.payload;
   if (hideFor || !active || !p) return null;
-  const f = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const f = (v: number) => `${fmtPct(v, 1)}`;
   return (
     <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px" }}>
       {payload?.[0]?.name && <div style={{ color: "var(--muted)" }}>{payload[0].name}</div>}
@@ -223,7 +223,7 @@ function BulletTip({
 
 /** Asset point details (hover on desktop, tap on mobile). */
 function AssetTipBox({ p, rf }: { p: Pt2 & { symbol: string; detail?: AssetPointDetail }; rf: number }) {
-  const f = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`);
+  const f = (v: number | null | undefined, d = 1) => fmtPct(v, d);
   const d = p.detail;
   const sharpe = p.volatility > 0 ? (p.expectedReturn - rf) / p.volatility : null;
   const row = (k: string, v: string) => (
@@ -244,10 +244,10 @@ function AssetTipBox({ p, rf }: { p: Pt2 & { symbol: string; detail?: AssetPoint
       )}
       {row("ความเสี่ยง σ ต่อปี", f(p.volatility))}
       {row(`E[R] ที่ใช้${d ? ` (${d.muSource})` : ""}`, f(p.expectedReturn))}
-      {row("Sharpe (รายตัว)", sharpe == null ? "–" : sharpe.toFixed(2))}
+      {row("Sharpe (รายตัว)", sharpe == null ? "—" : fmtNum(sharpe, 2))}
       {d && (
         <>
-          {row("β", d.beta == null ? "–" : d.beta.toFixed(2))}
+          {row("β", d.beta == null ? "—" : fmtNum(d.beta, 2))}
           {row("μ ในอดีต / CAPM", `${f(d.historicalReturn)} / ${f(d.capmReturn)}`)}
           {row("น้ำหนัก ถือ → แนะนำ", `${d.currentWeight ? f(d.currentWeight) : "ไม่ได้ถือ"} → ${f(d.recommendedWeight)}`)}
         </>
@@ -377,7 +377,7 @@ export function DrawdownChart({ data }: { data: { date: string; drawdown: number
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v) * 100).toFixed(2)}%`, "Drawdown"]} />
+        <Tooltip {...tooltipStyle} formatter={(v) => [fmtPct(Number(v), 2), "Drawdown"]} />
         <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--neg)" fill={`url(#${g})`} strokeWidth={1.5} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -394,7 +394,7 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
-        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(1)}%`, n]} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtPct(Number(v), 1), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {symbols.map((s, i) => (
           <Area key={s} type="stepAfter" dataKey={s} stackId="w" stroke={SERIES[i % SERIES.length]} fill={SERIES[i % SERIES.length]} fillOpacity={0.65} isAnimationActive={false} />
@@ -410,13 +410,13 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
  * fixed colour order, the benchmark as a dashed neutral line. `percent` formats values as % (drawdown).
  */
 export function ModelLinesChart({ data, series, benchmark, percent = false, height = 280 }: { data: Record<string, number | string | null>[]; series: { key: string; name: string }[]; benchmark?: string | null; percent?: boolean; height?: number }) {
-  const f = (v: number) => (percent ? `${(v * 100).toFixed(1)}%` : v.toFixed(1));
+  const f = (v: number) => (percent ? `${fmtPct(v, 1)}` : fmtNum(v, 1));
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
-        <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => (percent ? pct(Number(v)) : Number(v).toFixed(0))} />
+        <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => (percent ? pct(Number(v)) : fmtNum(Number(v), 0))} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [f(Number(v)), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {benchmark && <Line type="linear" dataKey="benchmark" name={benchmark} stroke="var(--muted)" strokeDasharray="4 3" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
@@ -508,8 +508,8 @@ export function RiWaterfallChart({ steps }: { steps: { label: string; delta: num
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="label" {...axis} interval={0} fontSize={10} />
-        <YAxis {...axis} width={44} tickFormatter={(v) => Number(v).toFixed(0)} />
-        <Tooltip {...tooltipStyle} cursor={{ fill: "var(--panel-2)" }} formatter={(_v, _n, p) => [Number((p.payload as { delta: number }).delta).toFixed(2), "ต่อหุ้น"]} />
+        <YAxis {...axis} width={44} tickFormatter={(v) => fmtNum(Number(v), 0)} />
+        <Tooltip {...tooltipStyle} cursor={{ fill: "var(--panel-2)" }} formatter={(_v, _n, p) => [fmtNum((p.payload as { delta: number }).delta, 2), "ต่อหุ้น"]} />
         <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
         <Bar dataKey="size" stackId="w" radius={[4, 4, 0, 0]} isAnimationActive={false}>
           {data.map((d, i) => (
@@ -533,7 +533,7 @@ export function RoeKeChart({ data, ke }: { data: { year: string; roe: number }[]
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="year" {...axis} />
         <YAxis {...axis} width={44} tickFormatter={pct} domain={[0, "auto"]} />
-        <Tooltip {...tooltipStyle} formatter={(v, n) => [`${(Number(v) * 100).toFixed(2)}%`, n]} />
+        <Tooltip {...tooltipStyle} formatter={(v, n) => [fmtPct(Number(v), 2), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Area type="monotone" dataKey="roe" name="ROE" stroke="var(--series-3)" strokeWidth={2} fill={`url(#${gid(id, "roe")})`} isAnimationActive={false} />
         <Line type="stepAfter" dataKey="ke" name="Ke" stroke="var(--series-2)" strokeDasharray="5 4" dot={false} strokeWidth={2} isAnimationActive={false} />

@@ -73,8 +73,8 @@ export function BondLadderPanel() {
             {[
               ["ลงทุน", fmtThb(plan.totals.invested)],
               ["เงินสดคงเหลือ", fmtThb(plan.totals.cash)],
-              ["Yield พอร์ต (XIRR)", plan.portfolioYield?.rate != null ? fmtPct(plan.portfolioYield.rate, 2) : "–"],
-              ["Modified duration", plan.weightedModifiedDuration != null ? fmtNum(plan.weightedModifiedDuration, 2) : "–"],
+              ["Yield พอร์ต (XIRR)", plan.portfolioYield?.rate != null ? fmtPct(plan.portfolioYield.rate, 2) : "—"],
+              ["Modified duration", plan.weightedModifiedDuration != null ? fmtNum(plan.weightedModifiedDuration, 2) : "—"],
               ["DV01 (บาท/1bp)", fmtNum(plan.totals.dv01, 0)],
             ].map(([k, v]) => (
               <div key={k} className="rounded-xl border border-border bg-panel-2/60 p-3">

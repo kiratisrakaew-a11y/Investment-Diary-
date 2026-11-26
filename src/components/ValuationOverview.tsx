@@ -128,7 +128,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                     </td>
                     <td>
                       <RangeBar values={g.methods.map((m) => ({ label: m.label, v: m.value }))} price={g.price} />
-                      <div className="mt-1 text-xs text-muted tabular-nums">{g.low != null ? `${fmtNum(g.low)} – ${fmtNum(g.high)}` : "–"}</div>
+                      <div className="mt-1 text-xs text-muted tabular-nums">{g.low != null ? `${fmtNum(g.low)} – ${fmtNum(g.high)}` : "—"}</div>
                     </td>
                     <td className="num">
                       <span className="font-semibold">{fmtNum(g.average)}</span>
@@ -151,7 +151,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                           </div>
                         </>
                       ) : (
-                        <span className="text-muted">–</span>
+                        <span className="text-muted">—</span>
                       )}
                     </td>
                     <td>
@@ -184,7 +184,7 @@ function Metric({ k, v, tone }: { k: string; v: string; tone?: string }) {
 /** Latest value of each method as dots on one line, with the market price as a vertical marker. */
 function RangeBar({ values, price }: { values: { label: string; v: number | null }[]; price: number | null }) {
   const vs = values.filter((x): x is { label: string; v: number } => x.v != null && Number.isFinite(x.v));
-  if (!vs.length) return <span className="text-muted">–</span>;
+  if (!vs.length) return <span className="text-muted">—</span>;
   const all = [...vs.map((x) => x.v), ...(price != null ? [price] : [])];
   const lo = Math.min(...all);
   const hi = Math.max(...all);

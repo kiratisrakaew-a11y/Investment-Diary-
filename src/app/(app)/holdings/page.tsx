@@ -10,7 +10,7 @@ import { PriceImport } from "@/components/PriceImport";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { DataQualityPanel } from "@/components/DataQuality";
 import type { Position } from "@/lib/finance/portfolio";
-import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass } from "@/lib/format";
+import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass, formatChange } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
 import { AssetActionsMenu } from "@/components/AssetActionsMenu";
 import { dependencyCounts } from "@/server/services/asset-lifecycle";
@@ -247,12 +247,12 @@ function ValuationCell({ v, price, symbol, cls }: { v?: { average: number | null
     return (
       <Link href={`/valuation/stock/${symbol}`} className="hover:underline" title={`เฉลี่ยจาก ${v.count} valuation`}>
         {fmtNum(v.average)}
-        <div className={`text-xs ${signClass(up)}`}>{up != null ? `${up >= 0 ? "+" : ""}${(up * 100).toFixed(1)}%` : ""}</div>
+        <div className={`text-xs ${formatChange(up).className}`}>{up != null ? formatChange(up).text : ""}</div>
       </Link>
     );
   }
   if (cls === "thai_stock" || cls === "us_stock")
     return <Link href={`/valuation/new?symbol=${symbol}`} className="text-xs text-accent">ประเมิน →</Link>;
   if (cls === "bond") return <Link href="/bonds" className="text-xs text-accent">YTM →</Link>;
-  return <span className="text-muted">–</span>;
+  return <span className="text-muted">—</span>;
 }

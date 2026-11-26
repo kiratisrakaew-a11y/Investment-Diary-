@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { fmtNum } from "@/lib/format";
 
 type Preview = {
   dryRun: boolean;
@@ -71,7 +72,7 @@ export function SplitForm({ symbols, today }: { symbols: string[]; today: string
           <input className="input" inputMode="decimal" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
         <div className="flex items-end text-xs text-muted">
-          {Number.isFinite(ratio) && ratio > 0 ? (ratio > 1 ? `แตกพาร์: หุ้น ×${+ratio.toFixed(4)}` : ratio < 1 ? `รวมพาร์: หุ้น ×${+ratio.toFixed(4)}` : "1:1 ไม่มีผล") : ""}
+          {Number.isFinite(ratio) && ratio > 0 ? (ratio > 1 ? `แตกพาร์: หุ้น ×${+fmtNum(ratio, 4)}` : ratio < 1 ? `รวมพาร์: หุ้น ×${+fmtNum(ratio, 4)}` : "1:1 ไม่มีผล") : ""}
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm">
@@ -89,7 +90,7 @@ export function SplitForm({ symbols, today }: { symbols: string[]; today: string
       {res && (
         <div className="space-y-1 text-sm">
           <p className={res.dryRun ? "text-muted" : "text-pos"}>
-            {res.dryRun ? "ตรวจแล้ว (ยังไม่บันทึก)" : `บันทึกแล้ว (รายการ #${res.transactionId})`} · {res.symbol} {res.label} วันที่ {res.date} · จำนวนหุ้น ×{+res.ratio.toFixed(4)} ต้นทุนรวมเท่าเดิม ไม่กระทบเงินสด
+            {res.dryRun ? "ตรวจแล้ว (ยังไม่บันทึก)" : `บันทึกแล้ว (รายการ #${res.transactionId})`} · {res.symbol} {res.label} วันที่ {res.date} · จำนวนหุ้น ×{+fmtNum(res.ratio, 4)} ต้นทุนรวมเท่าเดิม ไม่กระทบเงินสด
           </p>
           {res.prices && (
             <p className="text-xs text-muted">

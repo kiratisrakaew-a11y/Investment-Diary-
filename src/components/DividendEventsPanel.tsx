@@ -154,7 +154,7 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
                 <td className="font-medium">{e.symbol}</td>
                 <td>{e.exDate ?? <span className="text-muted">ไม่ทราบ</span>}</td>
                 <td>{e.paymentDate ?? <span className="text-muted">ไม่ทราบ</span>}</td>
-                <td>{e.announcedAt ?? <span className="text-muted">–</span>}</td>
+                <td>{e.announcedAt ?? <span className="text-muted">—</span>}</td>
                 <td className="num">
                   {fmtNum(e.dividendPerShare, 4)} {e.currency}
                 </td>

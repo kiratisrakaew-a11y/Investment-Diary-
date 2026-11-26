@@ -35,3 +35,9 @@ Fonts: `Inter` (Latin, digits) then `IBM Plex Sans Thai`. Sizes only: **12 / 14 
 2. positive/negative only for direction of change.
 3. Colour is never the only signal (arrow/label too).
 4. Every phase: tests unchanged and passing, before/after screenshots in both themes.
+
+## Number formatting (`src/lib/format.ts`, Phase 2)
+All displayed numbers go through: `formatNumber`, `formatPercent` (fraction → %), `formatPercentRaw`, `formatMoney`, `formatMillions`, `formatChange` (▲/▼ + colour). Legacy `fmtNum/fmtPct/fmtPctRaw/fmtThb/fmtQty/fmtRatio` are thin wrappers.
+- Empty / NaN / null → `—`; true minus `−` (U+2212); a value that rounds to 0 shows no sign.
+- Thousands separators; fixed decimals per call (price 2, % 1, millions 1); units in the column header.
+- Table numbers: `.num` (right-aligned, tabular-nums). Exceptions kept raw on purpose: values written into `<input>` (round-trip serialisation) and SVG path coordinates.

@@ -14,7 +14,7 @@ import { buildConstraints, exposureReport, type ConstraintsInput } from "@/lib/f
 import { SHORT_DISCLAIMER, applyShortPolicy, exposureSummary, withPolicyBounds } from "@/lib/finance/short-policy";
 import type { ResolvedRiskFree } from "@/lib/finance/risk-free";
 import { NumField, SelectField, Toggle } from "./fields";
-import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass } from "@/lib/format";
+import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass, fmtNum } from "@/lib/format";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
@@ -329,7 +329,7 @@ export function OptimizerClient({
             value={covMethod}
             options={[
               { value: "sample", label: "Sample (ข้อมูลในอดีตตรง ๆ)" },
-              { value: "ledoit_wolf", label: `Ledoit–Wolf shrinkage (δ = ${(shrinkage * 100).toFixed(1)}%)` },
+              { value: "ledoit_wolf", label: `Ledoit–Wolf shrinkage (δ = ${fmtPct(shrinkage, 1)})` },
             ]}
             onChange={setCovMethod}
           />
@@ -349,7 +349,7 @@ export function OptimizerClient({
               </div>
             ))}
             <div>
-              ERP {fmtPct(erp)} · ข้อมูล {period} · {periodsPerYear.toFixed(1)} งวด/ปี · {allowShort ? `ชอร์ตได้ ≤ ${fmtPct(maxShort, 0)}/ตัว, gross ≤ ${fmtPct(maxGross, 0)}` : "long-only"} · ลงทุนครบ 100%
+              ERP {fmtPct(erp)} · ข้อมูล {period} · {fmtNum(periodsPerYear, 1)} งวด/ปี · {allowShort ? `ชอร์ตได้ ≤ ${fmtPct(maxShort, 0)}/ตัว, gross ≤ ${fmtPct(maxGross, 0)}` : "long-only"} · ลงทุนครบ 100%
               {useRiskFree && allowBorrow ? ` · กู้ได้ถึง ${fmtPct(maxLev, 0)}` : " · ไม่กู้ยืม"}
             </div>
           </div>
@@ -402,7 +402,7 @@ export function OptimizerClient({
                       {a.held && <span className="ml-1 text-xs text-accent">ถืออยู่</span>}
                       {a.assetClass === "bond" && (
                         <div className="mt-0.5 flex flex-wrap gap-1 text-xs">
-                          {a.modifiedDuration != null && <span className="rounded-md border border-border px-1">D {a.modifiedDuration.toFixed(2)}</span>}
+                          {a.modifiedDuration != null && <span className="rounded-md border border-border px-1">D {fmtNum(a.modifiedDuration, 2)}</span>}
                           {a.bondExpected?.ok && <span className="rounded-md border border-border px-1" title={a.bondExpected.notes.join(" · ")}>YTM {fmtPct(a.bondExpected.ytm, 2)} · E[R] ล่วงหน้า {fmtPct(a.bondExpected.expectedReturn, 2)}</span>}
                           {a.rating && <span className="rounded-md border border-border px-1">{a.rating}</span>}
                           <span className="rounded-md border border-warn/40 px-1 text-warn" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
@@ -418,7 +418,7 @@ export function OptimizerClient({
                         <PctInput value={mktW[a.symbol] ?? null} onChange={(v) => setMktW((m) => ({ ...m, [a.symbol]: v }))} />
                       </td>
                     )}
-                    {isBl && <td className="num">{bl?.ok && blPos.has(i) ? fmtPct(bl.prior[blPos.get(i)!], 1) : "–"}</td>}
+                    {isBl && <td className="num">{bl?.ok && blPos.has(i) ? fmtPct(bl.prior[blPos.get(i)!], 1) : "—"}</td>}
                     <td className="num">
                       <div className="flex items-center justify-end gap-1">
                         <OverrideInput value={mu[i]} overridden={overrides[a.symbol] != null} onChange={(v) => setOverrides((o) => ({ ...o, [a.symbol]: v }))} />
@@ -526,7 +526,7 @@ export function OptimizerClient({
                   {r.riskBased.maxBudgetDeviation != null && <KV k="ส่วนต่างจาก risk budget สูงสุด" v={r.riskBased.maxBudgetDeviation.toExponential(1)} />}
                   {r.riskBased.cvar && (
                     <>
-                      <KV k={`CVaR ${(r.riskBased.cvar.confidence * 100).toFixed(0)}% ต่อวัน (LP)`} v={fmtPct(r.riskBased.cvar.objective, 2)} />
+                      <KV k={`CVaR ${fmtPct(r.riskBased.cvar.confidence, 0)} ต่อวัน (LP)`} v={fmtPct(r.riskBased.cvar.objective, 2)} />
                       <KV k="ตรวจทาน: ES ในอดีตของน้ำหนักนี้" v={fmtPct(r.riskBased.cvar.historicalES, 2)} />
                     </>
                   )}
@@ -557,7 +557,7 @@ export function OptimizerClient({
                   <div className="font-semibold text-muted">การกระจุกตัวของพอร์ตที่แนะนำ</div>
                   <div>ผู้ออก: {result.exposure.byIssuer.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
                   <div>หมวด: {result.exposure.bySector.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
-                  <div>Duration พอร์ต {result.exposure.duration.toFixed(2)} ปี{result.exposure.dv01Thb != null ? ` · DV01 ≈ ${fmtThb(result.exposure.dv01Thb)} ต่อ 1bp` : ""}</div>
+                  <div>Duration พอร์ต {fmtNum(result.exposure.duration, 2)} ปี{result.exposure.dv01Thb != null ? ` · DV01 ≈ ${fmtThb(result.exposure.dv01Thb)} ต่อ 1bp` : ""}</div>
                 </div>
               )}
               {r.warnings.map((n) => (
@@ -598,7 +598,7 @@ export function OptimizerClient({
                       </td>
                       <td className="num">{fmtThb(a.targetValue)}</td>
                       <td className={clsx("num", signClass(a.trade))}>
-                        {Math.abs(a.trade) < 1 ? "–" : `${a.trade > 0 ? "ซื้อ" : "ขาย"} ${fmtThb(Math.abs(a.trade))}`}
+                        {Math.abs(a.trade) < 1 ? "—" : `${a.trade > 0 ? "ซื้อ" : "ขาย"} ${fmtThb(Math.abs(a.trade))}`}
                       </td>
                     </tr>
                   ))}
@@ -641,7 +641,7 @@ export function OptimizerClient({
                         <tr key={assets[i].symbol}>
                           <td className="font-medium">{assets[i].symbol}</td>
                           <td className="num">{fmtPct(result.bl!.marketWeights[k], 1)}</td>
-                          <td className="num">{result.prior?.ok ? fmtPct(result.prior.risky.weights[k] * result.prior.riskyShare, 1) : "–"}</td>
+                          <td className="num">{result.prior?.ok ? fmtPct(result.prior.risky.weights[k] * result.prior.riskyShare, 1) : "—"}</td>
                           <td className="num font-medium">{fmtPct(r.allocations[k].weight, 1)}</td>
                           <td className="num">{fmtPct(result.bl!.prior[k], 2)}</td>
                           <td className={clsx("num", signClass(result.bl!.posterior[k] - result.bl!.prior[k]))}>{fmtPct(result.bl!.posterior[k], 2)}</td>
@@ -752,7 +752,7 @@ function PctInput({ value, onChange }: { value: number | null; onChange: (v: num
       className="input w-20 text-right tabular-nums"
       inputMode="decimal"
       value={text}
-      placeholder="–"
+      placeholder="—"
       onChange={(e) => {
         setText(e.target.value);
         if (e.target.value.trim() === "") return onChange(null);
@@ -812,7 +812,7 @@ function BlPanel({
           <Toggle label="ใช้ posterior covariance (Σ + M)" checked={postCov} onChange={setPostCov} />
         </div>
       </div>
-      {bl?.ok && <p className="text-xs text-muted">δ = {bl.riskAversion?.toFixed(2)} ({bl.riskAversionSource === "given" ? "กำหนดเอง" : "คำนวณจาก ERP"}) · τ = {bl.tau}</p>}
+      {bl?.ok && <p className="text-xs text-muted">δ = {fmtNum(bl.riskAversion, 2)} ({bl.riskAversionSource === "given" ? "กำหนดเอง" : "คำนวณจาก ERP"}) · τ = {bl.tau}</p>}
 
       <div className="space-y-2">
         {views.map((v, k) => (

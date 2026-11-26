@@ -13,7 +13,7 @@ import { CoverageTable } from "@/components/CoverageTable";
 import { WindowError, windowFromPageQuery, type WindowPreset } from "@/lib/finance/window";
 import Link from "next/link";
 import { listAssets } from "@/server/services/assets";
-import { ASSET_CLASS_LABEL } from "@/lib/format";
+import { ASSET_CLASS_LABEL, fmtNum } from "@/lib/format";
 import { UniversePicker } from "@/components/UniversePicker";
 import { pageBenchmark, parseSelection, periodUnit } from "@/lib/finance/universe-selection";
 
@@ -97,7 +97,7 @@ export default async function OptimizerPage({
           <section className="card space-y-2 border-l-4 border-l-neg" data-testid="window-insufficient">
             <h2 className="text-base font-semibold text-neg">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
             <p className="text-sm">
-              มีเพียง {u!.windowInfo!.obsPerAsset.toFixed(1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
+              มีเพียง {fmtNum(u!.windowInfo!.obsPerAsset, 1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
               {u!.windowInfo!.limitedBy.length ? ` · ช่วงถูกจำกัดโดย ${u!.windowInfo!.limitedBy.map((l) => `${l.symbol} (เริ่ม ${l.firstDate})`).join(", ")}` : ""}
             </p>
             <div className="flex flex-wrap gap-2">

@@ -695,7 +695,7 @@ export function BacktestClient({
               tone="text-neg"
             />
             <Stat
-              k={`β / α (vs ${m.benchmark?.symbol ?? "–"})`}
+              k={`β / α (vs ${m.benchmark?.symbol ?? "—"})`}
               v={`${fmtRatio(m.benchmark?.regressionBeta ?? null)} / ${fmtPct(m.benchmark?.regressionAlphaAnnual ?? null, 1)}`}
             />
             <Stat
@@ -710,7 +710,7 @@ export function BacktestClient({
               {res.period.from} → {res.period.to} · {res.period.rebalances}{" "}
               รอบปรับพอร์ต (ทุก {res.input.rebalanceEveryObservations}{" "}
               วันที่มีราคา) · มูลค่าสุดท้าย {fmtThb(res.values.at(-1)!.value)} ·
-              ดัชนี {m.benchmark ? fmtPct(m.benchmark.cumulative, 1) : "–"}
+              ดัชนี {m.benchmark ? fmtPct(m.benchmark.cumulative, 1) : "—"}
             </p>
             <GrowthChart data={m.growth} benchmark={m.benchmark?.symbol} />
             <h3 className="mt-4 mb-1 text-sm font-semibold">Drawdown</h3>

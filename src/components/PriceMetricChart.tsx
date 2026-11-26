@@ -58,7 +58,7 @@ const RING: Partial<Record<MetricStatus, string>> = {
 const dateTick = (t: number) => new Date(t).toISOString().slice(0, 7);
 const tick = (v: number) =>
   Math.abs(v) >= 1000
-    ? Math.round(v).toLocaleString("en-US")
+    ? fmtNum(v, 0)
     : Number(v.toPrecision(3)).toString();
 const key = (id: number) => `m${id}`;
 
@@ -314,7 +314,7 @@ export function PriceMetricChart({
                     ราคา:{" "}
                     <span className="tabular-nums">
                       {r.price != null
-                        ? `${Number(r.price).toLocaleString("en-US")} ${currency}`
+                        ? `${fmtNum(Number(r.price), 2)} ${currency}`
                         : "– (ไม่มีราคาวันนี้)"}
                     </span>
                   </div>
@@ -521,7 +521,7 @@ export function PriceMetricChart({
                     <span>
                       r ={" "}
                       <span className="font-semibold tabular-nums">
-                        {c.r.toFixed(2)}
+                        {fmtNum(c.r, 2)}
                       </span>{" "}
                       ({c.strength}
                       {c.r > 0 ? " · ไปทางเดียวกัน" : " · สวนทางกัน"}) · {c.n}{" "}

@@ -218,7 +218,7 @@ export function FinancialStatementsPanel({
                     {q.status === "done" ? "✅" : q.status === "error" ? "⚠️" : q.status === "reading" ? "⏳" : "•"}
                   </span>
                   <span className="font-medium">{q.name}</span>
-                  <span className="text-xs text-muted">{(q.size / 1024 / 1024).toFixed(2)}MB</span>
+                  <span className="text-xs text-muted">{fmtNum(q.size / 1024 / 1024, 2)}MB</span>
                   <span className={clsx("text-xs", q.status === "error" ? "text-neg" : "text-muted")}>
                     {q.status === "reading" ? "AI กำลังอ่าน… (อาจใช้เวลา 30–90 วินาที)" : q.status === "waiting" ? "รอคิว" : q.message}
                   </span>
@@ -362,7 +362,7 @@ function Cell({ value, onCommit, perShare }: { value: number | null; onCommit: (
       className="w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-border focus:border-accent focus:outline-none"
       inputMode="decimal"
       value={focus ? text : value == null ? "" : fmtNum(value, perShare ? 2 : 0)}
-      placeholder="–"
+      placeholder="—"
       onFocus={() => {
         setFocus(true);
         setText(show(value));

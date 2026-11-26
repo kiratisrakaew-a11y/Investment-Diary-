@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fmtPct } from "@/lib/format";
 
 /** Numeric input that keeps the user's in-progress text (e.g. "-", "1.") while editing. */
 function useNumText(value: number | null | undefined, scale: number) {
@@ -57,7 +58,7 @@ export function NumField({
         }}
       />
       {pct && value != null && value !== 0 && Math.abs(value) < 0.001 && (
-        <span className="mt-0.5 block text-xs text-neg">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {(value * 100).toFixed(3)}%)</span>
+        <span className="mt-0.5 block text-xs text-neg">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {fmtPct(value, 3)})</span>
       )}
     </label>
   );

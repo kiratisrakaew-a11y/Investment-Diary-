@@ -1,7 +1,7 @@
 import { getMptAnalysis, getPerformance, loadPortfolioData } from "@/server/services/portfolio";
 import { FrontierChart, GrowthChart } from "@/components/charts";
 import { Empty, PageHeader, Section } from "@/components/ui";
-import { fmtPct, fmtRatio, signClass } from "@/lib/format";
+import { fmtPct, fmtRatio, signClass, fmtNum } from "@/lib/format";
 import { compact, downsample } from "@/lib/explain-data";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
 import { StressPanel } from "@/components/StressPanel";
@@ -92,7 +92,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         title="วิเคราะห์ผลการดำเนินงาน"
         subtitle={
           perf.startDate
-            ? `ช่วง ${perf.startDate} → ${perf.endDate} (${perf.periodDays} วัน) · ${perf.periods} งวด · N ≈ ${perf.observationsPerYear?.toFixed(1) ?? "–"} งวด/ปี · Risk-free ${fmtPct(perf.riskFreeRate)}`
+            ? `ช่วง ${perf.startDate} → ${perf.endDate} (${perf.periodDays} วัน) · ${perf.periods} งวด · N ≈ ${fmtNum(perf.observationsPerYear, 1)} งวด/ปี · Risk-free ${fmtPct(perf.riskFreeRate)}`
             : "ยังไม่มีข้อมูล"
         }
       />
@@ -130,7 +130,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <Row label="Downside deviation" value={fmtPct(perf.downsideDeviation)} formula={`√(Σ min(0, rₜ − MARₜ)² / n) × √N · MAR = ${perf.sortinoMarBasis === "risk_free" ? "Rf" : "ตั้งเอง"} ${fmtPct(perf.sortinoMar)} ต่อปี`} />
                 <Row label="Max drawdown" value={fmtPct(perf.maxDrawdown)} formula="ลดลงสูงสุดจากจุดสูงสุดของดัชนี TWR" />
                 <Row
-                  label={`VaR 95% (1 งวด ≈ ${perf.varHorizonDays?.toFixed(1) ?? "–"} วัน)`}
+                  label={`VaR 95% (1 งวด ≈ ${fmtNum(perf.varHorizonDays, 1)} วัน)`}
                   value={fmtPct(perf.var95)}
                   formula={na(perf.var95, "ต้องมีอย่างน้อย 100 งวด") ?? "Historical — ควอนไทล์ 5% ของผลตอบแทนรายงวด"}
                 />
@@ -141,23 +141,23 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     <Row
                       key="v99"
                       label="VaR / ES 99% (1 งวด)"
-                      value={v.var != null ? `${fmtPct(v.var)} / ${fmtPct(v.es)}` : "–"}
+                      value={v.var != null ? `${fmtPct(v.var)} / ${fmtPct(v.es)}` : "—"}
                       formula={
                         v.var == null
                           ? `ต้องมีอย่างน้อย ${v.minRequired} งวด (มี ${v.observations})`
-                          : `Historical · ${v.observations} งวด ≈ ${v.tailObservations.toFixed(1)} จุดในหาง${v.reliable ? "" : " — น้อย ความน่าเชื่อถือต่ำ (ต้อง ≥ 500)"} · √10 ≈ ${fmtPct(v.horizon.tenPeriodScaled.var)} (ประมาณการ)`
+                          : `Historical · ${v.observations} งวด ≈ ${fmtNum(v.tailObservations, 1)} จุดในหาง${v.reliable ? "" : " — น้อย ความน่าเชื่อถือต่ำ (ต้อง ≥ 500)"} · √10 ≈ ${fmtPct(v.horizon.tenPeriodScaled.var)} (ประมาณการ)`
                       }
                     />
                   ))}
                 {perf.varBacktest.map((b) => (
                   <Row
                     key={`bt${b.confidence}`}
-                    label={`Backtest VaR ${(b.confidence * 100).toFixed(0)}% (rolling 250)`}
-                    value={"unavailable" in b ? "–" : `${b.exceptions} / คาด ${b.expected.toFixed(1)}`}
+                    label={`Backtest VaR ${fmtPct(b.confidence, 0)} (rolling 250)`}
+                    value={"unavailable" in b ? "—" : `${b.exceptions} / คาด ${fmtNum(b.expected, 1)}`}
                     formula={
                       "unavailable" in b
                         ? b.unavailable
-                        : `Kupiec p = ${b.kupiec.pValue.toFixed(3)}${b.kupiec.reject5pct ? " (ปฏิเสธที่ 5%)" : ""} · ${"unavailable" in b.christoffersen ? `Christoffersen: ${b.christoffersen.unavailable}` : `Christoffersen p = ${b.christoffersen.pValue.toFixed(3)}`} · ${b.evaluated} งวดทดสอบ`
+                        : `Kupiec p = ${fmtNum(b.kupiec.pValue, 3)}${b.kupiec.reject5pct ? " (ปฏิเสธที่ 5%)" : ""} · ${"unavailable" in b.christoffersen ? `Christoffersen: ${b.christoffersen.unavailable}` : `Christoffersen p = ${fmtNum(b.christoffersen.pValue, 3)}`} · ${b.evaluated} งวดทดสอบ`
                     }
                   />
                 ))}
@@ -191,7 +191,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                         <td className="num">{fmtPct(pick?.var95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.es95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.var99 ?? null)}</td>
-                        <td className="num">{pick?.var95 != null && navNow > 0 ? Math.round(pick.var95 * navNow).toLocaleString() : "–"}</td>
+                        <td className="num">{pick?.var95 != null && navNow > 0 ? fmtNum(pick.var95 * navNow, 0) : "—"}</td>
                         <td className="whitespace-normal text-xs text-muted">
                           {h.unavailable ?? (pick === h.nonOverlapping ? kind : h.notes.join(" · "))}
                           {h.periods > 1 && h.sqrtScaledVar95 != null && ` · เทียบ √h (สมมติอิสระกัน): ${fmtPct(h.sqrtScaledVar95)}`}
@@ -225,13 +225,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     <Row label="Market excess return (realized)" value={fmtPct(b.realizedMarketExcessReturn)} formula="ผลตอบแทนส่วนเกินของตลาดที่เกิดขึ้นจริงในช่วงนี้ — ไม่ใช่ ERP คาดการณ์" />
                     <Row
                       label="Beta (β, OLS)"
-                      value={b.regressionBeta != null ? `${fmtRatio(b.regressionBeta)} ± ${fmtRatio(b.betaStdError)}` : "–"}
+                      value={b.regressionBeta != null ? `${fmtRatio(b.regressionBeta)} ± ${fmtRatio(b.betaStdError)}` : "—"}
                       formula={`(rp − rf) = α + β(rm − rf) + ε · R² ${fmtRatio(b.rSquared)}`}
                     />
                     <Row label="Correlation (ρ)" value={fmtRatio(b.correlation)} formula="ความสัมพันธ์กับตลาด" />
                     <Row
                       label="Alpha ต่อปี (OLS)"
-                      value={b.regressionAlphaAnnual != null ? `${fmtPct(b.regressionAlphaAnnual)} ± ${fmtPct(b.alphaStdError)}` : "–"}
+                      value={b.regressionAlphaAnnual != null ? `${fmtPct(b.regressionAlphaAnnual)} ± ${fmtPct(b.alphaStdError)}` : "—"}
                       tone={signClass(b.regressionAlphaAnnual)}
                       formula="α รายงวด × N ± standard error — |α| < 2·SE ถือว่าไม่ต่างจากศูนย์อย่างมีนัยสำคัญ"
                     />
@@ -291,7 +291,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               {mpt.priceBasis.used === "total_return"
                 ? "ประมาณจากผลตอบแทนรวม (บาท, ราคาปรับปันผล — ปันผลรวมอยู่ในผลตอบแทน)"
                 : "ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — เลือกราคาปรับปันผลได้ที่หัวหน้า)"}{" "}
-              {mpt.observations} งวด{mpt.frequency === "weekly" ? "รายสัปดาห์" : mpt.frequency === "monthly" ? "รายเดือน" : "รายวัน"}ที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · ช่วงข้อมูลตามหน้าตั้งค่า ({mpt.windowInfo?.requested.preset ?? "3y"}) · long-only, ลงทุนเต็มจำนวน
+              {mpt.observations} งวด{mpt.frequency === "weekly" ? "รายสัปดาห์" : mpt.frequency === "monthly" ? "รายเดือน" : "รายวัน"}ที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {fmtNum(mpt.periodsPerYear, 0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · ช่วงข้อมูลตามหน้าตั้งค่า ({mpt.windowInfo?.requested.preset ?? "3y"}) · long-only, ลงทุนเต็มจำนวน
               {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
               {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}
@@ -328,7 +328,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                       <td className="num">{fmtPct(a.volatility, 1)}</td>
                       <td className="num">{fmtPct(mpt.current.weights[i], 1)}</td>
                       <td className="num">{fmtPct(mpt.minVariance.weights[i], 1)}</td>
-                      <td className="num">{mpt.tangency ? fmtPct(mpt.tangency.weights[i], 1) : "–"}</td>
+                      <td className="num">{mpt.tangency ? fmtPct(mpt.tangency.weights[i], 1) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -344,7 +344,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                       <td colSpan={3}>{label}</td>
                       <td className="num">{f(mpt.current)}</td>
                       <td className="num">{f(mpt.minVariance)}</td>
-                      <td className="num">{mpt.tangency ? f(mpt.tangency) : "–"}</td>
+                      <td className="num">{mpt.tangency ? f(mpt.tangency) : "—"}</td>
                     </tr>
                   ))}
                 </tfoot>
@@ -374,8 +374,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   <tr key={i}>
                     <th className="pr-2 text-right font-medium text-muted">{mpt.symbols[i]}</th>
                     {row.map((c, j) => (
-                      <td key={j} className="h-10 w-16 border-2 border-panel text-center tabular-nums" style={{ background: corrColor(c) }} title={`${mpt.symbols[i]} × ${mpt.symbols[j]}: ${c.toFixed(3)}`}>
-                        {c.toFixed(2)}
+                      <td key={j} className="h-10 w-16 border-2 border-panel text-center tabular-nums" style={{ background: corrColor(c) }} title={`${mpt.symbols[i]} × ${mpt.symbols[j]}: ${fmtNum(c, 3)}`}>
+                        {fmtNum(c, 2)}
                       </td>
                     ))}
                   </tr>
@@ -408,7 +408,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     <td className="num">{fmtPct(a.mctr, 1)}</td>
                     <td className="num">{fmtPct(a.contribution, 2)}</td>
                     <td className={`num ${a.share > a.weight + 0.05 ? "text-neg" : ""}`}>{fmtPct(a.share, 1)}</td>
-                    <td className="num">{mpt.risk.componentES95 ? fmtPct(mpt.risk.componentES95.assets[i].contribution, 2) : "–"}</td>
+                    <td className="num">{mpt.risk.componentES95 ? fmtPct(mpt.risk.componentES95.assets[i].contribution, 2) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -425,8 +425,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
           <p className="mt-2 text-xs text-muted">
-            MCTR = (Σw)ᵢ / σ · ส่วนร่วม = w × MCTR (รวมเท่ากับ σ พอร์ต) · กระจุกตัว: HHI {mpt.risk.concentration.hhi.toFixed(3)} → เทียบเท่า {mpt.risk.concentration.effectiveN.toFixed(1)} ตัว (น้ำหนัก),{" "}
-            {mpt.risk.concentration.effectiveRiskN.toFixed(1)} ตัว (ความเสี่ยง) · ใหญ่สุด {fmtPct(mpt.risk.concentration.maxWeight, 1)} · 3 อันดับแรก {fmtPct(mpt.risk.concentration.top3, 1)} · สีแดง = ความเสี่ยงเกินน้ำหนักมากกว่า 5 จุด
+            MCTR = (Σw)ᵢ / σ · ส่วนร่วม = w × MCTR (รวมเท่ากับ σ พอร์ต) · กระจุกตัว: HHI {fmtNum(mpt.risk.concentration.hhi, 3)} → เทียบเท่า {fmtNum(mpt.risk.concentration.effectiveN, 1)} ตัว (น้ำหนัก),{" "}
+            {fmtNum(mpt.risk.concentration.effectiveRiskN, 1)} ตัว (ความเสี่ยง) · ใหญ่สุด {fmtPct(mpt.risk.concentration.maxWeight, 1)} · 3 อันดับแรก {fmtPct(mpt.risk.concentration.top3, 1)} · สีแดง = ความเสี่ยงเกินน้ำหนักมากกว่า 5 จุด
           </p>
         </Section>
       )}

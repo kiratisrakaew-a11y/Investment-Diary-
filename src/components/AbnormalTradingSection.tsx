@@ -42,6 +42,7 @@ import {
   type ChartRow,
   type RangeKey,
 } from "@/lib/finance/abnormal/view";
+import { formatNumber } from "@/lib/format";
 
 const SYNC = "asset-price";
 const axis = {
@@ -295,24 +296,24 @@ function RowTooltip({
       <div>
         AR:{" "}
         <span className="tabular-nums">
-          {r.arPct == null ? "– (ไม่มีข้อมูลตลาด)" : `${r.arPct.toFixed(2)}%`}
+          {r.arPct == null ? "– (ไม่มีข้อมูลตลาด)" : `${formatNumber(r.arPct, 2)}%`}
         </span>
       </div>
       <div>
         CAR 5 วัน:{" "}
         <span className="tabular-nums">
-          {r.car5Pct == null ? "–" : `${r.car5Pct.toFixed(2)}%`}
+          {r.car5Pct == null ? "—" : `${formatNumber(r.car5Pct, 2)}%`}
         </span>
       </div>
       <div>
         Volume z:{" "}
         <span className="tabular-nums">
-          {r.z == null ? "–" : r.z.toFixed(2)}
+          {r.z == null ? "—" : formatNumber(r.z, 2)}
         </span>
         {r.volume != null && (
           <span className="text-muted">
             {" "}
-            · {r.volume.toLocaleString("en-US")} หุ้น
+            · {formatNumber(r.volume, 0)} หุ้น
           </span>
         )}
       </div>
@@ -447,7 +448,7 @@ function AbnormalTradingSection({
                   <YAxis
                     {...axis}
                     width={56}
-                    tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                    tickFormatter={(v) => `${formatNumber(Number(v), 0)}%`}
                   />
                   <Tooltip content={<RowTooltip />} />
                   <ReferenceLine y={0} stroke="var(--border)" />
@@ -522,7 +523,7 @@ function AbnormalTradingSection({
                   <YAxis
                     {...axis}
                     width={56}
-                    tickFormatter={(v) => Number(v).toFixed(0)}
+                    tickFormatter={(v) => formatNumber(Number(v), 0)}
                   />
                   <Tooltip content={<RowTooltip />} />
                   <ReferenceLine
@@ -868,12 +869,12 @@ function EventStudyPanel({
             <p className="text-muted">
               {res.modelLabel} · {res.benchmark.label} · วัน 0 = {res.day0} ·
               estimation {res.estimation?.from} → {res.estimation?.to} (n ={" "}
-              {res.fit.n}) · α {res.fit.alpha.toFixed(5)} · β{" "}
-              {res.fit.beta.toFixed(3)}
+              {res.fit.n}) · α {formatNumber(res.fit.alpha, 5)} · β{" "}
+              {formatNumber(res.fit.beta, 3)}
               {res.fit.betas &&
-                ` (${res.fit.betas.map((b) => b.toFixed(2)).join(" / ")})`}{" "}
-              · σ(ε) {(res.fit.sigma * 100).toFixed(2)}% · R²{" "}
-              {res.fit.r2 == null ? "–" : res.fit.r2.toFixed(3)}
+                ` (${res.fit.betas.map((b) => formatNumber(b, 2)).join(" / ")})`}{" "}
+              · σ(ε) {formatNumber(res.fit.sigma * 100, 2)}% · R²{" "}
+              {res.fit.r2 == null ? "—" : formatNumber(res.fit.r2, 3)}
             </p>
             <table className="table">
               <thead>
@@ -1133,7 +1134,7 @@ function SettingsPanel({
               ? data.sharesOutstanding
                   .map(
                     (s) =>
-                      `${s.shares.toLocaleString("en-US")} (ตั้งแต่ ${s.effectiveDate}, ${s.source})`,
+                      `${formatNumber(s.shares, 0)} (ตั้งแต่ ${s.effectiveDate}, ${s.source})`,
                   )
                   .join(" · ")
               : "ยังไม่ได้บันทึก — ใช้ set_shares_outstanding พร้อมแหล่งที่มา"}
@@ -1159,7 +1160,7 @@ function SettingsPanel({
             Volume สูงในวันที่ไม่มีข้อมูลตลาด (ไม่นับเป็น flag):{" "}
             {data.stock.volumeOnly
               .slice(0, 10)
-              .map((v) => `${v.date} (z=${v.z.toFixed(1)})`)
+              .map((v) => `${v.date} (z=${formatNumber(v.z, 1)})`)
               .join(", ")}
             {data.stock.volumeOnly.length > 10 ? " …" : ""}
           </p>

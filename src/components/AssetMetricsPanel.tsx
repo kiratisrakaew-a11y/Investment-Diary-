@@ -31,14 +31,9 @@ import {
   describeRule,
   type ThresholdLite,
 } from "./AssetMetricForm";
+import { fmtNum, formatNumber, formatPercent } from "@/lib/format";
 
-const fmt = (v: number | null | undefined, d: number) =>
-  v == null || !Number.isFinite(v)
-    ? "–"
-    : v.toLocaleString("en-US", {
-        minimumFractionDigits: Math.min(d, 2),
-        maximumFractionDigits: d,
-      });
+const fmt = (v: number | null | undefined, d: number) => fmtNum(v, d);
 const colorOf = metricColor;
 type Dialog =
   | { kind: "metric"; metricId?: number }
@@ -235,7 +230,7 @@ export function AssetMetricsPanel({
                         {m.name}
                       </div>
                       <div className="mt-0.5 text-xl font-semibold tabular-nums leading-tight">
-                        {m.latest ? fmt(m.latest.value, m.decimals) : "–"}{" "}
+                        {m.latest ? fmt(m.latest.value, m.decimals) : "—"}{" "}
                         <span className="text-xs font-normal text-muted">
                           {m.unit}
                         </span>
@@ -255,11 +250,10 @@ export function AssetMetricsPanel({
                           ch.delta > 0 ? "text-text" : "",
                         )}
                       >
-                        {ch.delta >= 0 ? "+" : ""}
-                        {fmt(ch.delta, m.decimals)}{" "}
+                        {formatNumber(ch.delta, m.decimals, { signed: true })}{" "}
                         {ch.deltaLabel === "pp" ? "pp" : m.unit}
                         {ch.relative != null &&
-                          ` (${ch.relative >= 0 ? "+" : ""}${(ch.relative * 100).toFixed(1)}%)`}{" "}
+                          ` (${formatPercent(ch.relative, 1, { signed: true })})`}{" "}
                         จาก {ch.previous?.date}
                       </span>
                     )}
@@ -391,10 +385,10 @@ export function AssetMetricsPanel({
                     <td className="font-medium">{m.name}</td>
                     <td>{m.unit}</td>
                     <td className="text-right tabular-nums">
-                      {m.latest ? fmt(m.latest.value, m.decimals) : "–"}
+                      {m.latest ? fmt(m.latest.value, m.decimals) : "—"}
                     </td>
                     <td>
-                      {m.latest?.observedOn ?? "–"}
+                      {m.latest?.observedOn ?? "—"}
                       {m.freshness.stale && (
                         <span className="ml-1 text-warn">(เก่า)</span>
                       )}
@@ -516,7 +510,7 @@ export function AssetMetricsPanel({
                           className="max-w-[14rem] truncate"
                           title={[o.source, o.note].filter(Boolean).join(" · ")}
                         >
-                          {o.source ?? "–"}
+                          {o.source ?? "—"}
                           {o.note && (
                             <span className="text-muted"> · {o.note}</span>
                           )}

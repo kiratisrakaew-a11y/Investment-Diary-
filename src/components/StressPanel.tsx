@@ -5,7 +5,7 @@ import { WindowBanner, WindowPicker, windowRequestOf, type WindowValue } from ".
 import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { NumField } from "./fields";
-import { fmtPct, fmtThb, signClass } from "@/lib/format";
+import { fmtPct, fmtThb, signClass, fmtNum } from "@/lib/format";
 import { ExplainButton } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
@@ -146,9 +146,9 @@ export function StressPanel({
                     <td className={clsx("num", signClass(r.pnl))}>{fmtThb(r.pnl)}</td>
                     <td className={clsx("num", signClass(r.pnl))}>{fmtPct(r.pnlPct, 1)}</td>
                     {Object.keys(FACTOR).map((k) => (
-                      <td key={k} className="num">{r.byFactor[k] ? fmtThb(r.byFactor[k]) : "–"}</td>
+                      <td key={k} className="num">{r.byFactor[k] ? fmtThb(r.byFactor[k]) : "—"}</td>
                     ))}
-                    <td className="num">{r.correlation ? `${fmtPct(r.correlation.volatilityBefore, 1)} → ${fmtPct(r.correlation.volatilityAfter, 1)}` : "–"}</td>
+                    <td className="num">{r.correlation ? `${fmtPct(r.correlation.volatilityBefore, 1)} → ${fmtPct(r.correlation.volatilityAfter, 1)}` : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -165,7 +165,7 @@ export function StressPanel({
                       (เส้นตรง {fmtPct(p.linearReturn, 1)} → จำกัดที่ −100%)
                     </span>
                   )}
-                  <span className="text-muted"> (β {p.assumptions.beta?.toFixed(2) ?? "–"}{p.assumptions.modifiedDuration != null ? ` · D ${p.assumptions.modifiedDuration.toFixed(2)}` : ""})</span>
+                  <span className="text-muted"> (β {fmtNum(p.assumptions.beta, 2)}{p.assumptions.modifiedDuration != null ? ` · D ${fmtNum(p.assumptions.modifiedDuration, 2)}` : ""})</span>
                 </span>
               ))}
             </div>

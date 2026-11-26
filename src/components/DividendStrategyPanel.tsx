@@ -14,7 +14,7 @@ import { Badge } from "./ui";
 type Result = Awaited<ReturnType<typeof screenDividendStocks>>;
 
 const PCT: Partial<Record<FactorKey, true>> = { ttmYieldRegular: true, earningsPayout: true, fcfPayout: true, dpsCagr3: true, dpsCagr5: true, roe: true, fcfStability: true, marginOfSafety: true, yieldVsHistory: true };
-const fmtFactor = (k: FactorKey, v: number | null) => (v == null ? "–" : PCT[k] ? fmtPct(v, 1) : k === "consistencyYears" ? `${v} ปี` : fmtNum(v, 2));
+const fmtFactor = (k: FactorKey, v: number | null) => (v == null ? "—" : PCT[k] ? fmtPct(v, 1) : k === "consistencyYears" ? `${v} ปี` : fmtNum(v, 2));
 
 const CODE_LABEL: Record<string, string> = {
   no_price: "ไม่มีราคา",
@@ -153,7 +153,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
             </div>
             <div>
               <h3 className="mb-2 text-sm font-semibold">
-                น้ำหนักปัจจัย <span className="font-normal text-muted">(รวม {(weightSum * 100).toFixed(0)}% — คำนวณสัดส่วนใหม่อัตโนมัติ)</span>
+                น้ำหนักปัจจัย <span className="font-normal text-muted">(รวม {fmtPct(weightSum, 0)} — คำนวณสัดส่วนใหม่อัตโนมัติ)</span>
               </h3>
               <table className="table">
                 <thead>
@@ -189,7 +189,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
           <button className="btn" onClick={run} disabled={pending || !symbols.length}>
             {pending ? "กำลังคัดกรอง…" : `คัดกรองด้วย “${preset.label}”`}
           </button>
-          <span className="text-xs text-muted">ค่าเริ่มต้นเป็นตัวอย่างที่แก้ได้ ไม่ใช่คำแนะนำการลงทุน · จักรวาล: {symbols.join(", ") || "–"}</span>
+          <span className="text-xs text-muted">ค่าเริ่มต้นเป็นตัวอย่างที่แก้ได้ ไม่ใช่คำแนะนำการลงทุน · จักรวาล: {symbols.join(", ") || "—"}</span>
         </div>
         {error && <p className="text-sm text-neg">{error}</p>}
       </section>
@@ -237,16 +237,16 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                               <div className="h-2 w-20 rounded-full bg-panel-2">
                                 <div className="h-2 rounded-full bg-linear-to-r from-accent to-accent-2" style={{ width: `${r.score * 100}%` }} />
                               </div>
-                              <span className="tabular-nums">{r.score.toFixed(2)}</span>
-                              {r.coverage < 1 && <span className="text-xs text-warn">{(r.coverage * 100).toFixed(0)}%</span>}
+                              <span className="tabular-nums">{fmtNum(r.score, 2)}</span>
+                              {r.coverage < 1 && <span className="text-xs text-warn">{fmtPct(r.coverage, 0)}</span>}
                             </div>
                           </td>
                           <td className="num">{fmtPct(p.ttmYieldRegular.value, 2)}</td>
                           <td className="num">{p.earningsPayout.value == null ? <span className="text-muted">{p.earningsPayout.status}</span> : fmtPct(p.earningsPayout.value, 0)}</td>
                           <td className="num">{p.fcfPayout.value == null ? <span className="text-muted">{p.fcfPayout.status}</span> : fmtPct(p.fcfPayout.value, 0)}</td>
                           <td className="num">{fmtPct(p.dpsCagr5.value, 1)}</td>
-                          <td className="num">{p.consistency.consecutiveYears.value ?? "–"}</td>
-                          <td className="num font-medium">{w ? fmtPct(w, 1) : "–"}</td>
+                          <td className="num">{p.consistency.consecutiveYears.value ?? "—"}</td>
+                          <td className="num font-medium">{w ? fmtPct(w, 1) : "—"}</td>
                         </tr>
                         {open === r.symbol && (
                           <tr>
@@ -257,8 +257,8 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                                     <span className="text-muted">{FACTOR_LABEL[f.key]}</span>
                                     <span className="tabular-nums">
                                       {fmtFactor(f.key, f.value)}
-                                      {f.rank != null ? ` · เปอร์เซ็นไทล์ ${(f.rank * 100).toFixed(0)}` : ` · ${f.status}`}
-                                      {f.contribution != null && <span className="text-accent"> +{f.contribution.toFixed(2)}</span>}
+                                      {f.rank != null ? ` · เปอร์เซ็นไทล์ ${fmtNum(f.rank * 100, 0)}` : ` · ${f.status}`}
+                                      {f.contribution != null && <span className="text-accent"> +{fmtNum(f.contribution, 2)}</span>}
                                     </span>
                                   </div>
                                 ))}
@@ -270,7 +270,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                               ))}
                               <p className="mt-1 text-xs text-muted">
                                 Yield รวม {fmtPct(p.ttmYieldTotal.value, 2)} · Forward {p.forwardYield.value == null ? p.forwardYield.warnings[0] : fmtPct(p.forwardYield.value, 2)} · ปันผลรายปีจาก{" "}
-                                {p.annualDps.source === "statements" ? "งบการเงิน" : p.annualDps.source === "events" ? "เหตุการณ์ปันผล" : "–"} · ลด {p.consistency.cuts} ครั้ง · งด {p.consistency.missedYears} ปี · Total shareholder yield: ไม่รองรับ (ไม่มีข้อมูลซื้อหุ้นคืน)
+                                {p.annualDps.source === "statements" ? "งบการเงิน" : p.annualDps.source === "events" ? "เหตุการณ์ปันผล" : "—"} · ลด {p.consistency.cuts} ครั้ง · งด {p.consistency.missedYears} ปี · Total shareholder yield: ไม่รองรับ (ไม่มีข้อมูลซื้อหุ้นคืน)
                               </p>
                             </td>
                           </tr>

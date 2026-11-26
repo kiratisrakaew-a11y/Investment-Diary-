@@ -38,7 +38,7 @@ export function AllocationTable({ rows }: { rows: AllocationRow[] }) {
                 {fmtPctRaw(r.driftPct)}
               </td>
               <td className="num text-xs">
-                {Math.abs(r.rebalanceAmount) < 1 ? "–" : `${r.rebalanceAmount > 0 ? "ซื้อ" : "ขาย"} ${fmtThb(Math.abs(r.rebalanceAmount))}`}
+                {Math.abs(r.rebalanceAmount) < 1 ? "—" : `${r.rebalanceAmount > 0 ? "ซื้อ" : "ขาย"} ${fmtThb(Math.abs(r.rebalanceAmount))}`}
               </td>
             </tr>
           ))}

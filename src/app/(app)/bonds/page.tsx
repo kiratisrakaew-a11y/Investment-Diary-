@@ -75,8 +75,8 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                         ))}
                       </div>
                     </td>
-                    <td className="num">{b.couponRate != null ? `${b.couponRate}%` : "–"}</td>
-                    <td>{b.maturityDate ?? "–"}</td>
+                    <td className="num">{b.couponRate != null ? `${b.couponRate}%` : "—"}</td>
+                    <td>{b.maturityDate ?? "—"}</td>
                     <td className="num">
                       {fmtNum(b.lastPrice)}
                       <div className="text-xs text-muted">{b.lastPriceDate}</div>
@@ -129,7 +129,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                   <summary className="cursor-pointer text-sm">
                     <span className="font-medium">{b.symbol}</span>
                     <span className="ml-2 text-muted">
-                      {c ? (c.rating === "unrated" ? "unrated" : `${c.rating.rating}${c.rating.agency ? ` (${c.rating.agency}${c.rating.date ? ` ${c.rating.date}` : ""})` : ""}`) : "–"}
+                      {c ? (c.rating === "unrated" ? "unrated" : `${c.rating.rating}${c.rating.agency ? ` (${c.rating.agency}${c.rating.date ? ` ${c.rating.date}` : ""})` : ""}`) : "—"}
                       {a?.issuer ? ` · ผู้ออก ${a.issuer}` : ""}
                       {c?.status === "ok" && c.term ? ` · PV(EL) ${fmtNum(c.term.pvExpectedLoss, 3)} ต่อ 100` : c ? " · ยังไม่มีข้อมูล PD/LGD" : ""}
                     </span>

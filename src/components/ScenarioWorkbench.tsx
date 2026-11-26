@@ -15,7 +15,7 @@ import type { DistributionSpec, MonteCarloConfig, ReverseConfig, ScenarioSet, Se
 import { generateScenarioNoteTh, inputHash, lineDiff } from "@/lib/valuation-notes-th";
 import { hasScenarios } from "@/lib/valuation-analyze";
 import { analyzeValuationAction } from "@/app/(app)/valuation/actions";
-import { fmtNum, fmtPct, signClass } from "@/lib/format";
+import { fmtNum, fmtPct, formatPercent, signClass } from "@/lib/format";
 
 type Tab = "scenarios" | "sensitivity" | "reverse" | "montecarlo" | "notes";
 const TABS: { id: Tab; label: string }[] = [
@@ -396,7 +396,7 @@ function RangePlot({ summary }: { summary: ScenarioSummary }) {
     );
   return (
     <figure className="min-w-0">
-      <svg viewBox="0 0 400 60" className="h-16 w-full" role="img" aria-label={`ช่วงมูลค่า scenario ${pts.map((p) => `${p.label} ${p.v.toFixed(2)}`).join(", ")} เทียบราคา ${summary.price ?? "—"}`}>
+      <svg viewBox="0 0 400 60" className="h-16 w-full" role="img" aria-label={`ช่วงมูลค่า scenario ${pts.map((p) => `${p.label} ${fmtNum(p.v, 2)}`).join(", ")} เทียบราคา ${summary.price ?? "—"}`}>
         <line x1={12} x2={388} y1={24} y2={24} className="stroke-border" />
         {marker(summary.price, "stroke-muted", "ราคา")}
         {marker(summary.probabilityWeightedValue, "stroke-accent", "ถ่วงน้ำหนัก")}
@@ -513,7 +513,7 @@ function SensitivityTab({ input }: { input: ValuationInput }) {
 }
 
 const fmtAxis = (v: number, ax: SensitivityConfig["x"]) =>
-  ax.mode === "pct" ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(0)}%` : Math.abs(v) < 1 && ax.path !== "yieldShiftBp" ? `${ax.mode === "shift" && v > 0 ? "+" : ""}${(v * 100).toFixed(2)}%` : `${ax.mode === "shift" && v > 0 ? "+" : ""}${v}`;
+  ax.mode === "pct" ? formatPercent(v, 0, { signed: true }) : Math.abs(v) < 1 && ax.path !== "yieldShiftBp" ? `${ax.mode === "shift" && v > 0 ? "+" : ""}${fmtPct(v, 2)}` : `${ax.mode === "shift" && v > 0 ? "+" : ""}${v}`;
 
 function ReverseTab({ input }: { input: ValuationInput }) {
   const def = useMemo(() => defaultReverse(input), [input.method]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -559,7 +559,7 @@ function ReverseTab({ input }: { input: ValuationInput }) {
               <div className="text-xs text-muted">{res.path} โดยนัยจากราคา {fmtNum(res.targetPrice)}</div>
               <div className="text-xl font-semibold tabular-nums">{Math.abs(res.solution!) < 1.5 ? fmtPct(res.solution!, 2) : fmtNum(res.solution!)}</div>
               <div className="text-xs text-muted tabular-nums">
-                มูลค่าที่ได้ {fmtNum(res.modeledPrice)} · ส่วนต่าง {res.residual?.toExponential(2)} · {res.iterations} รอบ · ช่วง {res.bracket?.map((b) => b.toFixed(4)).join("–")}
+                มูลค่าที่ได้ {fmtNum(res.modeledPrice)} · ส่วนต่าง {res.residual?.toExponential(2)} · {res.iterations} รอบ · ช่วง {res.bracket?.map((b) => fmtNum(b, 4)).join("—")}
               </div>
             </>
           ) : (
@@ -745,7 +745,7 @@ function CorrelationEditor({
                         </td>
                       ) : (
                         <td key={j} className="text-right tabular-nums text-muted" title="สะท้อนจากช่องด้านบน (สมมาตร)">
-                          {(value[i]?.[j] ?? 0).toFixed(2)}
+                          {fmtNum(value[i]?.[j] ?? 0, 2)}
                         </td>
                       ),
                     )}
@@ -759,11 +759,11 @@ function CorrelationEditor({
               • {e}
             </p>
           ))}
-          {check && !check.errors.length && check.psd && <p className="text-xs text-pos">ผ่านการตรวจ: สมมาตร แนวทแยง = 1 และ positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)})</p>}
+          {check && !check.errors.length && check.psd && <p className="text-xs text-pos">ผ่านการตรวจ: สมมาตร แนวทแยง = 1 และ positive semidefinite (eigenvalue ต่ำสุด {fmtNum(check.minEigenvalue, 4)})</p>}
           {check && !check.errors.length && !check.psd && (
             <div className="rounded-lg border border-warn/40 p-2 text-warn" role="alert">
               <p>
-                เมทริกซ์นี้ไม่เป็น positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)}) — ค่าชุดนี้ขัดกันเอง เช่น A สัมพันธ์บวกกับ B และ C แต่ B กับ C สัมพันธ์ลบมาก · ยังจำลองไม่ได้จนกว่าจะแก้ค่าเองหรือยืนยันใช้ค่าที่ซ่อม
+                เมทริกซ์นี้ไม่เป็น positive semidefinite (eigenvalue ต่ำสุด {fmtNum(check.minEigenvalue, 4)}) — ค่าชุดนี้ขัดกันเอง เช่น A สัมพันธ์บวกกับ B และ C แต่ B กับ C สัมพันธ์ลบมาก · ยังจำลองไม่ได้จนกว่าจะแก้ค่าเองหรือยืนยันใช้ค่าที่ซ่อม
               </p>
               <button type="button" className="btn-ghost mt-1 text-xs" onClick={() => setShowRepair((x) => !x)}>
                 {showRepair ? "ซ่อนค่าที่ซ่อม" : "ดูค่าที่ระบบเสนอให้ซ่อม"}
@@ -778,7 +778,7 @@ function CorrelationEditor({
                         .filter((c) => c.j > c.i)
                         .map((c) => (
                           <li key={`${c.i}-${c.j}`}>
-                            {c.i + 1}–{c.j + 1}: {c.from.toFixed(3)} → {c.to.toFixed(3)}
+                            {c.i + 1}–{c.j + 1}: {fmtNum(c.from, 3)} → {fmtNum(c.to, 3)}
                           </li>
                         )),
                     )}
@@ -844,7 +844,7 @@ function McResult({ r }: { r: MonteCarloResult }) {
   return (
     <div className="space-y-2" role="status">
       <div className={clsx("text-xs", r.usable ? "text-muted" : "text-neg")}>
-        {r.usable ? "ใช้ได้" : "ผลใช้ไม่ได้"} · {r.valid.toLocaleString()} จาก {r.drawsRun.toLocaleString()} รอบใช้ได้ ({fmtPct(r.invalidShare, 1)} คำนวณไม่ได้) · seed {r.seed} · {r.elapsedMs} ms
+        {r.usable ? "ใช้ได้" : "ผลใช้ไม่ได้"} · {fmtNum(r.valid, 0)} จาก {fmtNum(r.drawsRun, 0)} รอบใช้ได้ ({fmtPct(r.invalidShare, 1)} คำนวณไม่ได้) · seed {r.seed} · {r.elapsedMs} ms
         {r.timedOut && " · หยุดเพราะครบเวลา"}
       </div>
       {r.histogram.length > 0 && (

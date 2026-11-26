@@ -110,7 +110,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           sub={`ลงทุนสุทธิ ${fmtThb(summary.netContributedThb)}`}
           color={summary.totalPnlThb >= 0 ? "green" : "red"}
           ring={pnlPct != null ? Math.abs(pnlPct) : null}
-          ringLabel={pnlPct != null ? `${pnlPct >= 0 ? "+" : "−"}${Math.abs(pnlPct * 100).toFixed(0)}%` : undefined}
+          ringLabel={pnlPct != null ? `${pnlPct >= 0 ? "+" : "−"}${fmtPct(Math.abs(pnlPct), 0)}` : undefined}
           hint="วงแหวน = กำไร/ขาดทุนเทียบกับเงินลงทุนสุทธิ"
         />
         {perf.displayReturnConvention === "annualized" ? (

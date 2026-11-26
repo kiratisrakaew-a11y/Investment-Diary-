@@ -86,7 +86,7 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
             </div>
             <div>
               <dt className="text-xs text-muted">ช่วงเป้าหมาย</dt>
-              <dd className="text-2xl font-semibold tabular-nums">{latest.targetLow != null && latest.targetHigh != null ? `${fmtNum(latest.targetLow)} – ${fmtNum(latest.targetHigh)}` : "–"}</dd>
+              <dd className="text-2xl font-semibold tabular-nums">{latest.targetLow != null && latest.targetHigh != null ? `${fmtNum(latest.targetLow)} – ${fmtNum(latest.targetHigh)}` : "—"}</dd>
               <dd className="text-xs text-muted">
                 {latest.analysts != null ? `${latest.analysts} นักวิเคราะห์` : "ไม่ระบุจำนวนนักวิเคราะห์"}
                 {recLabel(latest.recommendationKey) && ` · คำแนะนำ: ${recLabel(latest.recommendationKey)}`}
@@ -142,8 +142,8 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
                     </td>
                     <td className="num">{fmtNum(h.targetMean)}</td>
                     <td className="num">{fmtNum(h.targetMedian)}</td>
-                    <td className="num">{h.targetLow != null && h.targetHigh != null ? `${fmtNum(h.targetLow)} – ${fmtNum(h.targetHigh)}` : "–"}</td>
-                    <td className="num">{h.analysts ?? "–"}</td>
+                    <td className="num">{h.targetLow != null && h.targetHigh != null ? `${fmtNum(h.targetLow)} – ${fmtNum(h.targetHigh)}` : "—"}</td>
+                    <td className="num">{h.analysts ?? "—"}</td>
                     <td className="text-right">
                       <button type="button" className="text-neg hover:underline" onClick={() => remove(h.id)} disabled={pending}>
                         ลบ

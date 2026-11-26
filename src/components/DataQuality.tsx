@@ -11,7 +11,7 @@ export const XIRR_STATUS_LABEL: Record<XirrResult["status"], string> = {
 
 export function xirrText(x: XirrResult) {
   if (x.rate != null) return fmtPct(x.rate);
-  return "–";
+  return "—";
 }
 
 export function xirrNote(x: XirrResult) {
