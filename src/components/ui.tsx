@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { ExplainButton, type ExplainSpec } from "./ExplainButton";
+import { formatChange } from "@/lib/format";
 
 export type Tone = "orange" | "blue" | "green" | "yellow" | "purple" | "red";
 const TONE_VAR: Record<Tone, string> = {
@@ -120,14 +121,139 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
   );
 }
 
-export function Badge({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+export type BadgeStatus = "green" | "yellow" | "red" | "info" | "neutral";
+const BADGE_STYLE: Record<BadgeStatus, { cls: string; glyph: string; label: string }> = {
+  green: { cls: "border-positive/40 bg-positive/10 text-positive", glyph: "✓", label: "ปกติ" },
+  yellow: { cls: "border-warning/40 bg-warning/10 text-warning", glyph: "!", label: "เฝ้าระวัง" },
+  red: { cls: "border-negative/40 bg-negative/10 text-negative", glyph: "✕", label: "ผิดปกติ" },
+  info: { cls: "border-primary/40 bg-primary/10 text-primary", glyph: "i", label: "ข้อมูล" },
+  neutral: { cls: "border-border bg-panel-2 text-text-muted", glyph: "", label: "" },
+};
+/**
+ * Status / category chip. `status` adds a glyph so colour is never the only signal
+ * (Phase 3.5 swaps the glyph for the CheckCircle / Warning / XCircle icons).
+ */
+export function Badge({ children, className, title, status = "neutral" }: { children: React.ReactNode; className?: string; title?: string; status?: BadgeStatus }) {
+  const st = BADGE_STYLE[status];
   return (
-    <span title={title} className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-xs text-muted", className)}>
+    <span title={title} className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", st.cls, className)}>
+      {st.glyph && (
+        <span aria-hidden className="font-semibold">
+          {st.glyph}
+        </span>
+      )}
+      {st.glyph && <span className="sr-only">{st.label}: </span>}
       {children}
     </span>
   );
 }
 
+/** Plain card surface (12px radius, one shadow level). */
+export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={clsx("card", className)}>{children}</div>;
+}
+
+/**
+ * KPI tile: muted label, large value, optional change (▲▼ + colour via formatChange) and note.
+ * `change` is a fraction for kind "percent" (0.012 → ▲ +1.2%).
+ */
+export function KpiCard({
+  label,
+  value,
+  change,
+  changeKind = "percent",
+  changeLabel,
+  note,
+  hint,
+  className,
+}: {
+  label: string;
+  value: React.ReactNode;
+  change?: number | null;
+  changeKind?: "percent" | "number" | "money";
+  changeLabel?: string;
+  note?: React.ReactNode;
+  hint?: string;
+  className?: string;
+}) {
+  const ch = change === undefined ? null : formatChange(change, changeKind);
+  return (
+    <div className={clsx("card", className)} title={hint}>
+      <div className="text-sm text-text-muted">{label}</div>
+      <div className="mt-1 text-2xl leading-tight font-semibold break-words tabular-nums">{value}</div>
+      {(ch || note) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs">
+          {ch && (
+            <span className={clsx("font-medium tabular-nums", ch.className)}>
+              {ch.text}
+              {changeLabel && <span className="ml-1 font-normal text-text-muted">{changeLabel}</span>}
+            </span>
+          )}
+          {note && <span className="text-text-muted">{note}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Loading placeholder; pulse stops under prefers-reduced-motion. */
+export function Skeleton({ className, lines }: { className?: string; lines?: number }) {
+  if (lines && lines > 1)
+    return (
+      <div className="space-y-2" aria-hidden>
+        {Array.from({ length: lines }, (_, i) => (
+          <div key={i} className={clsx("h-4 animate-pulse rounded-md bg-panel-2", i === lines - 1 && "w-2/3", className)} />
+        ))}
+      </div>
+    );
+  return <div aria-hidden className={clsx("animate-pulse rounded-md bg-panel-2", className ?? "h-4")} />;
+}
+
+/** Nothing here yet: say what to do next (action = a button / link). Icon slot is 48–64px duotone (Phase 3.5). */
+export function EmptyState({ title, description, action, icon, className }: { title: string; description?: React.ReactNode; action?: React.ReactNode; icon?: React.ReactNode; className?: string }) {
+  return (
+    <div className={clsx("flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-6 py-8 text-center", className)}>
+      {icon && <div className="mb-1 text-text-muted">{icon}</div>}
+      <div className="text-base font-medium">{title}</div>
+      {description && <p className="max-w-md text-sm text-text-muted">{description}</p>}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
+}
+
+/** Something failed: a sentence a person can act on (never a raw stack / code). */
+export function ErrorState({ title = "เกิดข้อผิดพลาด", message, action, className }: { title?: string; message?: React.ReactNode; action?: React.ReactNode; className?: string }) {
+  return (
+    <div role="alert" className={clsx("flex flex-col gap-1 rounded-xl border border-negative/40 bg-negative/10 px-4 py-3 text-sm", className)}>
+      <div className="font-medium text-negative">
+        <span aria-hidden>✕ </span>
+        {title}
+      </div>
+      {message && <div className="text-text-muted">{message}</div>}
+      {action && <div className="mt-1">{action}</div>}
+    </div>
+  );
+}
+
+/** Collapsible detail block (native <details>: keyboard + screen-reader friendly, no JS). */
+export function Collapsible({ title, children, defaultOpen, className, meta }: { title: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; className?: string; meta?: React.ReactNode }) {
+  return (
+    <details open={defaultOpen} className={clsx("group rounded-xl border border-border", className)}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">
+          <span aria-hidden className="inline-block text-text-muted transition-transform group-open:rotate-90">
+            ▸
+          </span>
+          {title}
+        </span>
+        {meta && <span className="text-xs font-normal text-text-muted">{meta}</span>}
+      </summary>
+      <div className="border-t border-border px-4 py-3">{children}</div>
+    </details>
+  );
+}
+
+/** Legacy empty box (kept for existing pages; new code uses EmptyState). */
 export function Empty({ children }: { children: React.ReactNode }) {
   return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">{children}</div>;
 }

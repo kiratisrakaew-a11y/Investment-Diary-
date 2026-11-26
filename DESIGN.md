@@ -41,3 +41,8 @@ All displayed numbers go through: `formatNumber`, `formatPercent` (fraction → 
 - Empty / NaN / null → `—`; true minus `−` (U+2212); a value that rounds to 0 shows no sign.
 - Thousands separators; fixed decimals per call (price 2, % 1, millions 1); units in the column header.
 - Table numbers: `.num` (right-aligned, tabular-nums). Exceptions kept raw on purpose: values written into `<input>` (round-trip serialisation) and SVG path coordinates.
+
+## Shared components (Phase 3)
+Static (`src/components/ui.tsx`): `Card`, `Section`, `PageHeader`, `KpiCard` (label muted · big value · ▲▼ change · note), `Badge` (`status` green/yellow/red/info adds a glyph — not colour alone), `Skeleton`, `EmptyState` (title + what to do next + action), `ErrorState` (human sentence, `role=alert`), `Collapsible` (native `<details>`).
+Interactive (`src/components/ui-client.tsx`): `Tabs` (ARIA tablist, ←/→/Home/End), `DataTable` (sticky header, sortable with `aria-sort`, numeric columns right-aligned + tabular-nums, units in header, empties sort last, loading/empty/error built in), `ChartContainer` + `CHART` tokens (series `chart-1..6`, faint grid, muted axes, tooltip style; format values with the Phase 2 helpers).
+Reference page: `/design` (not in the menu). Legacy `Stat` / `Empty` stay until each page is migrated in Phase 4.
