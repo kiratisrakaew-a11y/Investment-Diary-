@@ -75,6 +75,7 @@ export async function rebalancePortfolio(input: RebalanceParams) {
   // Tracking error uses the optimizer covariance when every targeted asset has enough history.
   let cov: number[][] | null = null;
   const u = await loadUniverse(x.optimizer?.lookbackDays, rows.map((r) => r.symbol), {
+    window: x.optimizer?.window,
     returnBasis: x.optimizer?.returnBasis,
     benchmark: x.optimizer?.benchmark,
   }).catch(() => null);
@@ -103,6 +104,8 @@ export async function rebalancePortfolio(input: RebalanceParams) {
     ...r,
     warnings: [...warnings, ...r.warnings],
     targetSource,
+    // Period behind the tracking-error covariance (and the optimizer targets when they came from it).
+    windowInfo: u?.windowInfo ?? null,
     costModel: costs,
     optimizer: optimizer?.ok ? { objective: optimizer.objective, returnMethod: optimizer.returnMethod, recommended: optimizer.recommended } : null,
     disclaimer: "ข้อเสนอเท่านั้น — ระบบไม่ได้บันทึกรายการซื้อขาย ตรวจราคา/ค่าธรรมเนียมจริงก่อนส่งคำสั่ง แล้วบันทึกเองเมื่อซื้อขายจริง",

@@ -3,6 +3,7 @@
  * cost model for every model. Data preparation is the backtest's own (`loadBacktestData`).
  */
 import { z } from "zod";
+import { windowInput } from "@/lib/finance/window";
 import { benchmarkField } from "@/server/basis-schema";
 import { priceBasisReport, resolveReturnBasis } from "@/lib/finance/price-basis";
 import { getSettings } from "./settings";
@@ -29,9 +30,10 @@ export const modelComparisonInput = z.object({
     .string()
     .optional()
     .describe(
-      "First date of data (YYYY-MM-DD); default = when all chosen assets have prices",
+      "Legacy first date of data (YYYY-MM-DD); use window instead (not both)",
     ),
-  endDate: z.string().optional(),
+  endDate: z.string().optional().describe("Legacy last date; use window.endDate instead"),
+  window: windowInput.optional(),
   models: z
     .array(z.enum(COMPARISON_MODELS))
     .min(1)
@@ -52,6 +54,10 @@ export const modelComparisonInput = z.object({
     .max(2000)
     .default(252)
     .describe("Walk-forward training window in price observations"),
+  trainingWindow: z
+      .union([z.object({ years: z.number().min(0.25).max(20) }), z.object({ observations: z.number().int().min(30).max(5000) })])
+      .optional()
+      .describe("Training window as { years } or { observations }; overrides windowDays (which counts price observations)"),
   rebalance: z
     .enum(["monthly", "quarterly", "semiannual", "annual"])
     .default("quarterly"),
@@ -89,7 +95,7 @@ export const modelComparisonInput = z.object({
   riskFree: riskFreeInput,
   historyPolicy: z
     .enum(["common", "drop_short"])
-    .default("common")
+    .optional()
     .describe(
       "drop_short = drop the assets whose short history makes the common period too short (listed in excluded)",
     ),
@@ -99,6 +105,8 @@ export async function comparePortfolioModels(
   input: z.input<typeof modelComparisonInput>,
 ) {
   const x = modelComparisonInput.parse(input);
+  if (x.trainingWindow)
+    x.windowDays = "observations" in x.trainingWindow ? x.trainingWindow.observations : Math.round(x.trainingWindow.years * 252);
   if (x.minWeight > x.maxWeight)
     throw new Error("น้ำหนักขั้นต่ำมากกว่าน้ำหนักสูงสุด");
   // PRICE_BASIS_BENCHMARK_SPEC F4: request → Settings → price_return.
@@ -119,8 +127,11 @@ export async function comparePortfolioModels(
     useLots: false,
     riskFree: x.riskFree,
     historyPolicy: x.historyPolicy,
+    window: x.window,
     benchmark: x.benchmark,
   });
+  if (x.trainingWindow && "years" in x.trainingWindow)
+    x.windowDays = Math.max(30, Math.min(d.dates.length - 3, Math.round(x.trainingWindow.years * d.obsPerYear)));
   if (d.symbols.length < 2)
     throw new Error(
       `ต้องมีอย่างน้อย 2 สินทรัพย์ที่มีราคาครบช่วง${d.excluded.length ? ` — ไม่รวม ${d.excluded.map((e) => `${e.symbol} (${e.reason})`).join(", ")}` : ""}`,
@@ -167,6 +178,7 @@ export async function comparePortfolioModels(
     },
     period: { from: d.dates[0], to: d.dates[d.dates.length - 1] },
     excluded: d.excluded,
+    windowInfo: d.windowInfo,
     riskFreeRate: d.rf,
     riskFreeInfo: d.riskFreeInfo,
     returnBasisByAsset: d.returnBasisByAsset,
@@ -231,6 +243,7 @@ export function summarizeModelComparison(r: Full) {
     riskFreeRate: r.riskFreeRate,
     benchmark: r.benchmark,
     priceBasis: r.priceBasis,
+    windowInfo: r.windowInfo,
     excluded: r.excluded,
     returnBasisByAsset: r.returnBasisByAsset,
     split: r.split && {

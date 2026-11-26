@@ -5,6 +5,7 @@ import { loadUniverse } from "./optimizer";
 import { bondHoldings } from "./bonds";
 import { listAssets } from "./assets";
 import { basisBenchmarkShape } from "@/server/basis-schema";
+import { WindowError, windowInput } from "@/lib/finance/window";
 import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
 import { BENCHMARK_KIND_LABEL, RETURN_BASIS_SHORT } from "@/lib/finance/price-basis";
 
@@ -26,7 +27,8 @@ const scenario = z.object({
 export const stressInput = z.object({
   scenarios: z.array(scenario).max(10).optional().describe("Custom scenarios; omit to run the presets"),
   presets: z.array(z.enum(Object.keys(PRESET_SCENARIOS) as [string, ...string[]])).optional().describe(`Preset names: ${Object.keys(PRESET_SCENARIOS).join(", ")}`),
-  lookbackDays: z.number().int().min(90).max(3650).optional().describe("History for β, covariance and the historical replay (default 2 years)"),
+  lookbackDays: z.number().int().min(90).max(3650).optional().describe("Legacy: days of history for β, covariance and the historical replay; use window instead (not both)"),
+  window: windowInput.optional(),
   ...basisBenchmarkShape,
 });
 
@@ -36,7 +38,9 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
   const [snap, bonds] = await Promise.all([getPortfolioSummary(), bondHoldings()]);
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   const assetMeta = new Map((await listAssets()).map((a) => [a.id, a]));
-  const u = await loadUniverse(x.lookbackDays ?? 730, held.map((p) => p.symbol), {
+  // spec-lookback-window: window → legacy lookbackDays → Settings' default period.
+  const u = await loadUniverse(x.lookbackDays, held.map((p) => p.symbol), {
+    window: x.window,
     withSeries: true,
     returnBasis: x.returnBasis,
     benchmark: x.benchmark,
@@ -44,7 +48,7 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
     frequency: "daily",
   }).catch((e) => {
     // A benchmark the user named but the app cannot use is an error; anything else = no β, as before.
-    if (e instanceof BenchmarkError) throw e;
+    if (e instanceof BenchmarkError || e instanceof WindowError) throw e;
     return null;
   });
   const uAsset = (sym: string) => (u?.ok ? u.assets.find((a) => a.symbol === sym) : undefined);
@@ -95,6 +99,7 @@ export async function stressTestPortfolio(input: z.input<typeof stressInput> = {
     history,
     skipped: u?.ok ? u.skipped : [],
     priceBasis: u?.priceBasis ?? null,
+    windowInfo: u?.windowInfo ?? null,
     benchmark: u?.benchmark ?? null,
   };
 }

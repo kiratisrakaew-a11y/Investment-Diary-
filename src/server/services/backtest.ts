@@ -1,4 +1,13 @@
 import { z } from "zod";
+import { today } from "@/lib/validation";
+import {
+  WindowError,
+  buildWindowInfo,
+  resolveWindow,
+  windowInput,
+  type WindowPreset,
+  type WindowRequest,
+} from "@/lib/finance/window";
 import { benchmarkField } from "@/server/basis-schema";
 import { resolveBenchmark } from "./benchmarks";
 import { loadSavedValuations, trailingDividends, viewsAt } from "./bl-views";
@@ -87,9 +96,10 @@ export const backtestInput = z
       .string()
       .optional()
       .describe(
-        "First date of data (YYYY-MM-DD); default = when all chosen assets have prices",
+        "Legacy first date of data (YYYY-MM-DD); use window instead (not both)",
       ),
-    endDate: z.string().optional(),
+    endDate: z.string().optional().describe("Legacy last date; use window.endDate instead"),
+    window: windowInput.optional(),
     weights: z
       .record(z.string(), z.number().min(0).max(1))
       .optional()
@@ -109,6 +119,10 @@ export const backtestInput = z
       .max(2000)
       .default(252)
       .describe("Training window in price observations"),
+    trainingWindow: z
+      .union([z.object({ years: z.number().min(0.25).max(20) }), z.object({ observations: z.number().int().min(30).max(5000) })])
+      .optional()
+      .describe("Training window as { years } or { observations }; overrides windowDays (which counts price observations)"),
     rebalance: z
       .enum(["monthly", "quarterly", "semiannual", "annual"])
       .default("quarterly"),
@@ -187,7 +201,7 @@ export const backtestInput = z
     riskFree: riskFreeInput,
     historyPolicy: z
       .enum(["common", "drop_short"])
-      .default("common")
+      .optional()
       .describe(
         "common = one calendar where every asset has prices (fails with the limiting assets named); drop_short = drop the assets whose short history makes the period too short (listed in excluded)",
       ),
@@ -233,6 +247,8 @@ export type BacktestDataRequest = Pick<
   benchmarkBasis?: "price" | "total_return";
   /** "default" | "auto" | symbol (PRICE_BASIS_BENCHMARK_SPEC D2); omitted = Settings' defaultBenchmark. */
   benchmark?: string;
+  /** spec-lookback-window: backtest period (training + test); legacy startDate / endDate still work. */
+  window?: WindowRequest;
 };
 
 /**
@@ -264,9 +280,25 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     return n >= 2;
   });
   const firstOf = (id: number) => prices.get(id)![0][0];
+  // spec-lookback-window: `window` (or Settings' default) unless the legacy startDate / endDate are given.
+  if (x.window && (x.startDate || x.endDate))
+    throw new WindowError("WINDOW_CONFLICT", "ส่งทั้ง window และ startDate / endDate — เลือกอย่างใดอย่างหนึ่ง", "ใช้ window (startDate / endDate เก็บไว้เพื่อความเข้ากันได้)");
+  const lastPriceDate = pool.reduce((m, a) => {
+    const p = prices.get(a.id)!;
+    return p[p.length - 1][0] > m ? p[p.length - 1][0] : m;
+  }, "") || today();
+  const legacy = !!(x.startDate || x.endDate);
+  const win = legacy
+    ? { preset: "custom" as const, startDate: x.startDate ?? null, endDate: x.endDate ?? lastPriceDate, mu: null }
+    : resolveWindow(x.window, {
+        settingsDefault: (settings.defaultWindowPreset ?? "3y") as WindowPreset,
+        lastPriceDate,
+        today: today(),
+      });
+  const winStart = legacy ? null : win.startDate;
   // Without a start date every series keeps its full history; the common calendar below starts where the
   // latest asset starts — so the limiting assets can be named (and dropped with drop_short).
-  let start = x.startDate ?? "0000-00-00";
+  let start = x.startDate ?? winStart ?? "0000-00-00";
   if (x.startDate) {
     pool = pool.filter((a) => {
       if (firstOf(a.id) > x.startDate!)
@@ -279,13 +311,14 @@ export async function loadBacktestData(x: BacktestDataRequest) {
   }
   pool = pool.filter((a) => {
     if (a.currency !== "USD") return true;
-    const ok = fx.length && fx[0][0] <= (x.startDate ?? firstOf(a.id));
+    const from = x.startDate ?? (winStart && winStart > firstOf(a.id) ? winStart : firstOf(a.id));
+    const ok = fx.length && fx[0][0] <= from;
     if (!ok)
       excluded.push({ symbol: a.symbol, reason: "ไม่มี USDTHB ครอบคลุมช่วง" });
     return ok;
   });
   if (!pool.length) throw new Error("ไม่มีสินทรัพย์ที่มีข้อมูลครบช่วง");
-  const end = x.endDate ?? "9999-12-31";
+  const end = x.endDate ?? (legacy ? "9999-12-31" : win.endDate);
   // Shared conventions (return-series.ts): THB levels per actual print, FX applied once, total return
   // only from the provider's adjusted closes; then the common calendar of actual prints.
   const adj =
@@ -358,7 +391,9 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     levels.get(a.id)!.levels[0]?.[0] ?? "9999-12-31";
   let dates = commonDates(pool.map((a) => levels.get(a.id)!.levels));
   const need = x.minObservations ?? 3;
-  if (dates.length < need && x.historyPolicy === "drop_short") {
+  // Settings' default policy when none is given (pairwise has no meaning for a backtest → common).
+  const policy = x.historyPolicy ?? (settings.defaultHistoryPolicy === "drop_short" ? "drop_short" : "common");
+  if (dates.length < need && policy === "drop_short") {
     // Drop the latest starter (then the sparsest series) until the common calendar is long enough.
     while (dates.length < need && pool.length > 2) {
       const worst = [...pool].sort(
@@ -445,6 +480,27 @@ export async function loadBacktestData(x: BacktestDataRequest) {
       `Rf ${(riskFreeInfo.rate * 100).toFixed(2)}% เป็นค่าตัวอย่างจากหน้าตั้งค่า (ไม่มีแหล่งอ้างอิง) — ดอกเบี้ยเงินสดและ Sharpe ใช้ค่านี้ · ระบุ riskFree.manual หรือบันทึกแหล่งที่มาในหน้าตั้งค่า`,
     );
   dataWarnings.push(...riskFreeInfo.warnings);
+  const reqStart = win.startDate ?? pool.reduce<string | null>((m, a) => (!m || firstOf(a.id) < m ? firstOf(a.id) : m), null);
+  const windowInfo = buildWindowInfo({
+    requested: win,
+    maxStart: reqStart,
+    effective: { startDate: dates[0], endDate: dates[dates.length - 1], observations: dates.length, frequency: "daily" },
+    nAssets: pool.length,
+    limitedBy:
+      reqStart && Date.parse(dates[0]) > Date.parse(reqStart) + 14 * 86_400_000
+        ? pool
+            .filter((a) => Date.parse(firstOf(a.id)) > Date.parse(reqStart) + 14 * 86_400_000)
+            .sort((a, b) => firstOf(b.id).localeCompare(firstOf(a.id)))
+            .map((a) => ({ symbol: a.symbol, firstDate: firstOf(a.id) }))
+        : [],
+    dropped: excluded
+      .filter((e) => /drop_short|หลังวันเริ่ม/.test(e.reason))
+      .map((e) => {
+        const a = assets.find((y) => y.symbol === e.symbol);
+        return { ...e, firstDate: a && prices.get(a.id)?.length ? firstOf(a.id) : null };
+      }),
+    minObsPerAsset: settings.minObsPerAsset ?? 10,
+  });
   const costs = x.useCosts
     ? tradingCostsSchema.parse({ ...savedCosts, ...(x.costs ?? {}) })
     : tradingCostsSchema.parse({ lotSize: {}, ...(x.costs ?? {}) });
@@ -469,6 +525,7 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     ),
     basisFallback: basisFallback.filter((f) => pool.some((a) => a.symbol === f.symbol)),
     basisExcluded,
+    windowInfo,
   };
 }
 
@@ -488,6 +545,9 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
   );
   const basis = basisInfo.used;
   x.returnBasis = basis;
+  // spec-lookback-window: training window as years (≈ 252 observations / year until the data says) or observations.
+  if (x.trainingWindow)
+    x.windowDays = "observations" in x.trainingWindow ? x.trainingWindow.observations : Math.round(x.trainingWindow.years * 252);
   assertSingleDividendTreatment(x.returnBasis, withCash);
   // Optimizer strategies need a training window + at least one test day (see lib/backtest: start = window + 1).
   const usesWindow =
@@ -513,12 +573,15 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     returnBasisByAsset,
     basisFallback,
     basisExcluded,
+    windowInfo,
   } = await loadBacktestData({
     ...x,
     minObservations: usesWindow ? x.windowDays + 3 : 3,
     benchmarkBasis:
       withCash || x.returnBasis === "total_return" ? "total_return" : "price",
   });
+  if (x.trainingWindow && "years" in x.trainingWindow)
+    x.windowDays = Math.max(30, Math.min(dates.length - 3, Math.round(x.trainingWindow.years * obsPerYear)));
   const weights = x.weights
     ? Object.fromEntries(
         Object.entries(x.weights).map(([k, v]) => [k.toUpperCase(), v]),
@@ -871,6 +934,7 @@ export async function backtestPortfolio(input: z.input<typeof backtestInput>) {
     },
     universe: symbols,
     excluded,
+    windowInfo,
     returnBasisByAsset,
     benchmark: benchmark
       ? {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-26 — Lookback window, phase W2 (backtest, model comparison, stress test, rebalance)
+- **backtest_portfolio / compare_portfolio_models**:
+  - `window` (training + test period), ending at `window.endDate`.
+  - The legacy `startDate` / `endDate` still work; sending them together with `window` → `WINDOW_CONFLICT`.
+  - `trainingWindow: { years } | { observations }` overrides `windowDays`; years are converted with the observations per year of the data.
+  - Results carry `windowInfo`; a late listing is named in `limitedBy`.
+  - `historyPolicy` defaults to Settings (pairwise counts as common in a backtest).
+  - **Numbers change**: without `window` or `startDate` the period is now the Settings default (3 years), where it used to be the whole common history.
+- **stress_test_portfolio**: `window` (legacy `lookbackDays` still works). The default period is the Settings one (3 years; it used to be 2). The result carries `windowInfo`.
+- **rebalance_portfolio**: `optimizer.window` drives the tracking-error covariance; the result carries `windowInfo`.
+- Checks: `check:window` adds backtest 3y, legacy = window, conflict, limitedBy; compare `trainingWindow` + past endDate; stress window + conflict; rebalance window.
+
 ## 2026-11-26 — Lookback window, phase W1 (spec-lookback-window: core, optimize_portfolio, get_portfolio_optimization)
 - **One period parameter `window`** (`lib/finance/window.ts`):
   - `preset` 1y … 10y = N calendar years back from `endDate`; `max` = from the longest history; `custom` = `startDate` … `endDate` (at most 20 years); `muWindow` = an optional separate period for expected returns.
