@@ -8,6 +8,7 @@ import { BondError } from "@/lib/finance/bonds";
 import { PriceSyncError } from "@/lib/finance/price-coverage";
 import { MetricError } from "@/server/services/asset-metrics";
 import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
+import { WindowError } from "@/lib/finance/window";
 
 async function authorized(req: Request) {
   if (checkApiKey(req)) return true;
@@ -30,6 +31,9 @@ export function errorResponse(e: unknown) {
   }
   if (e instanceof BondError) {
     return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });
+  }
+  if (e instanceof WindowError) {
+    return NextResponse.json({ error: e.message, code: e.code, suggestion: e.hint }, { status: 400 });
   }
   if (e instanceof BenchmarkError) {
     return NextResponse.json({ error: e.message, code: e.code, available: e.available, suggestion: e.issue.suggestion }, { status: 400 });

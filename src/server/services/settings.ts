@@ -35,6 +35,9 @@ export async function getSettings() {
       defaultReturnBasis: "price_return" as "price_return" | "total_return",
       defaultBenchmark: "default" as string,
       muCapPct: null as number | null,
+      defaultWindowPreset: "3y" as string,
+      defaultHistoryPolicy: "common" as string,
+      minObsPerAsset: 10 as number,
     }
   );
 }
@@ -56,6 +59,9 @@ export async function saveSettings(input: {
   defaultReturnBasis?: "price_return" | "total_return";
   defaultBenchmark?: string;
   muCapPct?: number | null;
+  defaultWindowPreset?: "1y" | "2y" | "3y" | "5y" | "7y" | "10y" | "max";
+  defaultHistoryPolicy?: "common" | "drop_short" | "pairwise";
+  minObsPerAsset?: number;
 }) {
   // Merge with stored values so a partial update never resets other settings to their defaults.
   const current = await getSettings();
@@ -79,6 +85,9 @@ export async function saveSettings(input: {
     defaultReturnBasis: current.defaultReturnBasis,
     defaultBenchmark: current.defaultBenchmark,
     muCapPct: current.muCapPct ?? null,
+    defaultWindowPreset: current.defaultWindowPreset,
+    defaultHistoryPolicy: current.defaultHistoryPolicy,
+    minObsPerAsset: current.minObsPerAsset,
     ...defined,
   });
   await getDb()

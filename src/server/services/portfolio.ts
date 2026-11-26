@@ -1,19 +1,16 @@
 import { computeAllocation } from "@/lib/finance/allocation";
 import { computeMetrics } from "@/lib/finance/metrics";
 import {
-  covarianceDiagnostics,
-  estimateInputs,
   correlationMatrix,
   portfolioStats,
   randomPortfolios,
 } from "@/lib/finance/mpt";
 import { constrainedFrontier } from "@/lib/finance/optimizer";
 import { componentES, riskContribution } from "@/lib/finance/risk-contribution";
-import { asOf, buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TotalReturnMode, type TxInput } from "@/lib/finance/portfolio";
+import { buildSnapshot, buildValueSeries, investorCashFlows, type AssetInput, type TotalReturnMode, type TxInput } from "@/lib/finance/portfolio";
 import { adjAssetsForPortfolio, unrecordedDividends } from "@/lib/finance/total-return-portfolio";
 import { benchmarkReportOf, normalizeBenchmarkRequest } from "@/lib/finance/benchmark-resolve";
 import { resolveBenchmark } from "./benchmarks";
-import { simpleReturns } from "@/lib/finance/stats";
 import { today } from "@/lib/validation";
 import type { AssetClass } from "@/db/schema";
 import { listAssets } from "./assets";
@@ -24,7 +21,7 @@ import {
   loadPriceHistory,
 } from "./prices";
 import { priceBasisReport, resolveReturnBasis, type ReturnBasis } from "@/lib/finance/price-basis";
-import { totalReturnSourceFor } from "@/lib/finance/total-return-policy";
+import type { WindowRequest } from "@/lib/finance/window";
 import { getSettings, getTargets } from "./settings";
 import { allTransactions } from "./transactions";
 
@@ -190,93 +187,73 @@ export async function getPerformance(
  * covariance from aligned daily THB returns over the look-back window.
  */
 export async function getMptAnalysis(
-  lookbackDays = 365 * 2,
+  lookbackDays?: number,
   data?: PortfolioData,
-  opts: { returnBasis?: ReturnBasis } = {},
+  opts: {
+    returnBasis?: ReturnBasis;
+    window?: WindowRequest;
+    frequency?: "daily" | "weekly" | "monthly";
+    historyPolicy?: "common" | "drop_short" | "pairwise";
+    covMethod?: "sample" | "ledoit_wolf";
+  } = {},
 ) {
-  const { assetInputs, txs, prices: closes, fx, settings } = data ?? (await loadAll());
-  const snap = buildSnapshot(assetInputs, txs, closes, fx, today());
+  const { assetInputs, txs, prices, fx } = data ?? (await loadAll());
+  const snap = buildSnapshot(assetInputs, txs, prices, fx, today());
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
-  const from = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
-  const rf = settings.riskFreeRate / 100;
-  // PRICE_BASIS_BENCHMARK_SPEC F2: request → Settings → price_return. Holdings are valued on closes either way;
-  // only the return series switch to adjusted closes (per-asset policy as in the optimizer: MPT A3).
-  const basisInfo = resolveReturnBasis(opts.returnBasis, settings.defaultReturnBasis ?? null, "price_return");
-  const fallback: { symbol: string; reason: string }[] = [];
-  const excluded: { symbol: string; reason: string }[] = [];
-  let prices = closes;
-  if (basisInfo.used === "total_return") {
-    const [adj, actions] = await Promise.all([loadAdjPriceHistory(), loadCorporateActionDates()]);
-    prices = new Map(closes);
-    for (const p of held) {
-      const window = (closes.get(p.assetId) ?? []).filter(([d]) => d >= from);
-      const adjMap = new Map(adj.get(p.assetId) ?? []);
-      const src = totalReturnSourceFor(
-        { symbol: p.symbol, assetClass: p.assetClass },
-        window.map(([date, close]) => ({ date, close, adjClose: adjMap.get(date) ?? null })),
-        actions.for({ id: p.assetId, symbol: p.symbol }),
-      );
-      if (!src.ok) {
-        excluded.push({ symbol: p.symbol, reason: `${src.reason}${src.required ? ` — ต้องการ: ${src.required}` : ""}` });
-        prices.delete(p.assetId);
-      } else if (src.source === "adjusted_close") {
-        prices.set(p.assetId, window.map(([d]) => [d, adjMap.get(d)!] as [string, number]));
-      } else if (src.note) fallback.push({ symbol: p.symbol, reason: src.note });
-    }
-  }
-  const priceBasis = priceBasisReport(basisInfo, fallback, excluded);
-
-  // USD assets need USDTHB for every date; never substitute FX = 1.
-  const fxStart = fx[0]?.[0];
-  const usable = held.filter(
-    (p) =>
-      (prices.get(p.assetId)?.filter(([d]) => d >= from).length ?? 0) >= 30 &&
-      (p.currency !== "USD" || (fxStart != null && fxStart <= (prices.get(p.assetId)!.find(([d]) => d >= from)?.[0] ?? from))),
-  );
-  const skipped = held.filter((p) => !usable.includes(p)).map((p) => p.symbol);
-  if (usable.length < 2) {
-    return { ok: false as const, reason: "Need at least 2 held assets with 30+ days of price history.", skipped, priceBasis };
-  }
-
-  // Dates on which every usable asset has a price.
-  const dateSets = usable.map((p) => new Set(prices.get(p.assetId)!.filter(([d]) => d >= from).map(([d]) => d)));
-  const common = [...dateSets[0]].filter((d) => dateSets.every((s) => s.has(d))).sort();
-  if (common.length < 30) {
-    return { ok: false as const, reason: "Not enough overlapping price dates between holdings.", skipped, priceBasis };
-  }
-  const series = usable.map((p) => {
-    const hist = prices.get(p.assetId)!;
-    return simpleReturns(
-      common.map((d) => (asOf(hist, d) ?? 0) * (p.currency === "USD" ? (asOf(fx, d) ?? NaN) : 1)),
-    );
+  // spec-lookback-window: the same universe loader as optimize_portfolio (window, frequency, history policy,
+  // price basis), so the two report the same period and windowInfo for the same input.
+  const { loadUniverse } = await import("./optimizer");
+  const u = await loadUniverse(lookbackDays, held.map((p) => p.symbol), {
+    withSeries: true,
+    window: opts.window,
+    returnBasis: opts.returnBasis,
+    frequency: opts.frequency,
+    historyPolicy: opts.historyPolicy,
   });
-  const years = (Date.parse(common[common.length - 1]) - Date.parse(common[0])) / (365 * 86_400_000);
-  const periodsPerYear = years > 0 ? (common.length - 1) / years : 252;
-  const { mu, cov } = estimateInputs(series, periodsPerYear);
-  const covWarnings = covarianceDiagnostics(cov).warnings;
-  const totalHeld = usable.reduce((s, p) => s + p.marketValueThb, 0);
-  const current = portfolioStats(usable.map((p) => p.marketValueThb / totalHeld), mu, cov, rf);
+  const priceBasis = u.priceBasis ?? priceBasisReport(resolveReturnBasis(opts.returnBasis, null, "price_return"));
+  const used = new Set(u.assets.map((a) => a.symbol));
+  const skipped = held.filter((p) => !used.has(p.symbol)).map((p) => p.symbol);
+  if (!u.ok || u.assets.length < 2)
+    return {
+      ok: false as const,
+      reason: u.reason ?? "ต้องมีสินทรัพย์ที่ถืออยู่และมีประวัติราคาพออย่างน้อย 2 ตัว",
+      skipped,
+      skippedDetail: u.skipped,
+      priceBasis,
+      windowInfo: u.windowInfo,
+      coverage: u.coverage,
+    };
+  const symbols = u.assets.map((a) => a.symbol);
+  const mu = u.assets.map((a) => a.historicalReturn);
+  const cov = opts.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
+  const rf = u.riskFree;
+  const totalHeld = u.assets.reduce((s, a) => s + a.currentValue, 0);
+  const current = portfolioStats(u.assets.map((a) => (totalHeld > 0 ? a.currentValue / totalHeld : 1 / u.assets.length)), mu, cov, rf);
   // Same QP engine as the optimizer page (long-only, fully invested).
   const f = constrainedFrontier(mu, cov, rf, { min: 0, max: 1 }, 100);
   const tangency = f.tangency;
-
   return {
     ok: true as const,
-    symbols: usable.map((p) => p.symbol),
+    symbols,
     skipped,
+    skippedDetail: u.skipped,
     priceBasis,
-    observations: common.length,
-    periodsPerYear,
-    covarianceWarnings: covWarnings,
-    from: common[0],
-    to: common[common.length - 1],
+    windowInfo: u.windowInfo,
+    coverage: u.coverage,
+    frequency: u.frequency,
+    covMethod: opts.covMethod ?? "sample",
+    observations: u.observations,
+    periodsPerYear: u.periodsPerYear,
+    covarianceWarnings: u.covarianceWarnings,
+    from: u.from!,
+    to: u.to!,
     riskFreeRate: rf,
-    assets: usable.map((p, i) => ({ symbol: p.symbol, expectedReturn: mu[i], volatility: Math.sqrt(cov[i][i]) })),
+    assets: u.assets.map((a, i) => ({ symbol: a.symbol, expectedReturn: mu[i], volatility: Math.sqrt(cov[i][i]) })),
     correlation: correlationMatrix(cov),
     /** Risk decomposition of the current holdings (σ annual; component ES on periodic returns). */
     risk: {
-      ...riskContribution(usable.map((p) => p.symbol), current.weights, cov),
-      componentES95: componentES(usable.map((p) => p.symbol), current.weights, series),
+      ...riskContribution(symbols, current.weights, cov),
+      componentES95: componentES(symbols, current.weights, u.series?.returns ?? []),
     },
     current,
     minVariance: f.gmv,

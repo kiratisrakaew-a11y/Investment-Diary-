@@ -383,6 +383,12 @@ export const settings = pgTable("settings", {
   defaultBenchmark: text("default_benchmark").notNull().default("default"),
   /** MPT_FIX_SPEC P1-7: cap on |μ − μ_CAPM| in % per year for history-based μ; null = no cap. */
   muCapPct: doublePrecision("mu_cap_pct"),
+  /** spec-lookback-window: default data period of μ / Σ features (1y … 10y | max). */
+  defaultWindowPreset: text("default_window_preset").notNull().default("3y"),
+  /** Default historyPolicy of the optimizer universe (common | drop_short | pairwise). */
+  defaultHistoryPolicy: text("default_history_policy").notNull().default("common"),
+  /** Observations per asset at or above which the window quality is "ok". */
+  minObsPerAsset: doublePrecision("min_obs_per_asset").notNull().default(10),
 });
 
 /**

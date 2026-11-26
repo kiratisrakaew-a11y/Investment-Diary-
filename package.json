@@ -26,7 +26,8 @@
     "check:backtest": "tsx src/scripts/backtest-check.ts",
     "check:total-return": "tsx src/scripts/total-return-check.ts",
     "check:price-basis": "tsx src/scripts/price-basis-check.ts",
-    "check:mpt": "tsx src/scripts/mpt-check.ts"
+    "check:mpt": "tsx src/scripts/mpt-check.ts",
+    "check:window": "tsx src/scripts/window-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

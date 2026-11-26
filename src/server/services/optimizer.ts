@@ -66,6 +66,13 @@ import {
 } from "@/lib/finance/return-series";
 import { getSettings, getYieldCurve } from "./settings";
 import { THAI_GOLD_SYMBOL } from "@/lib/prices/gold";
+import {
+  buildWindowInfo,
+  resolveWindow,
+  type WindowInfo,
+  type WindowPreset,
+  type WindowRequest,
+} from "@/lib/finance/window";
 import { resolveBenchmark } from "./benchmarks";
 import { loadSavedValuations, trailingDividends, viewsAt } from "./bl-views";
 import {
@@ -145,6 +152,11 @@ export interface OptimizerUniverse {
   returnBasisByAsset?: Record<string, AssetReturnBasis>;
   /** Sampling of the common calendar: daily (default) or last actual observation per week / month. */
   frequency?: SampleFrequency;
+  /** spec-lookback-window: requested vs effective period, limiting / dropped assets, quality. */
+  windowInfo?: WindowInfo;
+  coverage?: { symbol: string; firstDate: string | null; observations: number; status: "ok" | "limits_window" | "dropped"; reason?: string }[];
+  /** Years behind historical μ (muWindow when given) — the blend weight uses these. */
+  muYears?: number;
   /** Aligned periodic returns (only with `withSeries`): per asset, the benchmark, and price dates (returns end on dates[t + 1]). */
   series?: { returns: number[][]; benchmark: number[] | null; dates: string[] };
 }
@@ -177,9 +189,10 @@ async function netDividendEvents() {
 }
 
 /** Views from valuations saved up to today, priced at the latest stored close (P1-7). */
-async function valuationViewsNow(symbols: string[], totalReturn: boolean, maxAgeDays?: number) {
+async function valuationViewsNow(symbols: string[], totalReturn: boolean, maxAgeDays?: number, asOf?: string) {
   const [saved, prices, assets] = await Promise.all([loadSavedValuations(symbols), loadPriceHistory(), listAssets()]);
-  const today_ = today();
+  // As of the window's end date: only valuations saved by then, priced at that day's close (no look-ahead).
+  const today_ = asOf && asOf < today() ? asOf : today();
   const divs = await trailingDividends(symbols, new Date(Date.parse(today_) - 366 * 86_400_000).toISOString().slice(0, 10), today_);
   const idOf = new Map(assets.map((a) => [a.symbol, a.id]));
   const priceAt = (s: string, d: string) => {
@@ -193,6 +206,34 @@ async function valuationViewsNow(symbols: string[], totalReturn: boolean, maxAge
     return v;
   };
   return viewsAt(symbols, saved, divs, priceAt, today_, { totalReturn, maxAgeDays });
+}
+
+/** Per-asset coverage for the dry-run preview: first price, observations in the window, status. */
+function coverageRows(
+  candidates: { id: number; symbol: string }[],
+  usable: { id: number }[],
+  levelsById: Map<number, [string, number][]>,
+  dropped: { symbol: string; reason: string }[],
+  limitedBy: { symbol: string }[],
+  prices: Map<number, [string, number][]>,
+  from: string,
+) {
+  const used = new Set(usable.map((a) => a.id));
+  return candidates.map((a) => {
+    const p = prices.get(a.id) ?? [];
+    const d = dropped.find((x) => x.symbol === a.symbol);
+    return {
+      symbol: a.symbol,
+      firstDate: p[0]?.[0] ?? null,
+      observations: used.has(a.id) ? (levelsById.get(a.id)?.length ?? 0) : p.filter(([x]) => x >= from).length,
+      status: (used.has(a.id)
+        ? limitedBy.some((l) => l.symbol === a.symbol)
+          ? "limits_window"
+          : "ok"
+        : "dropped") as "ok" | "limits_window" | "dropped",
+      ...(d ? { reason: d.reason } : !used.has(a.id) ? { reason: "ไม่ได้ใช้ (ดู skipped)" } : {}),
+    };
+  });
 }
 
 /** Where an asset's close is struck: the Thai market or a US-time price (USD assets, world gold). */
@@ -247,9 +288,12 @@ function pairwiseInputs(levels: [string, number][][], minObs: number) {
 }
 
 export async function loadUniverse(
-  lookbackDays = 365 * 3,
+  /** Legacy look-back in calendar days (= window custom endDate − lookbackDays); not with opts.window. */
+  lookbackDays?: number,
   symbols?: string[],
   opts: {
+    /** spec-lookback-window: data period (preset / custom / endDate / muWindow); omitted = Settings default. */
+    window?: WindowRequest;
     withSeries?: boolean;
     returnBasis?: ReturnBasis;
     /** "default" | "auto" | index symbol; omitted = Settings' defaultBenchmark. */
@@ -318,10 +362,6 @@ export async function loadUniverse(
     });
   const rf = rfInfo.rate;
   const erp = settings.equityRiskPremium / 100;
-  const from = new Date(Date.now() - lookbackDays * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-
   const txs: TxInput[] = txRows.map((t) => ({ ...t }));
   const assetInputs: AssetInput[] = assets.map((a) => ({
     id: a.id,
@@ -330,12 +370,44 @@ export async function loadUniverse(
     assetClass: a.assetClass,
     currency: a.currency,
   }));
-  const snap = buildSnapshot(assetInputs, txs, prices, fx, today());
+  const { candidates, skipped } = selectCandidates(assets, symbols);
+  // spec-lookback-window: one resolved period; nothing after endDate is used (prices, adj, FX, benchmark).
+  const lastPriceDate = candidates.reduce((m, a) => {
+    const p = prices.get(a.id);
+    const d = p?.length ? p[p.length - 1][0] : "";
+    return d > m ? d : m;
+  }, "") || today();
+  const win = resolveWindow(opts.window, {
+    legacyLookbackDays: lookbackDays,
+    settingsDefault: (settings.defaultWindowPreset ?? "3y") as WindowPreset,
+    lastPriceDate,
+    today: today(),
+  });
+  const endDate = win.endDate;
+  const upTo = (m: Map<number, [string, number][]>) =>
+    new Map([...m].map(([k, v]) => [k, v.filter(([d]) => d <= endDate)] as [number, [string, number][]]));
+  const pricesE = upTo(prices);
+  const adjE = adj ? upTo(adj) : null;
+  const fxE = fx.filter(([d]) => d <= endDate);
+  const firstPrice = (id: number) => pricesE.get(id)?.[0]?.[0] ?? null;
+  const maxStart = candidates.reduce<string | null>((m, a) => {
+    const f = firstPrice(a.id);
+    return f && (!m || f < m) ? f : m;
+  }, null);
+  const from = win.startDate ?? maxStart ?? endDate;
+  const muFrom = win.mu ? (win.mu.startDate ?? maxStart ?? from) : from;
+  const buildFrom = muFrom < from ? muFrom : from;
+  const muLevelsById = new Map<number, [string, number][]>();
+  const historyDropped: { symbol: string; firstDate: string | null; reason: string }[] = [];
+  const windowNotes: string[] = [];
+  if (opts.window?.endDate && endDate < new Date(Date.parse(today()) - 7 * 86_400_000).toISOString().slice(0, 10))
+    windowNotes.push(
+      `วิเคราะห์ ณ ${endDate}: ราคา, FX, ดัชนี, ปันผลและ valuation ใช้เฉพาะข้อมูลถึงวันนั้น · Rf / ERP เป็นค่าปัจจุบันในหน้าตั้งค่า (ไม่มีประวัติย้อนหลังให้ใช้)`,
+    );
+  const snap = buildSnapshot(assetInputs, txs, pricesE, fxE, endDate);
   const valueOf = new Map(
     snap.positions.map((p) => [p.assetId, p.marketValueThb]),
   );
-
-  const { candidates, skipped } = selectCandidates(assets, symbols);
   // MPT_FIX_SPEC P0-B4: closes from different time zones (Thai market vs US-priced gold / USD assets) understate
   // daily correlation — without an explicit frequency such a universe is sampled weekly (stated in a note).
   const markets = new Set(candidates.map(marketOf));
@@ -351,15 +423,16 @@ export async function loadUniverse(
   const seriesWarnings: string[] = [];
   let usable = candidates.filter((a) => {
     // Archived assets are already in `skipped` (selectCandidates); hidden-from-holdings does not matter.
-    const window = prices.get(a.id)?.filter(([d]) => d >= from) ?? [];
+    const window = pricesE.get(a.id)?.filter(([d]) => d >= buildFrom) ?? [];
     if (frequency === "daily" ? window.length < MIN_OBS : window.length < 2) {
       skipped.push({
         symbol: a.symbol,
         reason: `มีราคาเพียง ${window.length} วัน (ต้องการ ≥ ${frequency === "daily" ? MIN_OBS : 2})`,
       });
+      historyDropped.push({ ...skipped[skipped.length - 1], firstDate: firstPrice(a.id) });
       return false;
     }
-    const adjMap = adj ? new Map(adj.get(a.id) ?? []) : null;
+    const adjMap = adjE ? new Map(adjE.get(a.id) ?? []) : null;
     // Bonds on a total-return basis: dirty price + coupons from the bond's own schedule (not adj_close).
     const bondTr =
       basis === "total_return" && a.assetClass === "bond"
@@ -386,7 +459,7 @@ export async function loadUniverse(
           totalReturnSource: "distributions",
           source: "bond schedule",
           currency: a.currency,
-          fx,
+          fx: fxE,
         })
       : (() => {
           const observations = window.map(([date, close]) => ({
@@ -409,7 +482,7 @@ export async function loadUniverse(
               })),
               source: "close + dividend events",
               currency: a.currency,
-              fx,
+              fx: fxE,
             });
           }
           // Total return per asset class (MPT A3): adj_close, or the close where it already is the total return.
@@ -439,7 +512,7 @@ export async function loadUniverse(
                 ? "adjusted_close"
                 : undefined,
             currency: a.currency,
-            fx,
+            fx: fxE,
           });
         })();
     if (!lv.ok) {
@@ -460,12 +533,16 @@ export async function loadUniverse(
       seriesWarnings.push(
         `${a.symbol}: price_return ใช้ราคาอย่างเดียว ไม่รวมคูปอง/ดอกเบี้ยค้างรับ — เลือก returnBasis total_return สำหรับผลตอบแทนรวมของพันธบัตร`,
       );
-    const levels = resampleLevels(lv.levels, frequency);
-    if (frequency !== "daily" && levels.length < minObs) {
+    const built = resampleLevels(lv.levels, frequency);
+    // muWindow: the levels were built from the earlier of the two starts; Σ / β keep `window`.
+    if (win.mu) muLevelsById.set(a.id, built.filter(([d]) => d >= muFrom));
+    const levels = win.mu ? built.filter(([d]) => d >= from) : built;
+    if ((frequency !== "daily" || win.mu) && levels.length < Math.max(2, frequency === "daily" ? 2 : minObs)) {
       skipped.push({
         symbol: a.symbol,
-        reason: `มีข้อมูลราย${frequency === "weekly" ? "สัปดาห์" : "เดือน"}เพียง ${levels.length} งวด (ต้องการ ≥ ${minObs})`,
+        reason: `มีข้อมูลราย${frequency === "weekly" ? "สัปดาห์" : frequency === "monthly" ? "เดือน" : "วัน"}เพียง ${levels.length} งวด (ต้องการ ≥ ${frequency === "daily" ? 2 : minObs})`,
       });
+      historyDropped.push({ ...skipped[skipped.length - 1], firstDate: firstPrice(a.id) });
       return false;
     }
     levelsById.set(a.id, levels);
@@ -482,8 +559,24 @@ export async function loadUniverse(
     basisNotes.push(
       `ผลตอบแทนรวมสุทธิภาษีปันผล: หุ้นใช้ราคาปิด + เงินปันผล × (1 − ${(wht! * 100).toFixed(0)}%) (event ที่ระบุอัตราภาษีใช้อัตรานั้น) แทนราคาปรับปันผล (gross)`,
     );
+  const emptyInfo = () =>
+    buildWindowInfo({
+      requested: win,
+      maxStart,
+      effective: null,
+      nAssets: usable.length,
+      limitedBy: [],
+      dropped: historyDropped,
+      minObsPerAsset: settings.minObsPerAsset ?? 10,
+    });
   const empty: OptimizerUniverse = {
     ok: false,
+    get windowInfo() {
+      return emptyInfo();
+    },
+    get coverage() {
+      return coverageRows(candidates, usable, levelsById, historyDropped, [], pricesE, from);
+    },
     from: null,
     to: null,
     observations: 0,
@@ -501,18 +594,20 @@ export async function loadUniverse(
     covarianceWarnings: [],
   };
   // MPT_FIX_SPEC P0-B3: assets whose history starts after the look-back start shorten the common calendar.
-  const policy = opts.historyPolicy ?? "common";
+  const policy = opts.historyPolicy ?? ((settings.defaultHistoryPolicy ?? "common") as "common" | "drop_short" | "pairwise");
   const firstOf = (a: { id: number }) => levelsById.get(a.id)![0][0];
   const late = (a: { id: number }) => Date.parse(firstOf(a)) > Date.parse(from) + 14 * 86_400_000;
   const historyNotes: string[] = [];
   if (policy === "drop_short") {
     const short = usable.filter(late);
     if (short.length && usable.length - short.length >= 2) {
-      for (const a of short)
+      for (const a of short) {
         skipped.push({
           symbol: a.symbol,
-          reason: `ประวัติราคาเริ่ม ${firstOf(a)} หลังช่วงที่ขอ (${from}) — historyPolicy drop_short`,
+          reason: `ประวัติราคาเริ่ม ${firstPrice(a.id) ?? firstOf(a)} หลังช่วงที่ขอ (${from}) — historyPolicy drop_short`,
         });
+        historyDropped.push({ ...skipped[skipped.length - 1], firstDate: firstPrice(a.id) ?? firstOf(a) });
+      }
       usable = usable.filter((a) => !late(a));
       historyNotes.push(`historyPolicy drop_short: ตัด ${short.map((a) => a.symbol).join(", ")} เพื่อให้ช่วงร่วมยาวขึ้น`);
     } else if (short.length)
@@ -538,7 +633,7 @@ export async function loadUniverse(
     const limiting = usable
       .filter(late)
       .sort((a, b) => (firstOf(a) < firstOf(b) ? 1 : -1))
-      .map((a) => `${a.symbol} (เริ่ม ${firstOf(a)})`);
+      .map((a) => `${a.symbol} (เริ่ม ${firstPrice(a.id) ?? firstOf(a)})`);
     historyNotes.push(
       `ขอข้อมูลตั้งแต่ ${from} แต่ช่วงร่วมเริ่ม ${dates[0]} (${dates.length} งวด)${limiting.length ? ` เพราะ ${limiting.join(", ")}` : ""} — historyPolicy "drop_short" ตัดตัวที่ประวัติสั้น หรือ "pairwise" ใช้ข้อมูลแต่ละคู่เต็มช่วง`,
     );
@@ -565,7 +660,7 @@ export async function loadUniverse(
     : [];
   // Benchmark on the asset calendar where it has actual prints at both ends (NaN otherwise) — never forward-filled.
   const benchWindow = resampleLevels(
-    bench.filter(([d]) => d >= from),
+    bench.filter(([d]) => d >= from && d <= endDate),
     frequency,
   );
   const benchReturns = benchWindow.length
@@ -588,10 +683,56 @@ export async function loadUniverse(
     ];
   }
 
+  // spec 8.1: report the last ACTUAL price date (a weekly / monthly label is the period end, maybe ahead).
+  const lastBucket = dates[dates.length - 1];
+  const actualEnd = usable.reduce((m, a) => {
+    const p = pricesE.get(a.id) ?? [];
+    let d = "";
+    for (let k = p.length - 1; k >= 0; k--)
+      if (p[k][0] <= lastBucket) {
+        d = p[k][0];
+        break;
+      }
+    return d > m ? d : m;
+  }, "") || lastBucket;
+  // muWindow: μ from each asset's own (longer) window; blend uses those years.
+  let muYears = years;
+  if (win.mu) {
+    const own = usable.map((a) => {
+      const lv = muLevelsById.get(a.id)!;
+      const d = lv.map(([x]) => x);
+      const r = returnsOn(lv, d).filter(Number.isFinite);
+      const yrs = (Date.parse(d[d.length - 1]) - Date.parse(d[0])) / (365 * 86_400_000);
+      return { mean: mean(r) * (yrs > 0 ? (d.length - 1) / yrs : 252), yrs };
+    });
+    ownMean = own.map((o) => o.mean);
+    const ys = own.map((o) => o.yrs).sort((x, y) => x - y);
+    muYears = ys[Math.floor(ys.length / 2)];
+  }
+  const limitedBy = usable
+    .filter(late)
+    .sort((x, y) => (firstOf(x) < firstOf(y) ? 1 : -1))
+    .map((a) => ({ symbol: a.symbol, firstDate: firstPrice(a.id) ?? firstOf(a) }));
+  const windowInfo = buildWindowInfo({
+    requested: win,
+    maxStart,
+    effective: { startDate: dates[0], endDate: actualEnd, observations: dates.length, frequency },
+    nAssets: usable.length,
+    limitedBy: Date.parse(dates[0]) > Date.parse(from) + 14 * 86_400_000 ? limitedBy : [],
+    dropped: historyDropped,
+    muYears,
+    minObsPerAsset: settings.minObsPerAsset ?? 10,
+  });
+  windowInfo.sigmaYears = years;
+  const coverage = coverageRows(candidates, usable, levelsById, historyDropped, windowInfo.limitedBy, pricesE, from);
+
   return {
     ok: true,
     from: dates[0],
-    to: dates[dates.length - 1],
+    to: actualEnd,
+    windowInfo,
+    coverage,
+    muYears,
     observations: dates.length,
     riskFree: rf,
     riskFreeInfo: rfInfo,
@@ -605,8 +746,10 @@ export async function loadUniverse(
     periodsPerYear: N,
     covarianceWarnings: [
       ...covarianceWarnings,
+      ...windowNotes,
       ...frequencyNotes,
       ...historyNotes,
+      ...windowInfo.warnings.filter((w) => !w.startsWith("ขอ ")),
       ...seriesWarnings,
       ...basisNotes,
       ...(resolved?.warning ? [`β / CAPM: ${resolved.warning}`] : []),
@@ -640,7 +783,7 @@ export async function loadUniverse(
         rating:
           a.assetClass === "bond" ? (ratingOf(a.credit) ?? "unrated") : null,
         modifiedDuration:
-          a.assetClass === "bond" ? bondDuration(a, prices.get(a.id)) : null,
+          a.assetClass === "bond" ? bondDuration(a, pricesE.get(a.id)) : null,
         currency: a.currency,
         yearsToMaturity:
           a.assetClass === "bond" && a.maturityDate
@@ -652,7 +795,7 @@ export async function loadUniverse(
             : null,
         bondExpected:
           a.assetClass === "bond"
-            ? bondForward(a, prices.get(a.id), curve, opts.bond)
+            ? bondForward(a, pricesE.get(a.id), curve, opts.bond)
             : null,
       };
     }),
@@ -739,8 +882,8 @@ export function expectedReturns(
 }
 
 /** Years of data behind the universe's μ (common calendar). */
-export const universeYears = (u: Pick<OptimizerUniverse, "from" | "to">) =>
-  u.from && u.to ? (Date.parse(u.to) - Date.parse(u.from)) / (365 * 86_400_000) : 0;
+export const universeYears = (u: Pick<OptimizerUniverse, "from" | "to" | "muYears">) =>
+  u.muYears ?? (u.from && u.to ? (Date.parse(u.to) - Date.parse(u.from)) / (365 * 86_400_000) : 0);
 
 /**
  * μ per asset (MPT_FIX_SPEC P1-7): overrides and bond yield-horizon returns win; otherwise
@@ -795,6 +938,10 @@ export function expectedReturnsDetailed(
 export interface OptimizeParams {
   symbols?: string[];
   lookbackDays?: number;
+  /** spec-lookback-window: data period; not together with lookbackDays (WINDOW_CONFLICT). */
+  window?: WindowRequest;
+  /** Return windowInfo + coverage only (no optimization). */
+  dryRun?: boolean;
   returnMethod?: ReturnMethod;
   /** Expected annual return overrides (decimal) by symbol. */
   overrides?: Record<string, number>;
@@ -840,10 +987,37 @@ export interface OptimizeParams {
 
 export type OptimizeRequest = OptimizeParams & Partial<ShortPolicy>;
 
+/**
+ * spec-lookback-window dryRun: the period and per-asset coverage optimize_portfolio would use, without
+ * running the solver (same universe loader and options).
+ */
+export async function previewOptimizeWindow(p: OptimizeRequest) {
+  const u = await loadUniverse(p.lookbackDays, p.symbols, {
+    window: p.window,
+    returnBasis: p.returnBasis,
+    benchmark: p.benchmark,
+    historyPolicy: p.historyPolicy,
+    dividendWithholding: p.dividendWithholding,
+    riskFree: p.riskFree,
+    frequency: p.frequency,
+  });
+  return {
+    ok: u.ok,
+    dryRun: true as const,
+    ...(u.ok ? {} : { reason: u.reason }),
+    frequency: u.frequency ?? null,
+    windowInfo: u.windowInfo,
+    coverage: u.coverage,
+    skipped: u.skipped,
+    warnings: u.covarianceWarnings,
+  };
+}
+
 /** Server-side recommendation used by the AI advisor, MCP and REST. */
 export async function optimizePortfolio(p: OptimizeRequest) {
   const u = await loadUniverse(p.lookbackDays, p.symbols, {
     withSeries: true,
+    window: p.window,
     returnBasis: p.returnBasis,
     benchmark: p.benchmark,
     historyPolicy: p.historyPolicy,
@@ -853,7 +1027,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     bond: { horizonYears: p.bondHorizonYears, rateShiftBp: p.bondRateShiftBp },
   });
   if (!u.ok)
-    return { ok: false as const, reason: u.reason, skipped: u.skipped };
+    return { ok: false as const, reason: u.reason, skipped: u.skipped, windowInfo: u.windowInfo, coverage: u.coverage };
   const symbols = u.assets.map((a) => a.symbol);
   const baseCov = p.covMethod === "ledoit_wolf" ? u.covShrunk : u.cov;
   const method = p.returnMethod ?? DEFAULT_RETURN_METHOD;
@@ -889,7 +1063,8 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     // MPT_FIX_SPEC P1-7 (4): views from saved valuations (≤ maxAge days old) added to the given views.
     let autoViews: Awaited<ReturnType<typeof valuationViewsNow>> | null = null;
     if (p.blackLitterman.viewsFromValuations) {
-      autoViews = await valuationViewsNow(symbols, u.returnBasis === "total_return", p.blackLitterman.valuationMaxAgeDays);
+      // Only an explicit window.endDate is an "as of" date; by default views use every valuation saved until now.
+      autoViews = await valuationViewsNow(symbols, u.returnBasis === "total_return", p.blackLitterman.valuationMaxAgeDays, p.window?.endDate);
       for (const s of autoViews.skipped) extraWarnings.push(`${s.symbol}: ${s.reason}`);
       if (!autoViews.views.length) extraWarnings.push("ไม่มี valuation ที่ใช้เป็น view ได้ — Black–Litterman ใช้ equilibrium (prior) และ views ที่ส่งมาเท่านั้น");
     }

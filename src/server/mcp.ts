@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { basisBenchmarkShape, returnBasisField } from "./basis-schema";
+import { windowInput } from "@/lib/finance/window";
 import { MODEL_VERSION } from "@/lib/governance";
 import {
   assetInput,
@@ -43,7 +44,8 @@ import {
 } from "@/lib/valuation-analyze";
 import { SCENARIO_PATHS } from "@/lib/valuation-scenarios";
 import { optimizeInput } from "./optimize-schema";
-import { loadUniverse, optimizePortfolio } from "./services/optimizer";
+import { loadUniverse, optimizePortfolio,
+  previewOptimizeWindow } from "./services/optimizer";
 import { dataQualityReport } from "./services/data-quality";
 import {
   importPrices,
@@ -560,14 +562,20 @@ export function createMcpServer() {
     {
       title: "Modern Portfolio Theory analysis",
       description:
-        "Markowitz analysis of current holdings: expected returns, correlation, current portfolio risk/return, " +
+        "Markowitz analysis of current holdings (same universe loader as optimize_portfolio: window, frequency, historyPolicy; windowInfo says requested vs effective period): expected returns, correlation, current portfolio risk/return, " +
         "minimum-variance and maximum-Sharpe (tangency) weights, and the Capital Market Line. " +
         "returnBasis total_return uses adjusted closes per asset (gold / dividend-free stocks / accumulating funds on closes, listed in priceBasis.fallback; a dividend payer without adjusted closes is left out with the reason in priceBasis.excluded). Holdings are always valued on closes.",
-      inputSchema: { returnBasis: returnBasisField },
+      inputSchema: {
+        returnBasis: returnBasisField,
+        window: windowInput.optional(),
+        frequency: z.enum(["daily", "weekly", "monthly"]).optional().describe("Omitted = daily, or weekly when Thai and US-time closes are mixed (as optimize_portfolio)"),
+        historyPolicy: z.enum(["common", "drop_short", "pairwise"]).optional().describe("As optimize_portfolio; omitted = Settings default"),
+        covMethod: z.enum(["sample", "ledoit_wolf"]).optional(),
+      },
       annotations: { readOnlyHint: true },
     },
-    safe(async ({ returnBasis }) => {
-      const r = await getMptAnalysis(undefined, undefined, { returnBasis });
+    safe(async ({ returnBasis, window, frequency, historyPolicy, covMethod }) => {
+      const r = await getMptAnalysis(undefined, undefined, { returnBasis, window, frequency, historyPolicy, covMethod });
       if (!r.ok) return r;
       const { cloud: _c, frontier: _f, ...rest } = r;
       return rest;
@@ -835,7 +843,7 @@ export function createMcpServer() {
       inputSchema: optimizeInput.shape,
       annotations: { readOnlyHint: true },
     },
-    safe(async (p) => optimizePortfolio(p)),
+    safe(async (p) => (p.dryRun ? previewOptimizeWindow(p) : optimizePortfolio(p))),
   );
 
   server.registerTool(

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-26 — Lookback window, phase W1 (spec-lookback-window: core, optimize_portfolio, get_portfolio_optimization)
+- **One period parameter `window`** (`lib/finance/window.ts`):
+  - `preset` 1y … 10y = N calendar years back from `endDate`; `max` = from the longest history; `custom` = `startDate` … `endDate` (at most 20 years); `muWindow` = an optional separate period for expected returns.
+  - `endDate` defaults to the last stored price date. An explicit past `endDate` cuts prices, adjusted closes, FX, the benchmark, dividends and Black–Litterman valuations at that date (no look-ahead). Rf / ERP are today's Settings values, and the result says so.
+  - Legacy `lookbackDays` = custom (`endDate − lookbackDays`). Both together → `WINDOW_CONFLICT`. Start ≥ end, a future end, or an end after the last price → `INVALID_WINDOW`.
+- **`windowInfo` in every result**:
+  - requested vs effective period (start, end, observations, frequency, years);
+  - `limitedBy` (the assets that shortened it, with their real first price date) and `dropped`;
+  - `obsPerAsset` and `quality` (≥ Settings `minObsPerAsset` (10) ok · ≥ 3 thin, suggests Ledoit–Wolf · < 3 insufficient);
+  - `muYears` / `sigmaYears`, and a warning when the period used is under half of the one asked for.
+  - The blend weight uses `muYears`.
+- **optimize_portfolio**: `window` and `dryRun` (`windowInfo` + per-asset coverage: first date, periods, ok / limits_window / dropped; the solver is not run).
+- **get_portfolio_optimization** (and the analytics page) now uses the same universe loader as optimize_portfolio, with `window`, `frequency`, `historyPolicy` and `covMethod`. For the same input it returns the same `windowInfo`. **Numbers change**:
+  - weekly sampling for mixed markets;
+  - the Settings period (3 years) instead of the previous 2;
+  - no forward-filled prices;
+  - Rf from the resolver.
+- **Settings** (migration 0023, additive, rollback file): `defaultWindowPreset` (3y), `defaultHistoryPolicy` (common), `minObsPerAsset` (10).
+- **Spec 8.1 fixed**: `period.to` / the effective end is the last actual price date. It used to be the weekly / monthly period end, which can be a future date.
+- **Legacy `lookbackDays`** now counts from the last price date (spec §3) instead of today. When prices stop a few days before today, the start moves by those days.
+- Checks: new `npm run check:window` (acceptance 1–10 on TEST-LOCAL data: 3y weekly, a late listing, drop_short, legacy = custom, past endDate incl. valuations, INVALID_WINDOW, optimize == portfolio MPT windowInfo, muWindow 10y / 3y, dryRun, real end date). Unit tests `window.test.ts`.
+
 ## 2026-11-26 — Optimizer bullet chart: asset details on hover / tap
 - Hovering (or tapping on a phone) an asset point in the "รูปหัวกระสุน" chart on the optimizer page shows a box next to the point:
   - symbol, name, asset class and sector;

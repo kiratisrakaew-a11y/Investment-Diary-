@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { benchmarkField } from "./basis-schema";
+import { windowInput } from "@/lib/finance/window";
 import { constraintsInput } from "@/lib/finance/exposure";
 import { shortPolicyInput } from "@/lib/finance/short-policy";
 
@@ -116,7 +117,18 @@ export const optimizeInput = z
       .array(z.string())
       .optional()
       .describe("Universe; defaults to every asset with enough price history"),
-    lookbackDays: z.number().int().min(90).max(3650).optional(),
+    lookbackDays: z
+      .number()
+      .int()
+      .min(90)
+      .max(3650)
+      .optional()
+      .describe("Legacy: calendar days back from the last price date (= window custom). Use window instead; both together → WINDOW_CONFLICT"),
+    window: windowInput.optional(),
+    dryRun: z
+      .boolean()
+      .optional()
+      .describe("Preview only: windowInfo (requested vs effective period, limiting / dropped assets, quality) and per-asset coverage, without optimizing"),
     returnBasis: z
       .enum(["price_return", "total_return"])
       .optional()

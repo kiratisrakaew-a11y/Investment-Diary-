@@ -294,6 +294,12 @@ export const settingsInput = z.object({
     .describe(
       "Default price basis of return-based features: price_return = closes, total_return = adjusted closes",
     ),
+  defaultWindowPreset: z
+    .enum(["1y", "2y", "3y", "5y", "7y", "10y", "max"])
+    .default("3y")
+    .describe("Default data period for μ / Σ features"),
+  defaultHistoryPolicy: z.enum(["common", "drop_short", "pairwise"]).default("common"),
+  minObsPerAsset: z.number().min(3).max(100).default(10),
   muCapPct: z
     .number()
     .min(0)

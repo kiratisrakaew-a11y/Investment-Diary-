@@ -272,7 +272,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               {mpt.priceBasis.used === "total_return"
                 ? "ประมาณจากผลตอบแทนรวม (บาท, ราคาปรับปันผล — ปันผลรวมอยู่ในผลตอบแทน)"
                 : "ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — เลือกราคาปรับปันผลได้ที่หัวหน้า)"}{" "}
-              {mpt.observations} วันที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · long-only, ลงทุนเต็มจำนวน
+              {mpt.observations} งวด{mpt.frequency === "weekly" ? "รายสัปดาห์" : mpt.frequency === "monthly" ? "รายเดือน" : "รายวัน"}ที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {mpt.periodsPerYear.toFixed(0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · ช่วงข้อมูลตามหน้าตั้งค่า ({mpt.windowInfo?.requested.preset ?? "3y"}) · long-only, ลงทุนเต็มจำนวน
               {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
               {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}
