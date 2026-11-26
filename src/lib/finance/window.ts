@@ -162,3 +162,18 @@ export function windowFromQuery(sp: URLSearchParams): WindowRequest | undefined 
     ...(sp.get("muWindow") ? { muWindow: { preset: sp.get("muWindow"), ...(sp.get("muStartDate") ? { startDate: sp.get("muStartDate") } : {}) } } : {}),
   });
 }
+
+/** Page query (?win=…&from=…&to=…&mu=…) → request; invalid input → undefined plus the reason (never guessed). */
+export function windowFromPageQuery(q: { win?: string; from?: string; to?: string; mu?: string }): {
+  request: WindowRequest | undefined;
+  error: string | null;
+} {
+  if (!q.win) return { request: undefined, error: null };
+  const r = windowInput.safeParse({
+    preset: q.win,
+    ...(q.from ? { startDate: q.from } : {}),
+    ...(q.to ? { endDate: q.to } : {}),
+    ...(q.mu ? { muWindow: { preset: q.mu } } : {}),
+  });
+  return r.success ? { request: r.data, error: null } : { request: undefined, error: r.error.issues.map((i) => i.message).join(" · ") };
+}

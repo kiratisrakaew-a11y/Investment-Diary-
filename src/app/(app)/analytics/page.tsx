@@ -9,6 +9,9 @@ import { listBenchmarks } from "@/server/services/benchmarks";
 import { BasisBenchmarkPicker, BasisSummary } from "@/components/BasisBenchmarkPicker";
 import { BENCHMARK_KIND_LABEL, isReturnBasis, PERF_BASIS_NOTE } from "@/lib/finance/price-basis";
 import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
+import { WindowError, windowFromPageQuery, type WindowPreset } from "@/lib/finance/window";
+import { WindowBanner, WindowPicker } from "@/components/WindowPicker";
+import { CoverageTable } from "@/components/CoverageTable";
 
 const TIMING_LABEL = {
   start_of_day: "เงินเข้า/ออกต้นวัน: rₜ = Vₜ / (Vₜ₋₁ + CFₜ) − 1",
@@ -34,13 +37,21 @@ function corrColor(c: number) {
   return c >= 0 ? `color-mix(in oklab, var(--series-2) ${a * 70}%, var(--panel))` : `color-mix(in oklab, var(--series-1) ${a * 70}%, var(--panel))`;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ basis?: string; bench?: string }> }) {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ basis?: string; bench?: string; win?: string; from?: string; to?: string; mu?: string }> }) {
   const q = await searchParams;
   const data = await loadPortfolioData();
   const benchmarks = await listBenchmarks();
   // PRICE_BASIS_BENCHMARK_SPEC: ?basis / ?bench override Settings for this page.
   const returnBasis = isReturnBasis(q.basis) ? q.basis : data.settings.defaultReturnBasis;
   const benchmark = q.bench?.trim() || data.settings.defaultBenchmark;
+  // spec-lookback-window: ?win / ?from / ?to / ?mu choose the MPT and stress-test period for this page.
+  const winQ = windowFromPageQuery(q);
+  const winValue = {
+    preset: (winQ.request?.preset ?? data.settings.defaultWindowPreset) as WindowPreset,
+    startDate: winQ.request?.startDate,
+    endDate: winQ.request?.endDate,
+    muPreset: winQ.request?.muWindow?.preset,
+  };
   let benchError: BenchmarkError | null = null;
   const [perf, mpt] = await Promise.all([
     getPerformance(undefined, data, { returnBasis, benchmark }).catch((e) => {
@@ -48,7 +59,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       benchError = e;
       return getPerformance(undefined, data, { returnBasis, benchmark: "default" });
     }),
-    getMptAnalysis(undefined, data, { returnBasis }),
+    getMptAnalysis(undefined, data, { returnBasis, window: winQ.request }).catch((e) => {
+      if (!(e instanceof WindowError)) throw e;
+      return { ok: false as const, reason: `${e.message} [${e.code}]`, skipped: [] as string[], priceBasis: null, windowInfo: null, coverage: null };
+    }),
   ]);
   const be = benchError as BenchmarkError | null;
   const navNow = perf.valueSeries[perf.valueSeries.length - 1]?.value ?? 0;
@@ -259,11 +273,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             : undefined
         }
       >
+        <div className="mb-3 space-y-1">
+          <WindowPicker mode="query" value={winValue} />
+          <WindowBanner info={mpt.windowInfo} />
+          <CoverageTable rows={mpt.coverage} />
+        </div>
         {!mpt.ok ? (
           <Empty>
             {mpt.reason}
-            {mpt.priceBasis.excluded.length > 0 && (
-              <div className="mt-2 text-xs">{mpt.priceBasis.excluded.map((x) => `${x.symbol}: ${x.reason}`).join(" · ")}</div>
+            {(mpt.priceBasis?.excluded.length ?? 0) > 0 && (
+              <div className="mt-2 text-xs">{mpt.priceBasis!.excluded.map((x) => `${x.symbol}: ${x.reason}`).join(" · ")}</div>
             )}
           </Empty>
         ) : (
@@ -413,7 +432,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       )}
 
       <Section title="Stress test">
-        <StressPanel initialBasis={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} />
+        <StressPanel initialBasis={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} initialWindow={winValue} />
       </Section>
     </>
   );

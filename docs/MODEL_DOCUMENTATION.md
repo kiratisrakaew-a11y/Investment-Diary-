@@ -100,6 +100,27 @@ With no new option, every result is unchanged digit for digit (checked before / 
   - `get_abnormal_volume`;
   - the current price on the valuation page.
 
+## 1e. Lookback window — `lib/finance/window.ts` (2026.11-win1)
+
+Every μ / Σ feature takes the same `window`: optimize, portfolio MPT, model comparison, backtest, stress test and rebalance.
+
+- `preset` 1y / 2y / 3y / 5y / 7y / 10y = N calendar years back from `endDate`.
+- `max` = from the first price of the longest history.
+- `custom` = `startDate` … `endDate`, at most 20 years. `max` has no cap.
+- `endDate` defaults to the last stored price date. An explicit `endDate` cuts prices, adjusted closes, FX, the benchmark, dividends and Black–Litterman valuations at that date.
+- Rf and ERP are the current Settings values. They have no history, and the result says so.
+- `muWindow`: an optional separate period for historical μ. Σ and β keep `window`; the blend weight uses `muYears`.
+- Omitted = the Settings default (`defaultWindowPreset`, 3y). β in the valuation editor keeps its 2-year daily estimate.
+- Legacy inputs still work: `lookbackDays` = custom (`endDate − lookbackDays`); backtest / compare `startDate` / `endDate`. Sending one together with `window` → `WINDOW_CONFLICT`. Start ≥ end, a future end, or an end after the last price → `INVALID_WINDOW`.
+- `windowInfo` in every result:
+  - requested vs effective period (start, end = last actual price date, observations, frequency, years);
+  - `limitedBy` (late listings with their first price date) and `dropped`;
+  - `obsPerAsset` and `quality`: ≥ Settings `minObsPerAsset` (10) ok · ≥ 3 thin (Ledoit–Wolf suggested) · < 3 insufficient. The optimizer page then asks for confirmation or offers drop_short;
+  - `muYears` / `sigmaYears`, and a warning when the period used is under half of the one asked for.
+- Minimum periods per asset are unchanged: daily 60, weekly 26, monthly 24.
+- `historyPolicy` defaults to Settings (`common`). Backtests support `common` / `drop_short`.
+- `optimize_portfolio dryRun` returns `windowInfo` plus per-asset coverage (first date, periods, ok / limits_window / dropped) without running the solver.
+
 ## 2. Performance — `returns.ts`, `metrics.ts`, `risk.ts`
 
 | Measure | Formula / rule |

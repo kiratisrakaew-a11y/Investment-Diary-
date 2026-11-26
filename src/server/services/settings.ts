@@ -90,6 +90,12 @@ export async function saveSettings(input: {
     minObsPerAsset: current.minObsPerAsset,
     ...defined,
   });
+  // spec-lookback-window 8.3: a changed Rf / ERP must say where it comes from and as of when.
+  const changed = (a: number, b: number) => Math.abs(a - b) > 1e-12;
+  if (changed(data.riskFreeRate, current.riskFreeRate) && (!data.rfSource || !data.rfAsOf))
+    throw new Error("เปลี่ยน Risk-free rate แล้วต้องระบุแหล่งที่มาและวันที่ข้อมูล (เช่น ThaiBMA 10Y, 2026-11-20)");
+  if (changed(data.equityRiskPremium, current.equityRiskPremium) && (!data.erpSource || !data.erpAsOf))
+    throw new Error("เปลี่ยน ERP แล้วต้องระบุแหล่งที่มาและวันที่ข้อมูล (เช่น Damodaran ม.ค. 2026)");
   await getDb()
     .insert(schema.settings)
     .values({ id: 1, ...data })

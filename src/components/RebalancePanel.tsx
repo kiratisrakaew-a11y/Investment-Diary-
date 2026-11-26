@@ -22,7 +22,7 @@ export function RebalancePanel({
   extraCash: number;
   sourceLabel?: string;
   /** Price basis / benchmark of the page (PRICE_BASIS_BENCHMARK_SPEC F3): used for the tracking-error covariance. */
-  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
+  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string; window?: unknown };
 }) {
   const fromOptimizer = () => Object.fromEntries(suggested.map((s) => [s.symbol, s.weight]));
   const [weights, setWeights] = useState<Record<string, number | null>>(fromOptimizer);
@@ -61,7 +61,7 @@ export function RebalancePanel({
           noTradeBand: band,
           allowSell,
           ...(maxTurnover != null ? { maxTurnover } : {}),
-          ...(basis ? { optimizer: { returnBasis: basis.returnBasis, benchmark: basis.benchmark } } : {}),
+          ...(basis ? { optimizer: { returnBasis: basis.returnBasis, benchmark: basis.benchmark, ...(basis.window ? { window: basis.window } : {}) } } : {}),
         }),
       });
       const data = await r.json();

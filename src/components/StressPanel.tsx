@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WindowBanner, WindowPicker, windowRequestOf, type WindowValue } from "./WindowPicker";
 import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { NumField } from "./fields";
@@ -24,6 +25,15 @@ type Response = {
   results: Result[];
   priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] } | null;
   benchmark?: { symbol: string; kind: "price_index" | "total_return"; warning: string | null } | null;
+  windowInfo?: {
+    requested: { preset: string; startDate: string | null; endDate: string };
+    effective: { startDate: string; endDate: string; observations: number; frequency: string; years: number } | null;
+    limitedBy: { symbol: string; firstDate: string }[];
+    quality: "ok" | "thin" | "insufficient";
+    obsPerAsset: number;
+    muYears: number;
+    sigmaYears: number;
+  } | null;
   history: { worstDay: { date: string | null; return: number }; worst21d: { from: string | null; to: string | null; return: number } | null; coverage: number; note: string } | null;
 };
 
@@ -33,11 +43,14 @@ const FACTOR: Record<string, string> = { equity: "หุ้น (β)", rate: "ด
 export function StressPanel({
   initialBasis,
   benchmarks = [],
+  initialWindow,
 }: {
   /** Page / Settings defaults (PRICE_BASIS_BENCHMARK_SPEC F6); changed here for this run only. */
   initialBasis?: BasisBenchmarkValue;
   benchmarks?: PickerBenchmark[];
+  initialWindow?: WindowValue;
 }) {
+  const [win, setWin] = useState<WindowValue>(initialWindow ?? { preset: "3y" });
   const [basis, setBasis] = useState<BasisBenchmarkValue>(initialBasis ?? { basis: "price_return", bench: "default" });
   const [res, setRes] = useState<Response | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +78,7 @@ export function StressPanel({
           : {}),
         returnBasis: basis.basis,
         benchmark: basis.bench,
+        window: windowRequestOf(win),
       };
       const r = await fetch("/api/v1/portfolio/stress", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await r.json();
@@ -80,6 +94,7 @@ export function StressPanel({
   return (
     <div className="space-y-4">
       <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={benchmarks} />
+      <WindowPicker value={win} onChange={setWin} showMu={false} />
       <div className="grid gap-3 sm:grid-cols-5">
         <NumField label="หุ้นตลาด" pct nullable value={eq} onChange={setEq} />
         <NumField label="ดอกเบี้ย (Δy)" pct nullable value={rate} onChange={setRate} />
@@ -102,6 +117,7 @@ export function StressPanel({
       {res && (
         <div className="space-y-3">
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
+          <WindowBanner info={res.windowInfo} />
           <div className="flex justify-end">
             <ExplainButton
               topic="ผล Stress test"

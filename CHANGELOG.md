@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-26 — Lookback window, phase W3 (UI, Settings, spec 8.2 / 8.3, docs)
+- **Period picker** (`components/WindowPicker.tsx`): 1Y … 10Y / ทั้งหมด / กำหนดเอง (start date); under "ขั้นสูง", an analysis date and a separate period for expected returns.
+  - Pages use the URL (`?win=…&from=…&to=…&mu=…`): the optimizer page and the MPT section of the analytics page.
+  - Panels keep it in their own state: backtest (it replaces the old start-date field), model comparison, stress test.
+  - The optimizer page passes its period to the comparison and to the rebalancing proposal.
+- **Window banner** on every result: "ขอ 3.0 ปี · ใช้จริง 2.0 ปี (104 สัปดาห์, …) เพราะ X เริ่ม …", the quality badge, periods per asset, and μ / Σ years when they differ.
+- **Coverage table** (`components/CoverageTable.tsx`, open when something is limiting or dropped): first price, periods in the period, status per asset.
+- **Insufficient data gate**: when the optimizer's data is "insufficient" (< 3 periods per asset), results are hidden until the user either cuts short-history assets (drop_short) or acknowledges.
+- **Settings**: default period, short-history policy, minimum periods per asset.
+- **8.3**: changing the Risk-free rate or the ERP now requires its source and as-of date; other settings save as before, and illustrative values already stored keep their warning.
+- **8.2**: the stale-FX message now says what it counts: days without a same-day USDTHB rate, each using a rate at most 5 days old; anything older makes the asset unavailable (unchanged rule).
+- **Docs**: `MODEL_DOCUMENTATION` §1e, OpenAPI query parameters for the portfolio MPT, GPT instructions, MCP descriptions. **MODEL_VERSION `2026.11-win1`** (valuation formulas unchanged).
+- Checks: `check:window` adds 8.3 (refused without source / date, saved with them, restored). New `e2e/window-smoke.mjs`: the picker changes the URL and banner on two pages, request bodies carry `window` in three panels, coverage panel shown, no horizontal scroll at 375 px. The insufficient-data gate was exercised with temporary TEST data (gate shown, drop_short link, acknowledge → results).
+
 ## 2026-11-26 — Lookback window, phase W2 (backtest, model comparison, stress test, rebalance)
 - **backtest_portfolio / compare_portfolio_models**:
   - `window` (training + test period), ending at `window.endDate`.

@@ -137,7 +137,8 @@ export function buildLevelSeries(x: ReturnSeriesInput): LevelSeries | Unavailabl
     prevPrice = price;
     prevFx = fx;
   }
-  if (fxStale) warnings.push(`${x.label}: ใช้อัตราแลกเปลี่ยนวันก่อนหน้า ${fxStale} วัน (ไม่มีอัตราวันเดียวกัน)`);
+  // spec 8.2: a count of observations, each using a rate at most maxStale days old (older = unavailable).
+  if (fxStale) warnings.push(`${x.label}: ${fxStale} วันไม่มีอัตรา ${x.currency}THB ของวันเดียวกัน — ใช้อัตราของวันก่อนหน้าที่เก่าไม่เกิน ${maxStale} วัน (เกินกว่านั้นจะไม่ใช้สินทรัพย์นี้)`);
   if (useDist && di < dist.length) warnings.push(`${x.label}: เงินปันผล ${dist.length - di} รายการหลังวันสุดท้ายของราคา — ไม่นับ`);
   return {
     ok: true,

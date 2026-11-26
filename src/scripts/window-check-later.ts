@@ -4,6 +4,8 @@ import { comparePortfolioModels } from "../server/services/model-comparison";
 import { stressTestPortfolio } from "../server/services/stress";
 import { rebalancePortfolio } from "../server/services/rebalance";
 import { WindowError } from "../lib/finance/window";
+import { getSettings, saveSettings } from "../server/services/settings";
+import { getDb, schema } from "../db";
 
 export async function windowChecksLater(
   check: (name: string, ok: boolean, detail?: string) => void,
@@ -58,5 +60,17 @@ export async function windowChecksLater(
   check("W2 stress: window → windowInfo (1y)", st.windowInfo?.requested.preset === "1y" && (st.windowInfo?.effective?.years ?? 0) <= 1.01);
   check("W2 stress: window + lookbackDays → WINDOW_CONFLICT", (await code(() => stressTestPortfolio({ window: { preset: "1y" }, lookbackDays: 365 }))) === "WINDOW_CONFLICT");
   const rb = await rebalancePortfolio({ targets: { "PBW-A": 0.5, "PBW-B": 0.5 }, optimizer: { window: { preset: "2y" } } } as never);
+  // 8.3: a changed Rf / ERP needs source + date; other settings save normally.
+  const before = await getSettings();
+  const r1 = await saveSettings({ riskFreeRate: before.riskFreeRate + 0.5, benchmarkSymbol: before.benchmarkSymbol, rfSource: null, rfAsOf: null }).then(() => null, (e: Error) => e.message);
+  const r2 = await saveSettings({ riskFreeRate: before.riskFreeRate, benchmarkSymbol: before.benchmarkSymbol, minObsPerAsset: before.minObsPerAsset }).then(() => null, (e: Error) => e.message);
+  const r3 = await saveSettings({ riskFreeRate: before.riskFreeRate + 0.5, benchmarkSymbol: before.benchmarkSymbol, rfSource: "TEST source", rfAsOf: "2026-11-20" }).then(() => null, (e: Error) => e.message);
+  // Restore exactly (bypassing the guard: the original values may be illustrative).
+  await getDb().update(schema.settings).set({ riskFreeRate: before.riskFreeRate, rfSource: before.rfSource, rfAsOf: before.rfAsOf });
+  check(
+    "8.3 changed Rf without source / date → refused; unchanged Rf saves; with source + date saves",
+    !!r1 && /แหล่งที่มา/.test(r1) && r2 === null && r3 === null && (await getSettings()).riskFreeRate === before.riskFreeRate,
+    r1 ?? "",
+  );
   check("W2 rebalance: optimizer.window drives the tracking-error covariance period", (rb as { windowInfo?: { requested: { preset: string } } | null }).windowInfo?.requested.preset === "2y");
 }

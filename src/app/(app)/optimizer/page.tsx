@@ -8,26 +8,47 @@ import { listBenchmarks } from "@/server/services/benchmarks";
 import { getSettings } from "@/server/services/settings";
 import { isReturnBasis } from "@/lib/finance/price-basis";
 import { BenchmarkError } from "@/lib/finance/benchmark-resolve";
+import { WindowBanner, WindowPicker } from "@/components/WindowPicker";
+import { CoverageTable } from "@/components/CoverageTable";
+import { WindowError, windowFromPageQuery, type WindowPreset } from "@/lib/finance/window";
+import Link from "next/link";
 
 export default async function OptimizerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ basis?: string; bench?: string }>;
+  searchParams: Promise<{ basis?: string; bench?: string; win?: string; from?: string; to?: string; mu?: string; hp?: string; ack?: string }>;
 }) {
   const q = await searchParams;
   const [settings, benchmarks] = await Promise.all([getSettings(), listBenchmarks()]);
   // PRICE_BASIS_BENCHMARK_SPEC F3: ?basis=…&bench=… override Settings for this page; μ/Σ are recomputed server-side.
   const returnBasis = isReturnBasis(q.basis) ? q.basis : settings.defaultReturnBasis;
   const benchmark = q.bench?.trim() || settings.defaultBenchmark;
-  const basis = { returnBasis, benchmark };
+  const basis: { returnBasis: typeof returnBasis; benchmark: string; window?: unknown } = { returnBasis, benchmark };
+  // spec-lookback-window: ?win=…&from=…&to=…&mu=… (data period) and ?hp=… (history policy) for this page.
+  const winQ = windowFromPageQuery(q);
+  const historyPolicy = q.hp === "drop_short" || q.hp === "pairwise" || q.hp === "common" ? q.hp : undefined;
+  const winValue = {
+    preset: (winQ.request?.preset ?? settings.defaultWindowPreset) as WindowPreset,
+    startDate: winQ.request?.startDate,
+    endDate: winQ.request?.endDate,
+    muPreset: winQ.request?.muWindow?.preset,
+  };
   let u: Awaited<ReturnType<typeof loadUniverse>> | null = null;
-  let benchError: string | null = null;
+  let benchError: string | null = winQ.error ? `ช่วงข้อมูลไม่ถูกต้อง: ${winQ.error}` : null;
   try {
-    u = await loadUniverse(undefined, undefined, { withSeries: true, returnBasis, benchmark });
+    u = await loadUniverse(undefined, undefined, { withSeries: true, returnBasis, benchmark, window: winQ.request, historyPolicy });
   } catch (e) {
-    if (!(e instanceof BenchmarkError)) throw e;
-    benchError = `${e.message} [${e.code}] — ${e.issue.suggestion}`;
+    if (e instanceof BenchmarkError) benchError = `${e.message} [${e.code}] — ${e.issue.suggestion}`;
+    else if (e instanceof WindowError) benchError = `${e.message} [${e.code}]${e.hint ? ` — ${e.hint}` : ""}`;
+    else throw e;
   }
+  const withQ = (patch: Record<string, string>) => {
+    const sp = new URLSearchParams(Object.entries(q).filter(([, v]) => typeof v === "string") as [string, string][]);
+    for (const [k, v] of Object.entries(patch)) sp.set(k, v);
+    return `/optimizer?${sp.toString()}`;
+  };
+  basis.window = winQ.request;
+  const insufficient = u?.windowInfo?.quality === "insufficient" && q.ack !== "1";
   const picker = (
     <div className="card space-y-2">
       <BasisBenchmarkPicker
@@ -44,7 +65,11 @@ export default async function OptimizerPage({
             : undefined
         }
       />
+      <WindowPicker mode="query" value={winValue} />
       {u && <BasisSummary priceBasis={u.priceBasis} benchmark={u.benchmark} />}
+      {u && <WindowBanner info={u.windowInfo} />}
+      {u && <CoverageTable rows={u.coverage} />}
+      {historyPolicy && <p className="text-xs text-muted">historyPolicy: {historyPolicy}</p>}
     </div>
   );
   return (
@@ -53,7 +78,26 @@ export default async function OptimizerPage({
         title="จัดพอร์ตตาม Modern Portfolio Theory"
         subtitle="Efficient frontier, tangency portfolio, น้ำหนักที่แนะนำ และการเปรียบเทียบโมเดลแบบ Out-of-Sample"
       />
-      {!u || !u.ok ? (
+      {insufficient ? (
+        <>
+          {picker}
+          <section className="card space-y-2 border-l-4 border-l-neg" data-testid="window-insufficient">
+            <h2 className="text-[15px] font-semibold text-neg">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
+            <p className="text-sm">
+              มีเพียง {u!.windowInfo!.obsPerAsset.toFixed(1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
+              {u!.windowInfo!.limitedBy.length ? ` · ช่วงถูกจำกัดโดย ${u!.windowInfo!.limitedBy.map((l) => `${l.symbol} (เริ่ม ${l.firstDate})`).join(", ")}` : ""}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link className="btn" href={withQ({ hp: "drop_short" })}>
+                ตัดตัวที่ประวัติสั้น (drop_short)
+              </Link>
+              <Link className="btn-ghost" href={withQ({ ack: "1" })}>
+                เข้าใจแล้ว ดูผลต่อ
+              </Link>
+            </div>
+          </section>
+        </>
+      ) : !u || !u.ok ? (
         <>
           {picker}
           <Empty>
@@ -85,7 +129,7 @@ export default async function OptimizerPage({
                 muCap={settings.muCapPct != null ? settings.muCapPct / 100 : null}
                 erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
             }
-            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} basis={basis} benchmarks={benchmarks} />}
+            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} basis={basis} benchmarks={benchmarks} initialWindow={winValue} />}
           />
         </>
       )}

@@ -123,7 +123,7 @@ export default async function SettingsPage() {
               </div>
               <p className="mt-1 text-xs text-muted">
                 แหล่งที่มาและวันที่จะถูกบันทึกลงใน valuation ใหม่ทุกครั้ง ·
-                เว้นว่าง = ค่าตัวอย่าง
+                เว้นว่าง = ค่าตัวอย่าง · เปลี่ยนตัวเลข Rf หรือ ERP ต้องกรอกแหล่งที่มาและวันที่ด้วย
               </p>
             </div>
             <div>
@@ -190,6 +190,33 @@ export default async function SettingsPage() {
                   ))}
               </select>
             </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="label">ช่วงข้อมูลเริ่มต้น (μ / Σ)</span>
+                <select name="defaultWindowPreset" className="input" defaultValue={settings.defaultWindowPreset}>
+                  {["1y", "2y", "3y", "5y", "7y", "10y", "max"].map((p) => (
+                    <option key={p} value={p}>
+                      {p === "max" ? "ทั้งหมด" : `${p.replace("y", "")} ปี`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="label">สินทรัพย์ประวัติสั้น</span>
+                <select name="defaultHistoryPolicy" className="input" defaultValue={settings.defaultHistoryPolicy}>
+                  <option value="common">ใช้ช่วงร่วม (common)</option>
+                  <option value="drop_short">ตัดตัวที่ประวัติสั้น (drop_short)</option>
+                  <option value="pairwise">Σ แบบรายคู่ (pairwise)</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="label">งวดต่อสินทรัพย์ขั้นต่ำ</span>
+                <input name="minObsPerAsset" type="number" min={3} step={1} className="input" defaultValue={settings.minObsPerAsset} />
+              </label>
+            </div>
+            <p className="-mt-2 text-xs text-muted">
+              ใช้กับจัดพอร์ต, MPT ของพอร์ต, เปรียบเทียบโมเดล, backtest, stress test และข้อเสนอปรับพอร์ต (เปลี่ยนรายหน้าได้) · ความถี่: รายวัน หรือรายสัปดาห์อัตโนมัติเมื่อสินทรัพย์ปิดราคาต่างเวลา
+            </p>
             <div>
               <label className="label">
                 เพดาน |μ − CAPM| ของผลตอบแทนคาดหวัง (% ต่อปี, ว่าง = ไม่จำกัด)

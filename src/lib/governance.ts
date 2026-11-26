@@ -22,8 +22,11 @@ export { rateScaleWarnings } from "./rate-scale";
  * blend μ leans on CAPM under 3 years, shrinkage / μ cap, weekly sampling for mixed markets, sector bucket,
  * calendar rebalancing, per-asset total return. Valuation formulas (DCF / DDM / RIM / multiples / bonds) are
  * unchanged, so saved valuations recompute to the same value and differ only in the version label.
+ * 2026.11-win1: lookback window (window / windowInfo / dryRun) in every μ / Σ feature; portfolio MPT on the
+ * optimizer's universe loader; Settings default period 3 years; period end = last actual price date.
+ * Valuation formulas unchanged.
  */
-export const MODEL_VERSION = "2026.11-mpt5";
+export const MODEL_VERSION = "2026.11-win1";
 
 const DAY = 86_400_000;
 const days = (a: string, b: string) =>

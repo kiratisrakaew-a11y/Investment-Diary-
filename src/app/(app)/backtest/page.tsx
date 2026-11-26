@@ -4,6 +4,7 @@ import { BacktestClient } from "@/components/BacktestClient";
 import { Empty, PageHeader } from "@/components/ui";
 import { getSettings } from "@/server/services/settings";
 import { listBenchmarks } from "@/server/services/benchmarks";
+import type { WindowPreset } from "@/lib/finance/window";
 
 export default async function BacktestPage() {
   const [assets, prices, settings, benchmarks] = await Promise.all([listAssets(), loadPriceHistory(), getSettings(), listBenchmarks()]);
@@ -16,7 +17,7 @@ export default async function BacktestPage() {
   return (
     <>
       <PageHeader title="Backtest พอร์ต (walk-forward)" subtitle="ทดสอบกลยุทธ์ย้อนหลังโดยใช้เฉพาะข้อมูลที่มี ณ วันนั้น หักต้นทุนการซื้อขาย และวัดผลด้วยเครื่องมือเดียวกับหน้าผลการดำเนินงาน" />
-      {usable.length ? <BacktestClient assets={usable} initialBasis={{ basis: settings.defaultReturnBasis, bench: settings.defaultBenchmark }} benchmarks={benchmarks} /> : <Empty>ยังไม่มีสินทรัพย์ที่มีประวัติราคา — ดึงราคาย้อนหลังในหน้าสินทรัพย์ก่อน</Empty>}
+      {usable.length ? <BacktestClient assets={usable} initialBasis={{ basis: settings.defaultReturnBasis, bench: settings.defaultBenchmark }} benchmarks={benchmarks} initialWindow={{ preset: settings.defaultWindowPreset as WindowPreset }} /> : <Empty>ยังไม่มีสินทรัพย์ที่มีประวัติราคา — ดึงราคาย้อนหลังในหน้าสินทรัพย์ก่อน</Empty>}
     </>
   );
 }

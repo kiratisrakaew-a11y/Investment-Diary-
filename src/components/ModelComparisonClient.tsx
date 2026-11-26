@@ -6,6 +6,7 @@
  * (train / test split or walk-forward).
  */
 import { useMemo, useState } from "react";
+import { WindowBanner, WindowPicker, windowRequestOf, type WindowValue } from "./WindowPicker";
 import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { ModelLinesChart } from "./charts";
@@ -31,6 +32,15 @@ type Response = ModelComparisonResult & {
   benchmark: { symbol: string; kind: "price_index" | "total_return"; warning?: string | null } | null;
   priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] };
   input: { rebalanceEveryObservations: number; observations: number };
+  windowInfo?: {
+    requested: { preset: string; startDate: string | null; endDate: string };
+    effective: { startDate: string; endDate: string; observations: number; frequency: string; years: number } | null;
+    limitedBy: { symbol: string; firstDate: string }[];
+    quality: "ok" | "thin" | "insufficient";
+    obsPerAsset: number;
+    muYears: number;
+    sigmaYears: number;
+  } | null;
 };
 type Mode = "split" | "walkForward";
 
@@ -79,12 +89,16 @@ export function ModelComparisonClient({
   assets,
   basis: initialBasis,
   benchmarks = [],
+  initialWindow,
 }: {
   assets: Asset[];
   /** Page values (PRICE_BASIS_BENCHMARK_SPEC F4); changed here for this comparison only. */
   basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
   benchmarks?: PickerBenchmark[];
+  /** Page / Settings data period (spec-lookback-window); changed here for this comparison only. */
+  initialWindow?: WindowValue;
 }) {
+  const [win, setWin] = useState<WindowValue>(initialWindow ?? { preset: "3y" });
   const [basis, setBasis] = useState<BasisBenchmarkValue>({
     basis: initialBasis?.returnBasis ?? "price_return",
     bench: initialBasis?.benchmark ?? "default",
@@ -133,6 +147,7 @@ export function ModelComparisonClient({
           useCosts,
           returnBasis: basis.basis,
           benchmark: basis.bench,
+          window: windowRequestOf(win),
         }),
       });
       const data = await r.json();
@@ -204,6 +219,7 @@ export function ModelComparisonClient({
         <section className="card space-y-3">
           <h2 className="text-[15px] font-semibold">เงื่อนไขการเปรียบเทียบ</h2>
           <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={benchmarks} />
+          <WindowPicker value={win} onChange={setWin} showMu={false} />
           <div className="grid grid-cols-2 gap-3">
             <NumField
               label="ช่วงฝึก (% ของข้อมูล)"
@@ -343,6 +359,7 @@ export function ModelComparisonClient({
       {res && (
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
+          <WindowBanner info={res.windowInfo} />
           <div className="flex flex-wrap items-center gap-3">
             <div
               role="group"

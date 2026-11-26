@@ -58,7 +58,7 @@ export function OptimizerClient({
   /** Settings' cap on |μ − CAPM| (annual decimal) or null. */
   muCap?: number | null;
   /** Price basis / benchmark of the page, passed on to the rebalancing proposal. */
-  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string };
+  basis?: { returnBasis: "price_return" | "total_return"; benchmark: string; window?: unknown };
   /** Risk-free resolver output (source, tenor, date, warnings). */
   rfInfo?: ResolvedRiskFree;
   /** Historical per-period returns per asset (same order as assets), for min CVaR. */

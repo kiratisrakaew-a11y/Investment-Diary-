@@ -597,7 +597,16 @@ export function buildOpenApi(origin: string) {
           operationId: "getPortfolioOptimization",
           summary:
             "Modern Portfolio Theory: min-variance and max-Sharpe weights, correlation, CML",
+          description:
+            "Same universe loader as optimizePortfolio. Response windowInfo: requested vs effective period, limitedBy, dropped, obsPerAsset, quality (ok / thin / insufficient), muYears, sigmaYears; coverage per asset.",
           parameters: [
+            q("window", "1y | 2y | 3y | 5y | 7y | 10y | max | custom (omit = Settings default)"),
+            q("startDate", "YYYY-MM-DD, with window=custom"),
+            q("endDate", "YYYY-MM-DD analysis date (default: last price date); nothing after it is used"),
+            q("muWindow", "Optional separate preset for expected returns"),
+            q("frequency", "daily | weekly | monthly (omit = daily, or weekly when markets mix)"),
+            q("historyPolicy", "common | drop_short | pairwise"),
+            q("covMethod", "sample | ledoit_wolf"),
             q(
               "returnBasis",
               "price_return (closes) | total_return (adjusted closes). Omit = Settings default",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WindowBanner, WindowPicker, windowRequestOf, type WindowValue } from "./WindowPicker";
 import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
 import clsx from "clsx";
 import { DrawdownChart, GrowthChart, WeightsChart } from "./charts";
@@ -29,6 +30,15 @@ type Response = Omit<BacktestResult, "benchmark"> & {
   benchmark?: { symbol: string; kind: "price_index" | "total_return"; warning?: string | null } | null;
   priceBasis?: { used: "price_return" | "total_return"; fallback: { symbol: string; reason: string }[]; excluded: { symbol: string; reason: string }[] };
   universe: string[];
+  windowInfo?: {
+    requested: { preset: string; startDate: string | null; endDate: string };
+    effective: { startDate: string; endDate: string; observations: number; frequency: string; years: number } | null;
+    limitedBy: { symbol: string; firstDate: string }[];
+    quality: "ok" | "thin" | "insufficient";
+    obsPerAsset: number;
+    muYears: number;
+    sigmaYears: number;
+  } | null;
   excluded: { symbol: string; reason: string }[];
   limitations: string[];
   input: { rebalanceEveryObservations: number };
@@ -66,19 +76,22 @@ export function BacktestClient({
   assets,
   initialBasis,
   benchmarks = [],
+  initialWindow,
 }: {
   assets: Asset[];
   /** Settings defaults (PRICE_BASIS_BENCHMARK_SPEC F5); changed here for this run only. */
   initialBasis?: BasisBenchmarkValue;
   benchmarks?: PickerBenchmark[];
+  /** Settings' default data period (spec-lookback-window). */
+  initialWindow?: WindowValue;
 }) {
+  const [win, setWin] = useState<WindowValue>(initialWindow ?? { preset: "3y" });
   const [basis, setBasis] = useState<BasisBenchmarkValue>(initialBasis ?? { basis: "price_return", bench: "default" });
   const [included, setIncluded] = useState<Set<string>>(
     new Set(assets.map((a) => a.symbol)),
   );
   const [strategy, setStrategy] = useState<BacktestStrategy>("max_sharpe");
   const [weights, setWeights] = useState<Record<string, number | null>>({});
-  const [startDate, setStartDate] = useState("");
   const [windowDays, setWindowDays] = useState(252);
   const [rebalance, setRebalance] = useState<
     "monthly" | "quarterly" | "semiannual" | "annual"
@@ -122,7 +135,7 @@ export function BacktestClient({
     return {
       strategy: s,
       symbols: [...included],
-      ...(startDate ? { startDate } : {}),
+      window: windowRequestOf(win),
       windowDays,
       rebalance,
       returnMethod,
@@ -220,6 +233,7 @@ export function BacktestClient({
             options={STRATEGIES}
             onChange={setStrategy}
           />
+          <WindowPicker value={win} onChange={setWin} showMu={false} />
           <BasisBenchmarkPicker
             value={{ ...basis, basis: usedBasis }}
             onChange={setBasis}
@@ -227,15 +241,6 @@ export function BacktestClient({
             disabledBases={adjBlocked ? { total_return: adjBlocked } : undefined}
           />
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="label">เริ่ม (ว่าง = วันที่ทุกตัวมีราคา)</span>
-              <input
-                type="date"
-                className="input"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </label>
             <SelectField
               label="ปรับพอร์ต"
               value={rebalance}
@@ -567,6 +572,7 @@ export function BacktestClient({
       {res && m && (
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
+          <WindowBanner info={res.windowInfo} />
           <div className="flex justify-end">
             <ExplainButton
               topic={`ผล Backtest (${res.strategy})`}

@@ -303,6 +303,11 @@ export async function saveSettingsAction(
           | "total_return"
           | undefined) ?? undefined,
       defaultBenchmark: str(f, "defaultBenchmark") ?? undefined,
+      defaultWindowPreset:
+        (str(f, "defaultWindowPreset") as "1y" | "2y" | "3y" | "5y" | "7y" | "10y" | "max" | undefined) ?? undefined,
+      defaultHistoryPolicy:
+        (str(f, "defaultHistoryPolicy") as "common" | "drop_short" | "pairwise" | undefined) ?? undefined,
+      minObsPerAsset: num(f, "minObsPerAsset") ?? undefined,
       // Empty = no cap on |μ − CAPM|.
       muCapPct: f.has("muCapPct") ? (num(f, "muCapPct") ?? null) : undefined,
     });
