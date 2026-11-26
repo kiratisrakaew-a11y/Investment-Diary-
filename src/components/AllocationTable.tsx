@@ -29,7 +29,7 @@ export function AllocationTable({ rows }: { rows: AllocationRow[] }) {
                 {/* Bar = actual share; tick = target. */}
                 <div className="relative h-2 rounded-full bg-panel-2">
                   <div className="h-2 rounded-full" style={{ width: `${Math.min(100, r.actualPct)}%`, background: ASSET_CLASS_COLOR[r.assetClass] }} />
-                  <div className="absolute -top-1 h-4 w-0.5 rounded bg-text/70" style={{ left: `calc(${Math.min(100, r.targetPct)}% - 1px)` }} title={`เป้า ${fmtPctRaw(r.targetPct)}`} />
+                  <div className="absolute -top-1 h-4 w-0.5 rounded-md bg-text/70" style={{ left: `calc(${Math.min(100, r.targetPct)}% - 1px)` }} title={`เป้า ${fmtPctRaw(r.targetPct)}`} />
                 </div>
               </td>
               <td className="num">{fmtPctRaw(r.targetPct)}</td>

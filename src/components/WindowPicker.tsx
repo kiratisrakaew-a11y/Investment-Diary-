@@ -145,7 +145,7 @@ export function WindowBanner({
   const tone = info.quality === "ok" ? "bg-pos/10 text-pos" : info.quality === "thin" ? "bg-warn/10 text-warn" : "bg-neg/10 text-neg";
   return (
     <p className="flex flex-wrap items-center gap-2 text-xs text-muted" data-testid="window-banner">
-      <span className={`rounded px-1.5 py-0.5 font-medium ${tone}`}>{info.quality}</span>
+      <span className={`rounded-md px-1.5 py-0.5 font-medium ${tone}`}>{info.quality}</span>
       <span>
         ขอ {info.requested.preset === "max" ? "ทั้งหมด" : reqYears != null ? `${reqYears.toFixed(1)} ปี` : info.requested.preset}
         {e ? ` · ใช้จริง ${e.years.toFixed(1)} ปี (${e.observations} ${unit}, ${e.startDate} → ${e.endDate})` : " · ใช้ไม่ได้"}

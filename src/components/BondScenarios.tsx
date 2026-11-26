@@ -17,10 +17,10 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
   return (
     <section className="card space-y-3 min-w-0" aria-labelledby="bond-scen-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="bond-scen-title" className="text-[15px] font-semibold">
+        <h2 id="bond-scen-title" className="text-base font-semibold">
           Scenario ของพันธบัตร
         </h2>
-        <span className="text-[11px] text-muted">เก็บในหน้านี้เท่านั้น (ไม่บันทึก)</span>
+        <span className="text-xs text-muted">เก็บในหน้านี้เท่านั้น (ไม่บันทึก)</span>
       </div>
       {!rows ? (
         <div className="space-y-2 text-xs">
@@ -119,11 +119,11 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
             >
               + scenario
             </button>
-            <button type="button" className="text-[11px] text-muted underline" onClick={() => setRows(null)}>
+            <button type="button" className="text-xs text-muted underline" onClick={() => setRows(null)}>
               ล้าง scenario
             </button>
           </div>
-          <ul className="space-y-0.5 text-[11px] text-muted">
+          <ul className="space-y-0.5 text-xs text-muted">
             <li>• ราคาวันนี้ = ตีราคาใหม่เต็มรูปแบบที่ yield วันนี้ + shift (ไม่ใช้ค่าประมาณ duration/convexity) · ค่าถ่วงน้ำหนัก = Σ p × ราคา</li>
             <li>• ผลตอบแทนถึงวันขาย = ซื้อที่ราคาวันนี้ รับคูปองและนำไปลงทุนต่อ แล้วขายที่ yield ตอนขาย — ไม่ใช่ YTM และไม่รับประกัน{!horizonDate && " (ใส่วันที่ขายในส่วน horizon return ด้านบนเพื่อคำนวณ)"}</li>
             <li>• ความน่าจะเป็น 25/50/25 เป็นค่าตัวอย่างที่แก้ได้ ไม่ใช่การประมาณทางสถิติ · พันธบัตรที่ไถ่ถอนก่อนกำหนดได้อาจไม่เป็นเชิงเส้น</li>

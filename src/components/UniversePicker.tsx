@@ -71,8 +71,8 @@ export function UniversePicker({
                 <input type="checkbox" className="mt-0.5 accent-[var(--accent)]" checked={on} onChange={() => toggle(c.symbol)} data-symbol={c.symbol} />
                 <span>
                   <span className="font-medium">{c.symbol}</span> <span className="text-xs text-muted">{c.assetClassLabel}</span>
-                  {c.held && <span className="ml-1 text-[11px] text-accent">ถืออยู่</span>}
-                  {on && reason.has(c.symbol) && <span className="block text-[11px] text-warn">ไม่ได้ใช้: {reason.get(c.symbol)}</span>}
+                  {c.held && <span className="ml-1 text-xs text-accent">ถืออยู่</span>}
+                  {on && reason.has(c.symbol) && <span className="block text-xs text-warn">ไม่ได้ใช้: {reason.get(c.symbol)}</span>}
                 </span>
               </label>
             </li>

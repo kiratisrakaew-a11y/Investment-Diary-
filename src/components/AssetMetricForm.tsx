@@ -72,7 +72,7 @@ export function Modal({
       )}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
-        <h2 className="text-[15px] font-semibold">{title}</h2>
+        <h2 className="text-base font-semibold">{title}</h2>
         <button
           type="button"
           aria-label="ปิด"
@@ -112,7 +112,7 @@ const Field = ({
     <span className="label">{label}</span>
     {children}
     {hint && (
-      <span className="mt-0.5 block text-[11px] text-muted">{hint}</span>
+      <span className="mt-0.5 block text-xs text-muted">{hint}</span>
     )}
   </label>
 );
@@ -677,7 +677,7 @@ export function ThresholdForm({
           </summary>
           <ul className="mt-2 space-y-1 text-xs">
             {versions.map((v) => (
-              <li key={v.id} className="rounded border border-border px-2 py-1">
+              <li key={v.id} className="rounded-md border border-border px-2 py-1">
                 <b>
                   {v.effectiveFrom} → {v.effectiveTo ?? "ปัจจุบัน"}
                 </b>{" "}
@@ -840,7 +840,7 @@ export function ThresholdForm({
           )}
         </div>
         {preview && preview.rows.length > 0 && (
-          <div className="max-h-40 overflow-y-auto rounded border border-border">
+          <div className="max-h-40 overflow-y-auto rounded-md border border-border">
             <table className="table text-xs">
               <thead>
                 <tr>

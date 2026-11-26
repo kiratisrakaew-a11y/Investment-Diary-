@@ -232,7 +232,7 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
           </circle>
         ))}
       </svg>
-      <figcaption className="flex gap-4 px-1 text-[11px] text-muted">
+      <figcaption className="flex gap-4 px-1 text-xs text-muted">
         <span>
           <span className="mr-1 inline-block h-0.5 w-4 align-middle" style={{ background: "var(--series-1)" }} />
           Revenue growth

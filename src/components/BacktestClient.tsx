@@ -226,7 +226,7 @@ export function BacktestClient({
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card space-y-3">
-          <h2 className="text-[15px] font-semibold">กลยุทธ์</h2>
+          <h2 className="text-base font-semibold">กลยุทธ์</h2>
           <SelectField
             label="กลยุทธ์"
             value={strategy}
@@ -365,7 +365,7 @@ export function BacktestClient({
                 }
                 hint="ว่าง = ไม่นับปันผลที่ไม่มีวันจ่าย"
               />
-              <p className="text-[11px] text-muted">
+              <p className="text-xs text-muted">
                 กลยุทธ์ปันผลใช้เกณฑ์ค่าเริ่มต้นของแต่ละแบบ (แก้ได้ในหน้า
                 “ปันผล”) · น้ำหนักสูงสุด/ตัวใช้ค่าด้านบน
               </p>

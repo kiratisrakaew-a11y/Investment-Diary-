@@ -73,11 +73,11 @@ export function EditAssetForm({ asset, hasHistory }: { asset: Basics; hasHistory
         </label>
         <input id="ea-provider" name="providerSymbol" className="input" maxLength={60} value={v.providerSymbol} onChange={set("providerSymbol")} placeholder="AP.BK" />
       </div>
-      <p className="text-[11px] text-muted sm:col-span-3">
+      <p className="text-xs text-muted sm:col-span-3">
         แก้ symbol แล้วรายการซื้อขาย ราคา ตัวชี้วัด และบันทึกยังผูกอยู่ครบ (อ้างด้วย id) — valuation งบการเงิน และปันผลจะเปลี่ยนตาม symbol ใหม่ด้วย ระบบแปลงเป็นตัวพิมพ์ใหญ่ให้
       </p>
       {hasHistory && typeChanged && (
-        <label className="flex items-start gap-2 text-[11px] text-warn sm:col-span-3">
+        <label className="flex items-start gap-2 text-xs text-warn sm:col-span-3">
           <input type="checkbox" name="confirmChange" className="mt-0.5" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
           <span>ยืนยันเปลี่ยนประเภท/สกุลเงิน — มีรายการซื้อขายหรือราคาแล้ว ค่าเดิมจะไม่ถูกแปลงให้</span>
         </label>

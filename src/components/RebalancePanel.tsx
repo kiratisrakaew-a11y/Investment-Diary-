@@ -78,7 +78,7 @@ export function RebalancePanel({
   return (
     <section className="card space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[15px] font-semibold">แปลงเป็นคำสั่งซื้อขาย (Rebalance)</h2>
+        <h2 className="text-base font-semibold">แปลงเป็นคำสั่งซื้อขาย (Rebalance)</h2>
         <button
           type="button"
           className="btn-ghost text-xs"

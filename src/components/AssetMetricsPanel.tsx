@@ -234,7 +234,7 @@ export function AssetMetricsPanel({
                         />
                         {m.name}
                       </div>
-                      <div className="mt-0.5 text-[22px] font-semibold tabular-nums leading-tight">
+                      <div className="mt-0.5 text-xl font-semibold tabular-nums leading-tight">
                         {m.latest ? fmt(m.latest.value, m.decimals) : "–"}{" "}
                         <span className="text-xs font-normal text-muted">
                           {m.unit}
@@ -246,7 +246,7 @@ export function AssetMetricsPanel({
                       title={m.statusExplanation}
                     />
                   </div>
-                  <div className="mt-1 text-[11px] text-muted">
+                  <div className="mt-1 text-xs text-muted">
                     {m.latest ? `ณ ${m.latest.observedOn}` : "ยังไม่มีค่า"}
                     {ch.delta != null && (
                       <span
@@ -273,7 +273,7 @@ export function AssetMetricsPanel({
                     )}
                   </div>
                   <div
-                    className="mt-1 truncate text-[11px] text-muted"
+                    className="mt-1 truncate text-xs text-muted"
                     title={
                       m.currentThreshold
                         ? describeRule(
@@ -287,17 +287,17 @@ export function AssetMetricsPanel({
                       ? `${RULE_LABEL[m.currentThreshold.ruleType]} · ${describeRule(m.currentThreshold as unknown as ThresholdLite, m.unit)}`
                       : "ยังไม่ตั้งเกณฑ์สี"}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-[11px]"
+                      className="btn-ghost px-2 py-0.5 text-xs"
                       onClick={() => setDialog({ kind: "obs", metricId: m.id })}
                     >
                       + ค่า
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-[11px]"
+                      className="btn-ghost px-2 py-0.5 text-xs"
                       onClick={() =>
                         setDialog({ kind: "threshold", metricId: m.id })
                       }
@@ -306,7 +306,7 @@ export function AssetMetricsPanel({
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-[11px]"
+                      className="btn-ghost px-2 py-0.5 text-xs"
                       onClick={() =>
                         setDialog({ kind: "metric", metricId: m.id })
                       }
@@ -315,7 +315,7 @@ export function AssetMetricsPanel({
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-[11px] text-neg"
+                      className="btn-ghost px-2 py-0.5 text-xs text-neg"
                       onClick={() =>
                         setDialog({ kind: "delete", metricId: m.id })
                       }
@@ -330,7 +330,7 @@ export function AssetMetricsPanel({
 
           {/* chart */}
           <div className="min-w-0 rounded-xl border border-border p-3">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
               <span className="font-medium text-text">{MODE_LABEL[mode]}</span>
               <span>· {MODE_HELP[mode]}</span>
               <label className="ml-auto inline-flex items-center gap-1">
@@ -496,7 +496,7 @@ export function AssetMetricsPanel({
                         <td className="whitespace-nowrap">
                           {o.observedOn}
                           {o.publishedOn && (
-                            <span className="block text-[10px] text-muted">
+                            <span className="block text-xs text-muted">
                               เผยแพร่ {o.publishedOn}
                             </span>
                           )}
@@ -604,7 +604,7 @@ export function AssetMetricsPanel({
             {archived.map((m) => (
               <li
                 key={m.id}
-                className="flex flex-wrap items-center gap-2 rounded border border-border px-2 py-1"
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border px-2 py-1"
               >
                 <span className="font-medium">{m.name}</span>
                 <span className="text-muted">

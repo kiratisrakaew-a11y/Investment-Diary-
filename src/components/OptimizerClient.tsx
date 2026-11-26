@@ -261,7 +261,7 @@ export function OptimizerClient({
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card min-w-0 space-y-3">
-          <h2 className="text-[15px] font-semibold">เป้าหมายและข้อจำกัด</h2>
+          <h2 className="text-base font-semibold">เป้าหมายและข้อจำกัด</h2>
           <SelectField label="Objective" value={objective} options={OBJECTIVES} onChange={setObjective} />
           {(objective === "utility" || useRiskFree) && (
             <label className="block">
@@ -291,7 +291,7 @@ export function OptimizerClient({
                 setMinW(on ? -maxShort : Math.max(0, minW));
               }}
             />
-            <p className="mt-1 text-[11px] text-muted">{allowShort ? SHORT_DISCLAIMER : "ปิดอยู่ (ค่าเริ่มต้น): ทุกน้ำหนัก ≥ 0 ในทุก objective"}</p>
+            <p className="mt-1 text-xs text-muted">{allowShort ? SHORT_DISCLAIMER : "ปิดอยู่ (ค่าเริ่มต้น): ทุกน้ำหนัก ≥ 0 ในทุก objective"}</p>
             {allowShort && (
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <NumField
@@ -339,7 +339,7 @@ export function OptimizerClient({
             <NumField label="สูงสุด/หมวด" pct nullable value={maxSector} onChange={setMaxSector} hint="ใช้หมวดที่ผู้ใช้ระบุพร้อมแหล่งที่มา — ตัวที่ไม่ระบุไม่ถูกจัดเข้าหมวด" />
             <NumField label="Duration สูงสุด (ปี)" nullable value={maxDuration} onChange={setMaxDuration} hint="Modified duration ของพอร์ตเสี่ยง (พันธบัตรจากราคาล่าสุด อื่น ๆ = 0)" />
           </div>
-          <div className="rounded-lg bg-panel-2 p-2 text-[11px] text-muted">
+          <div className="rounded-lg bg-panel-2 p-2 text-xs text-muted">
             <div>
               <b className="text-text">Rf {fmtPct(rf, 2)}</b> · {rfInfo ? `${rfInfo.label} · อายุ ${rfInfo.tenorYears} ปี · ${rfInfo.currency}` : "จากหน้าตั้งค่า"}
             </div>
@@ -358,7 +358,7 @@ export function OptimizerClient({
         <section className="card min-w-0 space-y-3 lg:col-span-2">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-[15px] font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
+              <h2 className="text-base font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
               {muNote && <p className="mt-1 max-w-md text-xs text-muted" data-testid="mu-note">{muNote}</p>}
             </div>
             <div className="w-56">
@@ -399,13 +399,13 @@ export function OptimizerClient({
                     </td>
                     <td>
                       <span className="font-medium">{a.symbol}</span> <span className="text-xs text-muted">{ASSET_CLASS_LABEL[a.assetClass]}</span>
-                      {a.held && <span className="ml-1 text-[11px] text-accent">ถืออยู่</span>}
+                      {a.held && <span className="ml-1 text-xs text-accent">ถืออยู่</span>}
                       {a.assetClass === "bond" && (
-                        <div className="mt-0.5 flex flex-wrap gap-1 text-[10px]">
-                          {a.modifiedDuration != null && <span className="rounded border border-border px-1">D {a.modifiedDuration.toFixed(2)}</span>}
-                          {a.bondExpected?.ok && <span className="rounded border border-border px-1" title={a.bondExpected.notes.join(" · ")}>YTM {fmtPct(a.bondExpected.ytm, 2)} · E[R] ล่วงหน้า {fmtPct(a.bondExpected.expectedReturn, 2)}</span>}
-                          {a.rating && <span className="rounded border border-border px-1">{a.rating}</span>}
-                          <span className="rounded border border-warn/40 px-1 text-warn" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
+                        <div className="mt-0.5 flex flex-wrap gap-1 text-xs">
+                          {a.modifiedDuration != null && <span className="rounded-md border border-border px-1">D {a.modifiedDuration.toFixed(2)}</span>}
+                          {a.bondExpected?.ok && <span className="rounded-md border border-border px-1" title={a.bondExpected.notes.join(" · ")}>YTM {fmtPct(a.bondExpected.ytm, 2)} · E[R] ล่วงหน้า {fmtPct(a.bondExpected.expectedReturn, 2)}</span>}
+                          {a.rating && <span className="rounded-md border border-border px-1">{a.rating}</span>}
+                          <span className="rounded-md border border-warn/40 px-1 text-warn" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
                         </div>
                       )}
                     </td>
@@ -455,7 +455,7 @@ export function OptimizerClient({
       {error && <p className="text-sm text-neg">{error}</p>}
       {outcome && !outcome.ok && (
         <section className="card border-l-4 border-l-neg">
-          <h2 className="text-[15px] font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
+          <h2 className="text-base font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
           <p className="mt-1 text-sm">{outcome.issue.message}</p>
           {outcome.issue.suggestion && <p className="mt-1 text-sm text-muted">แนะนำ: {outcome.issue.suggestion}</p>}
           <p className="mt-2 text-xs text-muted">ระบบไม่ผ่อนข้อจำกัดให้เอง เพื่อไม่ให้ได้น้ำหนักที่ขัดกับที่คุณตั้งไว้ ({outcome.issue.code})</p>
@@ -469,7 +469,7 @@ export function OptimizerClient({
           </p>
           <section className="card">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>
+              <h2 className="text-base font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>
               {computing && <span className="text-xs text-muted">กำลังคำนวณ…</span>}
             </div>
             <BulletChart
@@ -538,7 +538,7 @@ export function OptimizerClient({
                       </div>
                     ))}
                   </div>
-                  <p className="text-[11px] text-muted">{r.riskBased.method} · {r.riskBased.status} · {r.riskBased.iterations} รอบ</p>
+                  <p className="text-xs text-muted">{r.riskBased.method} · {r.riskBased.status} · {r.riskBased.iterations} รอบ</p>
                 </>
               )}
               {useRiskFree && <KV k="สัดส่วนสินทรัพย์เสี่ยง y*" v={fmtPct(r.riskyShare, 1)} />}
@@ -567,7 +567,7 @@ export function OptimizerClient({
                 <button className="btn" onClick={applyTargets} disabled={applying || !r || hasShortOrLeverage(r)}>
                   ใช้เป็นเป้าหมาย asset allocation
                 </button>
-                {hasShortOrLeverage(r) && <p className="mt-1 text-[11px] text-muted">มีสถานะชอร์ต/กู้ยืม — เป้าหมาย asset allocation รับได้เฉพาะ 0–100%</p>}
+                {hasShortOrLeverage(r) && <p className="mt-1 text-xs text-muted">มีสถานะชอร์ต/กู้ยืม — เป้าหมาย asset allocation รับได้เฉพาะ 0–100%</p>}
                 {applyMsg && <p className="mt-1 text-xs text-pos">{applyMsg}</p>}
               </div>
             </section>
@@ -705,7 +705,7 @@ function LongShortExposure({ weights, riskFree }: { weights: { symbol: string; w
       </div>
       <div className="space-y-1">
         {weights.map((x) => (
-          <div key={x.symbol} className="grid grid-cols-[4rem_1fr_1fr_3.5rem] items-center gap-1 text-[11px]">
+          <div key={x.symbol} className="grid grid-cols-[4rem_1fr_1fr_3.5rem] items-center gap-1 text-xs">
             <span className="truncate">{x.symbol}</span>
             <div className="flex justify-end border-r border-border">
               {x.weight < 0 && <div className="h-2 rounded-l bg-[var(--series-2)]" style={{ width: `${(Math.abs(x.weight) / scale) * 100}%` }} />}
@@ -715,7 +715,7 @@ function LongShortExposure({ weights, riskFree }: { weights: { symbol: string; w
           </div>
         ))}
       </div>
-      <figcaption className="mt-1 text-[10px] text-muted">ซ้ายของเส้นศูนย์ = ชอร์ต · ขวา = ซื้อ (long)</figcaption>
+      <figcaption className="mt-1 text-xs text-muted">ซ้ายของเส้นศูนย์ = ชอร์ต · ขวา = ซื้อ (long)</figcaption>
     </figure>
   );
 }
@@ -796,7 +796,7 @@ function BlPanel({
   return (
     <section className="card space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-[15px] font-semibold">Black–Litterman</h2>
+        <h2 className="text-base font-semibold">Black–Litterman</h2>
         <button type="button" className="btn-ghost text-xs" onClick={setEqual}>
           ตั้งน้ำหนักตลาดเท่ากันทุกตัว
         </button>
@@ -816,7 +816,7 @@ function BlPanel({
 
       <div className="space-y-2">
         {views.map((v, k) => (
-          <div key={k} className="flex flex-wrap items-end gap-2 rounded border border-border/60 p-2 text-sm">
+          <div key={k} className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2 text-sm">
             <div className="w-36">
               <SelectField
                 label={`View ${k + 1}`}

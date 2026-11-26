@@ -79,7 +79,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                     <td>{b.maturityDate ?? "–"}</td>
                     <td className="num">
                       {fmtNum(b.lastPrice)}
-                      <div className="text-[11px] text-muted">{b.lastPriceDate}</div>
+                      <div className="text-xs text-muted">{b.lastPriceDate}</div>
                     </td>
                     {b.analytics ? (
                       <>
@@ -125,7 +125,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
               const c = b.credit;
               const a = assetBySymbol.get(b.symbol);
               return (
-                <details key={b.id} className="rounded border border-border/60 p-3" open={c?.status === "ok"}>
+                <details key={b.id} className="rounded-md border border-border/60 p-3" open={c?.status === "ok"}>
                   <summary className="cursor-pointer text-sm">
                     <span className="font-medium">{b.symbol}</span>
                     <span className="ml-2 text-muted">

@@ -308,7 +308,7 @@ function MetricChartCard({
         </p>
       ) : (
         <>
-          <div className="text-[10px] text-muted">
+          <div className="text-xs text-muted">
             {UNIT_LABEL[mode](m.unit)}
             {mode === "indexed" && chart.baseDate && (
               <>
@@ -371,7 +371,7 @@ function MetricChartCard({
           </ResponsiveContainer>
         </>
       )}
-      <div className="mt-1 space-y-0.5 text-[11px] text-muted">
+      <div className="mt-1 space-y-0.5 text-xs text-muted">
         {!chart.empty && (
           <div>
             {showBands

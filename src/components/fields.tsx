@@ -57,7 +57,7 @@ export function NumField({
         }}
       />
       {pct && value != null && value !== 0 && Math.abs(value) < 0.001 && (
-        <span className="mt-0.5 block text-[11px] text-neg">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {(value * 100).toFixed(3)}%)</span>
+        <span className="mt-0.5 block text-xs text-neg">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {(value * 100).toFixed(3)}%)</span>
       )}
     </label>
   );

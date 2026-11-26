@@ -255,7 +255,7 @@ export function SotpEditor({
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="space-y-4 lg:col-span-3">
           <div className="card space-y-3">
-            <h2 className="text-[15px] font-semibold">บริษัทแม่</h2>
+            <h2 className="text-base font-semibold">บริษัทแม่</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <NumField label="จำนวนหุ้น (หน่วยเดียวกับมูลค่า)" value={a.sharesOutstanding} onChange={(v) => set("sharesOutstanding", v ?? 0)} hint="เช่น มูลค่าเป็นล้านบาท → หุ้นเป็นล้านหุ้น" />
               <NumField label="ราคาปัจจุบัน" value={a.currentPrice} onChange={(v) => set("currentPrice", v ?? 0)} />
@@ -297,7 +297,7 @@ export function SotpEditor({
           </button>
 
           <div className="card space-y-4">
-            <h2 className="text-[15px] font-semibold">รายการปรับ (EV → Equity bridge)</h2>
+            <h2 className="text-base font-semibold">รายการปรับ (EV → Equity bridge)</h2>
             <LineItems title="บวก: สินทรัพย์นอกการดำเนินงาน (ที่ดิน, เงินลงทุนที่ไม่ได้แยกเป็นส่วนงาน)" items={a.nonOperatingAssets} onChange={(v) => set("nonOperatingAssets", v)} />
             <LineItems title="หัก: ภาระผูกพันอื่น (หุ้นบุริมสิทธิ, ภาระผูกพันพนักงาน)" items={a.otherClaims} onChange={(v) => set("otherClaims", v)} />
             <LineItems title="หัก: ตัดรายการระหว่างกัน (มูลค่าที่นับซ้ำในหลายส่วนงาน)" items={a.eliminations} onChange={(v) => set("eliminations", v)} />
@@ -306,7 +306,7 @@ export function SotpEditor({
 
         <section className="space-y-4 lg:col-span-2">
           <div className="card space-y-2">
-            <h2 className="text-[15px] font-semibold">มูลค่าต่อหุ้น (SOTP)</h2>
+            <h2 className="text-base font-semibold">มูลค่าต่อหุ้น (SOTP)</h2>
             <div className="text-3xl font-semibold tabular-nums">{fmtNum(result.value)}</div>
             <div className="text-sm text-muted">
               ราคา {fmtNum(a.currentPrice)} · Upside <span className={signClass(result.upside)}>{fmtPct(result.upside, 1)}</span>
@@ -360,7 +360,7 @@ export function SotpEditor({
               </table>
               <div className="flex flex-wrap gap-2 text-xs">
                 {d.sensitivity.holdingDiscount.map((x) => (
-                  <span key={x.discount} className={clsx("rounded border border-[var(--border)] px-2 py-1", x.discount === a.holdingDiscount && "font-semibold")}>
+                  <span key={x.discount} className={clsx("rounded-md border border-[var(--border)] px-2 py-1", x.discount === a.holdingDiscount && "font-semibold")}>
                     discount {fmtPct(x.discount, 0)} → {fmtNum(x.value)}
                   </span>
                 ))}
@@ -472,7 +472,7 @@ function SegmentCard({
       {src.type === "model" && <ModelFields src={src} defaults={defaults} unit={unit} onChange={(p) => onChange({ source: { ...src, ...p } })} />}
 
       {row && (
-        <div className="rounded bg-[var(--muted-bg,transparent)] text-xs">
+        <div className="rounded-md bg-[var(--muted-bg,transparent)] text-xs">
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
             <span>{row.basis === "enterprise" ? "EV" : "Equity"} {fmtNum(row.value)}</span>
             {row.equity100 != null && <span>Equity 100% {fmtNum(row.equity100)}</span>}
@@ -519,7 +519,7 @@ function ModelFields({ src, defaults, unit, onChange }: { src: Extract<Source, {
           />
         ))}
       </div>
-      <p className="text-[11px] text-muted">คำนวณด้วยเครื่องยนต์เดียวกับหน้าประเมินมูลค่าปกติ · ใส่ตัวเลขเป็นยอดรวมของส่วนงานในหน่วย {unit || "เดียวกัน"}</p>
+      <p className="text-xs text-muted">คำนวณด้วยเครื่องยนต์เดียวกับหน้าประเมินมูลค่าปกติ · ใส่ตัวเลขเป็นยอดรวมของส่วนงานในหน่วย {unit || "เดียวกัน"}</p>
     </div>
   );
 }
@@ -559,9 +559,9 @@ function Waterfall({ steps, unit }: { steps: SotpResult["waterfall"]; unit: stri
         return (
           <div key={i} className="grid grid-cols-[minmax(0,9rem)_1fr_5rem] items-center gap-2">
             <span className={clsx("truncate", s.kind === "total" && "font-semibold")} title={s.label}>{s.label}</span>
-            <div className="relative h-4 rounded bg-[var(--border)]/30">
+            <div className="relative h-4 rounded-md bg-[var(--border)]/30">
               <div
-                className={clsx("absolute h-4 rounded", s.kind === "total" ? "bg-[var(--accent)]" : s.amount >= 0 ? "bg-emerald-500/70" : "bg-rose-500/70")}
+                className={clsx("absolute h-4 rounded-md", s.kind === "total" ? "bg-[var(--accent)]" : s.amount >= 0 ? "bg-emerald-500/70" : "bg-rose-500/70")}
                 style={{ left: pct(lo), width: `calc(${pct(hi)} - ${pct(lo)})` }}
               />
             </div>

@@ -220,7 +220,7 @@ export function ModelComparisonClient({
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card space-y-3">
-          <h2 className="text-[15px] font-semibold">เงื่อนไขการเปรียบเทียบ</h2>
+          <h2 className="text-base font-semibold">เงื่อนไขการเปรียบเทียบ</h2>
           <BasisBenchmarkPicker value={basis} onChange={setBasis} benchmarks={benchmarks} />
           <WindowPicker value={win} onChange={setWin} showMu={false} />
           <div className="grid grid-cols-2 gap-3">
@@ -308,7 +308,7 @@ export function ModelComparisonClient({
         </section>
 
         <section className="card lg:col-span-2">
-          <h2 className="mb-1 text-[15px] font-semibold">
+          <h2 className="mb-1 text-base font-semibold">
             ชุดสินทรัพย์{" "}
             <span className="text-xs font-normal text-muted">
               — ทุกโมเดลใช้ชุดเดียวกัน ({included.size} ตัว)
@@ -748,7 +748,7 @@ export function ModelComparisonClient({
               {okModels.length > 0 && (
                 <div className="grid gap-6 lg:grid-cols-2">
                   <section className="card min-w-0">
-                    <h2 className="mb-2 text-[15px] font-semibold">
+                    <h2 className="mb-2 text-base font-semibold">
                       มูลค่าพอร์ตนอกช่วงฝึก{" "}
                       <span className="text-xs font-normal text-muted">
                         (ฐาน 100 ณ วันเริ่มทดสอบ)
@@ -761,7 +761,7 @@ export function ModelComparisonClient({
                     />
                   </section>
                   <section className="card min-w-0">
-                    <h2 className="mb-2 text-[15px] font-semibold">
+                    <h2 className="mb-2 text-base font-semibold">
                       Drawdown นอกช่วงฝึก{" "}
                       <span className="text-xs font-normal text-muted">
                         (ลดลงจากจุดสูงสุดก่อนหน้า)
@@ -780,7 +780,7 @@ export function ModelComparisonClient({
           )}
 
           <section className="card space-y-1 text-xs text-muted">
-            <h2 className="text-[15px] font-semibold text-text">
+            <h2 className="text-base font-semibold text-text">
               วิธีคำนวณและข้อจำกัด
             </h2>
             <ul className="list-disc space-y-0.5 pl-4">

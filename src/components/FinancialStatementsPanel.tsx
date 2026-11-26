@@ -159,7 +159,7 @@ export function FinancialStatementsPanel({
     <section className="card space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="text-left" onClick={() => setOpen((o) => !o)}>
-          <h2 className="text-[15px] font-semibold">
+          <h2 className="text-base font-semibold">
             {open ? "▾" : "▸"} งบการเงินย้อนหลัง {sorted.length ? `(${sorted[0].fiscalYear}–${sorted[sorted.length - 1].fiscalYear})` : ""}
           </h2>
           <p className="text-xs text-muted">อัปโหลดงบ (PDF / Excel / CSV) แยกไฟล์ได้ — AI อ่านและกรอกตัวเลขให้ หน่วย: ล้าน (ต่อหุ้นเป็นบาท)</p>
@@ -253,7 +253,7 @@ export function FinancialStatementsPanel({
                             ×
                           </button>
                         </div>
-                        {data.sources[y.fiscalYear] && <div className="max-w-28 truncate text-[10px] font-normal" title={data.sources[y.fiscalYear]!}>{data.sources[y.fiscalYear]}</div>}
+                        {data.sources[y.fiscalYear] && <div className="max-w-28 truncate text-xs font-normal" title={data.sources[y.fiscalYear]!}>{data.sources[y.fiscalYear]}</div>}
                       </th>
                     ))}
                   </tr>
@@ -359,7 +359,7 @@ function Cell({ value, onCommit, perShare }: { value: number | null; onCommit: (
   }, [value]);
   return (
     <input
-      className="w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-border focus:border-accent focus:outline-none"
+      className="w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-border focus:border-accent focus:outline-none"
       inputMode="decimal"
       value={focus ? text : value == null ? "" : fmtNum(value, perShare ? 2 : 0)}
       placeholder="–"

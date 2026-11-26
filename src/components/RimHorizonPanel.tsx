@@ -90,7 +90,7 @@ export function RimHorizonPanel({
                     <Row k="ROE หลังปี h" v={r.terminalRoe != null ? fmtPct(r.terminalRoe, 1) : "–"} />
                   </dl>
                   {r.warnings.length > 0 && (
-                    <ul className="mt-2 space-y-0.5 text-[11px] text-warn">
+                    <ul className="mt-2 space-y-0.5 text-xs text-warn">
                       {r.warnings.map((w) => (
                         <li key={w}>⚠️ {w}</li>
                       ))}
@@ -120,7 +120,7 @@ export function RimHorizonPanel({
                 )}
               </span>
             )}
-            <span className="w-full text-[11px] text-muted">
+            <span className="w-full text-xs text-muted">
               บันทึกเป็นภาพ (snapshot) ใช้ Residual income เดิม ตัดเหลือ h ปีแรกตามที่กรอก — แสดงในประวัติพร้อมป้าย แต่ไม่ถูกนับเป็น “ล่าสุดของวิธีนี้” จึงไม่ทับ valuation หลัก
             </span>
           </div>

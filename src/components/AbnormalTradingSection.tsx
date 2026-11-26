@@ -224,7 +224,7 @@ export function AssetPriceWithAbnormal({
           <Empty>ยังไม่มีประวัติราคา</Empty>
         )}
         {isThaiStock && marks.length > 0 && (
-          <p className="mt-2 text-[11px] text-muted">
+          <p className="mt-2 text-xs text-muted">
             <span style={{ color: "var(--accent)" }}>┆</span> event ·{" "}
             <span style={{ color: LEVEL_COLOR["ผิดปกติ"] }}>●</span> ผิดปกติ ·{" "}
             <span style={{ color: LEVEL_COLOR["น่าสังเกต"] }}>●</span> น่าสังเกต
@@ -422,7 +422,7 @@ function AbnormalTradingSection({
               </p>
             ))}
             <div>
-              <div className="mb-1 flex justify-between text-[10px] text-muted">
+              <div className="mb-1 flex justify-between text-xs text-muted">
                 <span>
                   Abnormal return (แท่ง, %) · CAR 5 วัน (เส้น, %) · แถบ ±2σ(ε)
                 </span>
@@ -494,7 +494,7 @@ function AbnormalTradingSection({
               </ResponsiveContainer>
             </div>
             <div>
-              <div className="mb-1 text-[10px] text-muted">
+              <div className="mb-1 text-xs text-muted">
                 Volume z-score (
                 {data.stock.volumeBasis === "turnover"
                   ? "log turnover"
@@ -568,7 +568,7 @@ function AbnormalTradingSection({
             <SettingsPanel data={data} onApply={onThresholds} basisChoice={basisChoice} onBasis={onBasis} />
           </>
         )}
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           <strong>{DISCLAIMER}</strong> —
           ราคาและปริมาณผิดปกติเกิดได้จากหลายสาเหตุ ที่ |t| &gt; 2
           คาดว่าจะมีวันถูก flag โดยบังเอิญราว 5% ของวัน · รายละเอียด

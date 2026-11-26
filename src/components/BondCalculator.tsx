@@ -134,7 +134,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="card space-y-3 lg:col-span-2">
-          <h2 className="text-[15px] font-semibold">ข้อมูลพันธบัตร / หุ้นกู้</h2>
+          <h2 className="text-base font-semibold">ข้อมูลพันธบัตร / หุ้นกู้</h2>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="label">วันชำระราคา</span>
@@ -368,7 +368,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                     <tr key={f.date}>
                       <td>
                         {f.date}
-                        {f.payDate !== f.date && <span className="block text-[11px] text-muted">จ่ายจริง {f.payDate}</span>}
+                        {f.payDate !== f.date && <span className="block text-xs text-muted">จ่ายจริง {f.payDate}</span>}
                       </td>
                       <td className="num">{fmtNum(f.amount, 3)}</td>
                       <td className="num">{fmtNum(f.amount / (1 + r.a.ytm / spec.frequency) ** f.periods, 3)}</td>
@@ -384,7 +384,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
       {r.ok && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="card space-y-3">
-            <h2 className="text-[15px] font-semibold">ผลตอบแทนจริงถ้าขายก่อนครบกำหนด (horizon return)</h2>
+            <h2 className="text-base font-semibold">ผลตอบแทนจริงถ้าขายก่อนครบกำหนด (horizon return)</h2>
             <div className="grid grid-cols-3 gap-3">
               <DateField label="วันที่ขาย" value={horizonDate} onChange={setHorizonDate} />
               <NumField label="ลงทุนต่อคูปองที่" pct value={reinvest} onChange={(v) => setReinvest(v ?? 0)} />
@@ -401,7 +401,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 <Row k="กำไร/ขาดทุนจากราคา (ขาย + เงินต้นคืน − ซื้อ)" v={fmtNum(horizon.priceReturn, 3)} />
                 <Row k="ผลตอบแทนรวม" v={fmtPct(horizon.totalReturn, 2)} />
                 <Row k="ผลตอบแทนต่อปี (ทบตามงวดคูปอง เทียบกับ YTM ได้)" v={fmtPct(horizon.annualizedReturn, 3)} strong />
-                <p className="mt-2 text-[11px] text-muted">
+                <p className="mt-2 text-xs text-muted">
                   YTM {r.ok ? fmtPct(r.a.ytm, 3) : "–"} คือผลตอบแทนถ้าถือจนครบกำหนดและนำคูปองไปลงทุนต่อที่ YTM เท่านั้น — ผลตอบแทนจริงเมื่อขายก่อนครบกำหนดขึ้นกับ yield ตอนขายและอัตราลงทุนต่อ จึงไม่รับประกัน
                 </p>
               </div>
@@ -409,7 +409,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
             {!horizonDate && <p className="text-xs text-muted">ใส่วันที่ขายเพื่อดูผลตอบแทนจริงซึ่งขึ้นกับ yield ตอนขายและอัตราที่นำคูปองไปลงทุนต่อ</p>}
           </section>
           <section className="card space-y-3">
-            <h2 className="text-[15px] font-semibold">มูลค่าจาก zero curve, Z-spread และ key-rate duration</h2>
+            <h2 className="text-base font-semibold">มูลค่าจาก zero curve, Z-spread และ key-rate duration</h2>
             <label className="block">
               <span className="label">Zero rate (ปี: % ต่อปี ทบต้นรายปี) บรรทัดละจุด</span>
               <textarea className="input font-mono text-xs" rows={4} value={curveText} onChange={(e) => setCurveText(e.target.value)} />

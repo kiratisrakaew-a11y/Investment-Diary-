@@ -157,7 +157,7 @@ export function StressPanel({
           {res.results.length === 1 && (
             <div className="flex flex-wrap gap-2 text-xs">
               {res.results[0].positions.map((p) => (
-                <span key={p.symbol} className="rounded border border-border/60 px-2 py-1">
+                <span key={p.symbol} className="rounded-md border border-border/60 px-2 py-1">
                   {p.symbol} <span className={signClass(p.pnl.total)}>{fmtPct(p.returnPct, 1)}</span>
                   {p.boundedAtFullLoss && (
                     <span className="text-warn" title="สถานะซื้อที่จ่ายเต็มขาดทุนได้ไม่เกินมูลค่าที่ถือ — ค่าเส้นตรงเกินช่วงที่ใช้ได้">

@@ -85,7 +85,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
           </span>
           <span className="leading-tight">
             <span className="block text-sm font-semibold tracking-wide">INVESTMENT DIARY</span>
-            <span className="block text-[11px] text-muted">Portfolio analytics · THB</span>
+            <span className="block text-xs text-muted">Portfolio analytics · THB</span>
           </span>
         </Link>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 text-sm">

@@ -26,7 +26,7 @@ function PriceBadges({ p }: { p: Position }) {
   return (
     <div className="mt-0.5 flex flex-wrap justify-end gap-1">
       {badges.map((b) => (
-        <span key={b} className="rounded bg-neg/10 px-1 text-[11px] text-neg">
+        <span key={b} className="rounded-md bg-neg/10 px-1 text-xs text-neg">
           {b}
         </span>
       ))}
@@ -47,14 +47,14 @@ function ChipGroup({ title, items }: { title?: string; items: Chip[] }) {
   if (!items.length) return null;
   return (
     <div className="mt-2">
-      {title && <div className="mb-1 text-[11px] font-medium text-muted">{title}</div>}
+      {title && <div className="mb-1 text-xs font-medium text-muted">{title}</div>}
       <ul className="flex flex-wrap gap-1.5">
         {items.map((a) => (
           <li key={a.id} className="relative flex items-center gap-1 rounded-lg border border-border bg-panel-2/60 py-0.5 pr-0.5 pl-2 text-xs">
             <Link href={`/holdings/${a.id}`} className="font-medium hover:text-accent">
               {a.symbol}
             </Link>
-            {a.extra && <span className="text-[11px] text-muted">{a.extra}</span>}
+            {a.extra && <span className="text-xs text-muted">{a.extra}</span>}
             <AssetActionsMenu asset={{ id: a.id, symbol: a.symbol }} hidden={a.hidden} archived={a.archived} held={false} dependencyCount={a.deps} />
           </li>
         ))}
@@ -129,13 +129,13 @@ export default async function HoldingsPage() {
                     <td className="num">{fmtNum(p.avgCostThb)}</td>
                     <td className="num">
                       {fmtNum(p.lastPrice)} <span className="text-xs text-muted">{p.currency}</span>
-                      <div className="text-[11px] text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
+                      <div className="text-xs text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
                       <PriceBadges p={p} />
                     </td>
                     <td className="num">{fmtThb(p.marketValueThb)}</td>
                     <td className={`num ${signClass(p.unrealizedPnlThb)}`}>
                       {fmtThb(p.unrealizedPnlThb)}
-                      <div className="text-[11px]">{fmtPctRaw(p.unrealizedPnlPct)}</div>
+                      <div className="text-xs">{fmtPctRaw(p.unrealizedPnlPct)}</div>
                     </td>
                     <td className={`num ${signClass(p.realizedPnlThb + p.incomeThb)}`}>{fmtThb(p.realizedPnlThb + p.incomeThb)}</td>
                     <td className="num">{fmtPctRaw(p.weightPct)}</td>
@@ -182,7 +182,7 @@ export default async function HoldingsPage() {
               <ChipGroup items={[...sold, ...never].filter((x) => x.archived)} />
             </details>
           )}
-          <p className="mt-3 text-[11px] text-muted">⋯ = ซ่อน / เก็บถาวร / ลบถาวร · การซ่อนมีผลแค่หน้านี้ ไม่กระทบผลตอบแทน ประวัติ valuation หรือการจัดพอร์ต · ลบถาวรได้เฉพาะสินทรัพย์ที่ไม่มีข้อมูลอ้างถึง</p>
+          <p className="mt-3 text-xs text-muted">⋯ = ซ่อน / เก็บถาวร / ลบถาวร · การซ่อนมีผลแค่หน้านี้ ไม่กระทบผลตอบแทน ประวัติ valuation หรือการจัดพอร์ต · ลบถาวรได้เฉพาะสินทรัพย์ที่ไม่มีข้อมูลอ้างถึง</p>
         </Section>
       )}
 
@@ -247,7 +247,7 @@ function ValuationCell({ v, price, symbol, cls }: { v?: { average: number | null
     return (
       <Link href={`/valuation/stock/${symbol}`} className="hover:underline" title={`เฉลี่ยจาก ${v.count} valuation`}>
         {fmtNum(v.average)}
-        <div className={`text-[11px] ${signClass(up)}`}>{up != null ? `${up >= 0 ? "+" : ""}${(up * 100).toFixed(1)}%` : ""}</div>
+        <div className={`text-xs ${signClass(up)}`}>{up != null ? `${up >= 0 ? "+" : ""}${(up * 100).toFixed(1)}%` : ""}</div>
       </Link>
     );
   }

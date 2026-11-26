@@ -57,7 +57,7 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
                   <div key={a.label} className="flex justify-between gap-3 border-b border-border/60 py-1">
                     <span className="text-muted">
                       {a.label}
-                      {a.note && <span className="block text-[11px]">{a.note}</span>}
+                      {a.note && <span className="block text-xs">{a.note}</span>}
                     </span>
                     <span className="text-right tabular-nums">{formatValue(a.value, a.unit)}</span>
                   </div>

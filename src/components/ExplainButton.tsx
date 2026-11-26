@@ -64,7 +64,7 @@ export function ExplainButton({ topic, data, hint, label = "อธิบาย",
         onClick={() => run()}
         title="ให้ AI อธิบายความหมายของตัวเลขในส่วนนี้แบบเข้าใจง่าย"
         className={clsx(
-          "inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/20",
+          "inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent hover:bg-accent/20",
           className,
         )}
       >
@@ -98,7 +98,7 @@ function ExplainDrawer({
       <div className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-border bg-panel-solid/85 shadow-2xl backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-accent uppercase">
+            <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-accent uppercase">
               <Sparkle /> AI อธิบายแบบเข้าใจง่าย
             </div>
             <h2 className="mt-0.5 font-semibold">{topic}</h2>
@@ -112,7 +112,7 @@ function ExplainDrawer({
             <div className="space-y-3" aria-live="polite">
               <p className="text-muted">กำลังให้ AI อ่านตัวเลขและเรียบเรียงคำอธิบาย…</p>
               {[90, 75, 85, 60, 80].map((w, i) => (
-                <div key={i} className="h-3 animate-pulse rounded bg-panel-2" style={{ width: `${w}%` }} />
+                <div key={i} className="h-3 animate-pulse rounded-md bg-panel-2" style={{ width: `${w}%` }} />
               ))}
             </div>
           )}
@@ -153,7 +153,7 @@ function ExplainDrawer({
 export function CardTitle({ title, explain, className, children }: { title: string; explain?: ExplainSpec | null; className?: string; children?: React.ReactNode }) {
   return (
     <div className={clsx("mb-3 flex flex-wrap items-center justify-between gap-2", className)}>
-      <h2 className="text-[15px] font-semibold">
+      <h2 className="text-base font-semibold">
         {title}
         {children}
       </h2>

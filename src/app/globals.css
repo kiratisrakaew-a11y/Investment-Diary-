@@ -10,73 +10,114 @@
 :root[data-theme="dim"] {
   --bg: #07111f;
   --bg-2: #101b31;
-  --bg-glow-1: rgb(66 217 255 / 0.16);
-  --bg-glow-2: rgb(165 140 255 / 0.14);
-  --bg-glow-3: rgb(73 225 181 / 0.08);
-  --panel: rgb(22 38 66 / 0.52);
+  --bg-glow-1: rgb(66 217 255 / 0.08);
+  --bg-glow-2: rgb(165 140 255 / 0.07);
+  --bg-glow-3: rgb(73 225 181 / 0.04);
+  --surface: rgb(22 38 66 / 0.72);
+  --panel: var(--surface);
   --panel-2: rgb(118 169 255 / 0.1);
   --panel-solid: #0f1c33;
   --panel-strong: rgb(13 25 46 / 0.78);
   --field: rgb(9 19 36 / 0.9);
   --grid-bg: rgb(11 22 40 / 0.88);
   --text: #eaf2ff;
-  --muted: #a3b4d2;
+  --text-muted: #a3b4d2;
+  --muted: var(--text-muted);
   --border: rgb(148 186 255 / 0.18);
   --border-strong: rgb(148 186 255 / 0.34);
-  --accent: #42d9ff;
+  --primary: #42d9ff;
+  --accent: var(--primary);
   --accent-2: #76a9ff;
-  --accent-ink: #04121f;
+  --primary-ink: #04121f;
+  --accent-ink: var(--primary-ink);
   --accent-glow: rgb(66 217 255 / 0.28);
   --focus: #8fe6ff;
-  --pos: #49e1b5;
-  --neg: #ff788a;
-  --warn: #ffc86b;
+  --positive: #49e1b5;
+  --negative: #ff788a;
+  --warning: #ffc86b;
+  --pos: var(--positive);
+  --neg: var(--negative);
+  --warn: var(--warning);
   --info: #76a9ff;
-  --series-1: #76a9ff;
-  --series-2: #ff788a;
-  --series-3: #49e1b5;
-  --series-4: #ffc86b;
-  --series-5: #a58cff;
-  --series-6: #42d9ff;
+  --chart-1: #76a9ff;
+  --chart-2: #ff788a;
+  --chart-3: #49e1b5;
+  --chart-4: #ffc86b;
+  --chart-5: #a58cff;
+  --chart-6: #42d9ff;
+  --series-1: var(--chart-1);
+  --series-2: var(--chart-2);
+  --series-3: var(--chart-3);
+  --series-4: var(--chart-4);
+  --series-5: var(--chart-5);
+  --series-6: var(--chart-6);
+  /* Category colours (icon chips): stock · fund · bond · valuation · notes · metrics · event */
+  --cat-stock: #76a9ff;
+  --cat-fund: #a58cff;
+  --cat-bond: #3dd9c4;
+  --cat-valuation: #ffb067;
+  --cat-notes: #ffd166;
+  --cat-metrics: #ff8fc0;
+  --cat-event: #ff8a6b;
   --grid: rgb(148 186 255 / 0.12);
-  --glass-blur: 18px;
-  --shadow: 0 10px 34px rgb(0 0 0 / 0.28);
+  --glass-blur: 12px;
+  --shadow: 0 2px 10px rgb(0 0 0 / 0.24);
   color-scheme: dark;
 }
 :root[data-theme="light"] {
   --bg: #f3f8ff;
   --bg-2: #e8f1ff;
-  --bg-glow-1: rgb(66 217 255 / 0.16);
-  --bg-glow-2: rgb(165 140 255 / 0.12);
-  --bg-glow-3: rgb(73 225 181 / 0.1);
-  --panel: rgb(255 255 255 / 0.58);
+  --bg-glow-1: rgb(66 217 255 / 0.08);
+  --bg-glow-2: rgb(165 140 255 / 0.06);
+  --bg-glow-3: rgb(73 225 181 / 0.05);
+  --surface: rgb(255 255 255 / 0.78);
+  --panel: var(--surface);
   --panel-2: rgb(118 169 255 / 0.1);
   --panel-solid: #ffffff;
   --panel-strong: rgb(255 255 255 / 0.84);
   --field: rgb(255 255 255 / 0.94);
   --grid-bg: rgb(255 255 255 / 0.9);
   --text: #0f1b2d;
-  --muted: #4f6079;
+  --text-muted: #4f6079;
+  --muted: var(--text-muted);
   --border: rgb(60 100 170 / 0.16);
   --border-strong: rgb(60 100 170 / 0.32);
-  --accent: #086f99;
+  --primary: #086f99;
+  --accent: var(--primary);
   --accent-2: #3d6fd6;
-  --accent-ink: #ffffff;
+  --primary-ink: #ffffff;
+  --accent-ink: var(--primary-ink);
   --accent-glow: rgb(8 111 153 / 0.22);
   --focus: #086f99;
-  --pos: #0e7553;
-  --neg: #c73a52;
-  --warn: #946200;
+  --positive: #0e7553;
+  --negative: #c73a52;
+  --warning: #946200;
+  --pos: var(--positive);
+  --neg: var(--negative);
+  --warn: var(--warning);
   --info: #3d6fd6;
-  --series-1: #3d6fd6;
-  --series-2: #d9485f;
-  --series-3: #0f8a62;
-  --series-4: #a97a05;
-  --series-5: #7b5ce0;
-  --series-6: #0a8db8;
+  --chart-1: #3d6fd6;
+  --chart-2: #d9485f;
+  --chart-3: #0f8a62;
+  --chart-4: #a97a05;
+  --chart-5: #7b5ce0;
+  --chart-6: #0a8db8;
+  --series-1: var(--chart-1);
+  --series-2: var(--chart-2);
+  --series-3: var(--chart-3);
+  --series-4: var(--chart-4);
+  --series-5: var(--chart-5);
+  --series-6: var(--chart-6);
+  --cat-stock: #3d6fd6;
+  --cat-fund: #7b5ce0;
+  --cat-bond: #0b7a6e;
+  --cat-valuation: #b4570a;
+  --cat-notes: #946200;
+  --cat-metrics: #b0306a;
+  --cat-event: #c2410c;
   --grid: rgb(60 100 170 / 0.12);
-  --glass-blur: 20px;
-  --shadow: 0 10px 30px rgb(30 60 120 / 0.1);
+  --glass-blur: 12px;
+  --shadow: 0 1px 6px rgb(30 60 120 / 0.12);
   color-scheme: light;
 }
 
@@ -134,13 +175,65 @@
   --color-info: var(--info);
   --color-pos: var(--pos);
   --color-neg: var(--neg);
-  --font-sans: "IBM Plex Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  /* Design tokens (DESIGN.md). Old names above stay as aliases until each page is migrated (Phase 4). */
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+  --color-surface: var(--surface);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-text-muted: var(--text-muted);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-cat-stock: var(--cat-stock);
+  --color-cat-fund: var(--cat-fund);
+  --color-cat-bond: var(--cat-bond);
+  --color-cat-valuation: var(--cat-valuation);
+  --color-cat-notes: var(--cat-notes);
+  --color-cat-metrics: var(--cat-metrics);
+  --color-cat-event: var(--cat-event);
+  /* Type scale: 12 / 14 / 16 / 20 / 28 px only. */
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 36px;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 36px;
+  /* Radius: 6px controls, 12px cards. */
+  --radius-xs: 6px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  /* One light shadow level. */
+  --shadow-2xs: var(--shadow);
+  --shadow-xs: var(--shadow);
+  --shadow-sm: var(--shadow);
+  --shadow-md: var(--shadow);
+  --shadow-lg: var(--shadow);
+  --shadow-xl: var(--shadow);
+  --shadow-2xl: var(--shadow);
+  --font-sans: "Inter", "IBM Plex Sans Thai", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
   color: var(--text);
-  /* Compact fintech scale: body/forms 13px, tables 12px, metadata 10–11px (rem units stay 16px-based). */
-  font-size: 13px;
+  /* Body 14px; type scale is 12 / 14 / 16 / 20 / 28 px (see DESIGN.md). */
+  font-size: 14px;
   line-height: 1.5;
   background:
     radial-gradient(60rem 40rem at 10% -10%, var(--bg-glow-1), transparent 60%),
@@ -166,7 +259,7 @@ body {
 /* Floating inspector: stronger fill behind text, thin accent edge. */
 @utility glass-strong {
   background-color: var(--panel-strong);
-  box-shadow: var(--shadow), 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in oklab, var(--primary) 22%, transparent);
 }
 /* Recessed, near-opaque well for charts and dense grids inside a glass card. */
 @utility glass-inset {
@@ -176,16 +269,16 @@ body {
 
 @layer components {
 .card {
-  @apply glass rounded-2xl border border-border p-4 shadow-[var(--shadow),inset_0_1px_0_rgb(255_255_255/0.06)];
+  @apply glass rounded-xl border border-border p-4 shadow-[var(--shadow)];
 }
 .btn {
-  @apply inline-flex items-center justify-center gap-1 rounded-lg bg-linear-to-r from-accent to-accent-2 px-3 py-1.5 text-sm font-medium text-accent-ink shadow-[0_4px_16px_var(--accent-glow)] hover:brightness-110 disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-ink hover:brightness-110 disabled:opacity-50;
 }
 .btn-ghost {
-  @apply inline-flex items-center gap-1 rounded-lg border border-border bg-panel-2 px-3 py-1.5 text-sm hover:border-accent/60 disabled:opacity-50;
+  @apply inline-flex items-center gap-1 rounded-md border border-border bg-panel-2 px-3 py-1.5 text-sm hover:border-accent/60 disabled:opacity-50;
 }
 .input {
-  @apply w-full rounded-lg border border-border bg-field px-2.5 py-1.5 text-[13px] outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40;
+  @apply w-full rounded-md border border-border bg-field px-3 py-2 text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40;
 }
 .label {
   @apply mb-1 block text-xs font-medium text-muted;
@@ -194,7 +287,7 @@ body {
   @apply w-full text-xs;
 }
 .table th {
-  @apply border-b border-border px-2 py-2 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-muted uppercase;
+  @apply border-b border-border px-2 py-2 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-muted uppercase;
 }
 .table td {
   @apply border-b border-border/60 px-2 py-2 whitespace-nowrap;
@@ -203,7 +296,7 @@ body {
   @apply bg-panel-2/60;
 }
 .menu-item {
-  @apply block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply block w-full rounded-md px-3 py-2 text-left text-xs hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50;
 }
 .num {
   @apply text-right tabular-nums;

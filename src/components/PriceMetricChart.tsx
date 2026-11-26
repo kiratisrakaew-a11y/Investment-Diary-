@@ -245,7 +245,7 @@ export function PriceMetricChart({
       )}
 
       {chosen.length > 0 && (
-        <div className="flex justify-between text-[10px] text-muted">
+        <div className="flex justify-between text-xs text-muted">
           <span>ราคา ({currency}) · แกนซ้าย</span>
           <span>แกนขวา · {rightUnit}</span>
         </div>
@@ -463,7 +463,7 @@ export function PriceMetricChart({
 
       {chosen.length > 0 && (
         <div className="space-y-2 text-xs">
-          <p className="text-[11px] text-muted">
+          <p className="text-xs text-muted">
             สองแกนมีสเกลต่างกัน — อย่าตีความจากจุดตัดหรือความชันของเส้น ใช้ค่า
             correlation ด้านล่างแทน · จุด = วันที่มีค่าจริง (เส้นประแค่เชื่อมจุด
             ไม่ใช่ค่าระหว่างกลาง) · วงสี = สถานะตามเกณฑ์ ณ วันนั้น
@@ -538,7 +538,7 @@ export function PriceMetricChart({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[11px] text-muted">
+            <p className="mt-2 text-xs text-muted">
               วัดจากการเปลี่ยนแปลงระหว่างค่าที่บันทึกติดกัน: % เปลี่ยนของราคา
               เทียบกับการเปลี่ยนของ metric (
               {rightUnit && /%/.test(rightUnit)

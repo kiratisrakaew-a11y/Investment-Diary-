@@ -103,7 +103,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
                   {r.intrinsicValue != null && r.intrinsicValue > 0 && (
                     <div className="h-2.5 rounded-full bg-linear-to-r from-accent-2 to-accent" style={{ width: `${Math.min(100, (r.intrinsicValue / max) * 100)}%` }} />
                   )}
-                  {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded bg-text" style={{ left: `${(price / max) * 100}%` }} />}
+                  {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded-md bg-text" style={{ left: `${(price / max) * 100}%` }} />}
                 </div>
               </div>
             ))}
@@ -126,11 +126,11 @@ export default async function StockValuationPage({ params }: { params: Promise<{
                     />
                   )}
                   <div className="absolute -top-[2px] h-3.5 w-3.5 -translate-x-1/2 rotate-45 rounded-[2px] border-2 border-panel-solid bg-muted" style={{ left: `${(consTarget / max) * 100}%` }} />
-                  {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded bg-text" style={{ left: `${(price / max) * 100}%` }} />}
+                  {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded-md bg-text" style={{ left: `${(price / max) * 100}%` }} />}
                 </div>
               </div>
             )}
-            <div className="text-right text-[11px] text-muted">
+            <div className="text-right text-xs text-muted">
               เส้นตั้ง = ราคาปิดล่าสุด {fmtNum(price)}
               {hist.length ? ` ณ ${hist[hist.length - 1].date}` : ""}
             </div>
@@ -180,7 +180,7 @@ function Metric({ k, v, sub, tone }: { k: string; v: string; sub?: string; tone?
     <div>
       <dt className="text-xs text-muted">{k}</dt>
       <dd className={`text-2xl font-semibold tabular-nums ${tone ?? ""}`}>{v}</dd>
-      {sub && <dd className="text-[11px] text-muted">{sub}</dd>}
+      {sub && <dd className="text-xs text-muted">{sub}</dd>}
     </div>
   );
 }

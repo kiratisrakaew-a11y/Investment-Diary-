@@ -128,7 +128,7 @@ export function AdvisorChat({
                 {t.tools && t.tools.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1 border-t border-border/60 pt-2">
                     {t.tools.map((n) => (
-                      <span key={n} className="rounded-full bg-bg px-2 py-0.5 text-[11px] text-muted">🔧 {TOOL_LABEL[n] ?? n}</span>
+                      <span key={n} className="rounded-full bg-bg px-2 py-0.5 text-xs text-muted">🔧 {TOOL_LABEL[n] ?? n}</span>
                     ))}
                   </div>
                 )}

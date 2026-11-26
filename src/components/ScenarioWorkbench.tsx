@@ -88,10 +88,10 @@ export function ScenarioWorkbench({
   return (
     <section className="card glass min-w-0" aria-labelledby="scen-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="scen-title" className="text-[15px] font-semibold">
+        <h2 id="scen-title" className="text-base font-semibold">
           Scenario · ความน่าจะเป็น · การวิเคราะห์ความไว
         </h2>
-        {summary && <span className={clsx("rounded-full border px-2 py-0.5 text-[11px]", QUALITY[summary.qualityStatus].cls)}>{QUALITY[summary.qualityStatus].label}</span>}
+        {summary && <span className={clsx("rounded-full border px-2 py-0.5 text-xs", QUALITY[summary.qualityStatus].cls)}>{QUALITY[summary.qualityStatus].label}</span>}
       </div>
       {stale && (
         <p className="mt-2 rounded-lg border border-warn/40 px-3 py-2 text-xs text-warn" role="status">
@@ -128,9 +128,9 @@ function Kpis({ input, summary }: { input: ValuationInput; summary: ScenarioSumm
   const unit = input.method === "bond" ? " (ราคาต่อ 100)" : "";
   const k = (label: string, value: string, sub?: string, tone?: string) => (
     <div className="min-w-0">
-      <div className="text-[11px] text-muted">{label}</div>
-      <div className={clsx("text-[22px] font-semibold tabular-nums leading-tight", tone)}>{value}</div>
-      {sub && <div className="text-[11px] text-muted">{sub}</div>}
+      <div className="text-xs text-muted">{label}</div>
+      <div className={clsx("text-xl font-semibold tabular-nums leading-tight", tone)}>{value}</div>
+      {sub && <div className="text-xs text-muted">{sub}</div>}
     </div>
   );
   return (
@@ -169,14 +169,14 @@ function ScenarioTab({ input, set, summary, update, clear }: { input: ValuationI
             </button>
           )}
         </div>
-        <p className="text-[11px] text-muted">ความน่าจะเป็น 25/50/25 เป็นค่าตัวอย่างที่แก้ได้ ไม่ใช่การประมาณทางสถิติ</p>
+        <p className="text-xs text-muted">ความน่าจะเป็น 25/50/25 เป็นค่าตัวอย่างที่แก้ได้ ไม่ใช่การประมาณทางสถิติ</p>
       </div>
     );
 
   const values = summary.scenarios.map((s) => s.valuePerShare).filter((v): v is number => v != null);
   return (
     <div className="space-y-3">
-      {derived && <p className="text-[11px] text-muted">สร้างจาก scenario ของโมเดลส่วนงาน — แก้ความน่าจะเป็นที่โมเดลส่วนงาน · ส่วนงานที่ไม่มี scenario ใช้มูลค่าฐาน</p>}
+      {derived && <p className="text-xs text-muted">สร้างจาก scenario ของโมเดลส่วนงาน — แก้ความน่าจะเป็นที่โมเดลส่วนงาน · ส่วนงานที่ไม่มี scenario ใช้มูลค่าฐาน</p>}
       <div className="overflow-x-auto">
         <table className="table min-w-[640px]">
           <thead>
@@ -219,7 +219,7 @@ function ScenarioTab({ input, set, summary, update, clear }: { input: ValuationI
                 <td className="text-right tabular-nums">{r.valuePerShare != null ? fmtNum(r.valuePerShare) : <span title={r.naReason ?? ""}>N/A</span>}</td>
                 <td className={clsx("text-right tabular-nums", signClass(r.upsidePct))}>{r.upsidePct != null ? fmtPct(r.upsidePct, 1) : "N/A"}</td>
                 <td className="text-right tabular-nums">{r.marginOfSafetyPct != null ? fmtPct(r.marginOfSafetyPct, 1) : <span title={r.naReason ?? ""}>N/A</span>}</td>
-                <td className="max-w-[16rem] text-[11px]">
+                <td className="max-w-[16rem] text-xs">
                   {r.errors.map((e) => (
                     <div key={e} className="text-neg">• {e}</div>
                   ))}
@@ -239,12 +239,12 @@ function ScenarioTab({ input, set, summary, update, clear }: { input: ValuationI
               </td>
               <td className={clsx("text-right tabular-nums", signClass(summary.weightedUpsidePct))}>{summary.weightedUpsidePct != null ? fmtPct(summary.weightedUpsidePct, 1) : "—"}</td>
               <td className="text-right tabular-nums">{summary.weightedMarginOfSafetyPct != null ? fmtPct(summary.weightedMarginOfSafetyPct, 1) : "—"}</td>
-              <td className="text-[11px] text-muted">ค่าถ่วงน้ำหนัก (เฉพาะเมื่อทุก scenario ที่มีความน่าจะเป็น &gt; 0 คำนวณได้)</td>
+              <td className="text-xs text-muted">ค่าถ่วงน้ำหนัก (เฉพาะเมื่อทุก scenario ที่มีความน่าจะเป็น &gt; 0 คำนวณได้)</td>
             </tr>
           </tfoot>
         </table>
       </div>
-      <p className="text-[11px] text-muted">Upside = มูลค่า ÷ ราคา − 1 · Margin of safety = (มูลค่า − ราคา) ÷ มูลค่า · ความน่าจะเป็นถ่วงเฉพาะ scenario ของวิธีนี้ ไม่ใช่การเฉลี่ยข้ามวิธี</p>
+      <p className="text-xs text-muted">Upside = มูลค่า ÷ ราคา − 1 · Margin of safety = (มูลค่า − ราคา) ÷ มูลค่า · ความน่าจะเป็นถ่วงเฉพาะ scenario ของวิธีนี้ ไม่ใช่การเฉลี่ยข้ามวิธี</p>
       {(summary.errors.length > 0 || summary.qualityReasons.length > 0 || summary.warnings.length > 0) && (
         <ul className="space-y-0.5 text-xs">
           {summary.errors.map((e) => (
@@ -297,7 +297,7 @@ function ScenarioTab({ input, set, summary, update, clear }: { input: ValuationI
                 <span className="label">แหล่งข้อมูลเฉพาะ scenario (ลิงก์ วันที่ หน่วย)</span>
                 <input className="input text-xs" value={s.sources ?? ""} onChange={(e) => setScen(i, { sources: e.target.value || undefined })} />
               </label>
-              <button type="button" className="mt-2 text-[11px] text-neg underline" onClick={() => update({ scenarios: scen.filter((_, j) => j !== i) })}>
+              <button type="button" className="mt-2 text-xs text-neg underline" onClick={() => update({ scenarios: scen.filter((_, j) => j !== i) })}>
                 ลบ scenario นี้
               </button>
             </details>
@@ -318,7 +318,7 @@ function ScenarioTab({ input, set, summary, update, clear }: { input: ValuationI
           </div>
         </div>
       )}
-      <button type="button" className="text-[11px] text-muted underline" onClick={clear}>
+      <button type="button" className="text-xs text-muted underline" onClick={clear}>
         ล้าง scenario ทั้งหมด (มูลค่าฐานไม่เปลี่ยน)
       </button>
     </div>
@@ -372,7 +372,7 @@ function OverrideEditor({ paths, value, onChange }: { paths: string[]; value: Re
           เพิ่ม
         </button>
       </div>
-      <p className="text-[11px] text-muted">อัตราใส่เป็นทศนิยม (0.02 = 2%) · *Shift = บวกเพิ่มจากค่าเดิม · segments[id].scenario = ใช้ scenario ของโมเดลส่วนงานนั้น</p>
+      <p className="text-xs text-muted">อัตราใส่เป็นทศนิยม (0.02 = 2%) · *Shift = บวกเพิ่มจากค่าเดิม · segments[id].scenario = ใช้ scenario ของโมเดลส่วนงานนั้น</p>
     </div>
   );
 }
@@ -389,7 +389,7 @@ function RangePlot({ summary }: { summary: ScenarioSummary }) {
     v != null && (
       <g>
         <line x1={x(v)} x2={x(v)} y1={6} y2={42} className={cls} strokeWidth={1.5} strokeDasharray={label === "ราคา" ? "3 3" : undefined} />
-        <text x={x(v)} y={54} textAnchor="middle" className="fill-muted text-[9px]">
+        <text x={x(v)} y={54} textAnchor="middle" className="fill-muted text-xs">
           {label}
         </text>
       </g>
@@ -403,13 +403,13 @@ function RangePlot({ summary }: { summary: ScenarioSummary }) {
         {pts.map((p) => (
           <g key={p.label}>
             <circle cx={x(p.v)} cy={24} r={4.5} className="fill-accent/70 stroke-accent" />
-            <text x={x(p.v)} y={14} textAnchor="middle" className="fill-text text-[9px]">
+            <text x={x(p.v)} y={14} textAnchor="middle" className="fill-text text-xs">
               {p.label}
             </text>
           </g>
         ))}
       </svg>
-      <figcaption className="text-[11px] text-muted">จุด = มูลค่าแต่ละ scenario · เส้นประ = ราคาตลาด · เส้นสีหลัก = ค่าถ่วงน้ำหนัก</figcaption>
+      <figcaption className="text-xs text-muted">จุด = มูลค่าแต่ละ scenario · เส้นประ = ราคาตลาด · เส้นสีหลัก = ค่าถ่วงน้ำหนัก</figcaption>
     </figure>
   );
 }
@@ -500,7 +500,7 @@ function SensitivityTab({ input }: { input: ValuationInput }) {
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted">
+          <p className="text-xs text-muted">
             ฐาน {fmtNum(grid.baseValue)} · ช่อง N/A = คำนวณไม่ได้ (วางเมาส์ดูเหตุผล) · สีแสดง % เปลี่ยนจากฐาน · sensitivity ≠ ความน่าจะเป็น
           </p>
           {[...grid.errors, ...grid.notes].map((e) => (
@@ -551,14 +551,14 @@ function ReverseTab({ input }: { input: ValuationInput }) {
           คำนวณ
         </button>
       </div>
-      <p className="text-[11px] text-muted">หาค่าเดียวที่ทำให้มูลค่าจากแบบจำลองเท่ากับราคาตลาด โดยคงสมมติฐานอื่นทั้งหมด — เป็นเงื่อนไขของสมมติฐานเหล่านั้น ไม่ใช่การพยากรณ์การเติบโต</p>
+      <p className="text-xs text-muted">หาค่าเดียวที่ทำให้มูลค่าจากแบบจำลองเท่ากับราคาตลาด โดยคงสมมติฐานอื่นทั้งหมด — เป็นเงื่อนไขของสมมติฐานเหล่านั้น ไม่ใช่การพยากรณ์การเติบโต</p>
       {res && (
         <div className="rounded-lg border border-border p-3" role="status">
           {res.status === "solved" ? (
             <>
-              <div className="text-[11px] text-muted">{res.path} โดยนัยจากราคา {fmtNum(res.targetPrice)}</div>
-              <div className="text-[22px] font-semibold tabular-nums">{Math.abs(res.solution!) < 1.5 ? fmtPct(res.solution!, 2) : fmtNum(res.solution!)}</div>
-              <div className="text-[11px] text-muted tabular-nums">
+              <div className="text-xs text-muted">{res.path} โดยนัยจากราคา {fmtNum(res.targetPrice)}</div>
+              <div className="text-xl font-semibold tabular-nums">{Math.abs(res.solution!) < 1.5 ? fmtPct(res.solution!, 2) : fmtNum(res.solution!)}</div>
+              <div className="text-xs text-muted tabular-nums">
                 มูลค่าที่ได้ {fmtNum(res.modeledPrice)} · ส่วนต่าง {res.residual?.toExponential(2)} · {res.iterations} รอบ · ช่วง {res.bracket?.map((b) => b.toFixed(4)).join("–")}
               </div>
             </>
@@ -566,7 +566,7 @@ function ReverseTab({ input }: { input: ValuationInput }) {
             <div className="text-warn">{res.status === "unsupported" ? "ไม่รองรับ" : res.status === "ambiguous" ? "มีหลายคำตอบ" : "ไม่มีคำตอบในช่วงนี้"}</div>
           )}
           {res.messages.map((m) => (
-            <p key={m} className="mt-1 text-[11px] text-muted">• {m}</p>
+            <p key={m} className="mt-1 text-xs text-muted">• {m}</p>
           ))}
         </div>
       )}
@@ -618,7 +618,7 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
         })}>
           {pending ? "กำลังจำลอง…" : "จำลอง (บนเซิร์ฟเวอร์)"}
         </button>
-        <button type="button" className="text-[11px] text-muted underline" onClick={() => (setCfg(undefined), setRes(null))}>
+        <button type="button" className="text-xs text-muted underline" onClick={() => (setCfg(undefined), setRes(null))}>
           ปิด Monte Carlo
         </button>
       </div>
@@ -660,7 +660,7 @@ function MonteCarloTab({ input, set, update }: { input: ValuationInput; set?: Sc
           + ตัวแปร
         </button>
       )}
-      <p className="text-[11px] text-muted">ตัวแปร *Shift (growthShift, roeShift, yieldShiftBp) เป็นส่วนเพิ่มอยู่แล้ว · “± จากฐาน” = บวกค่าที่สุ่มเข้ากับค่าเดิม</p>
+      <p className="text-xs text-muted">ตัวแปร *Shift (growthShift, roeShift, yieldShiftBp) เป็นส่วนเพิ่มอยู่แล้ว · “± จากฐาน” = บวกค่าที่สุ่มเข้ากับค่าเดิม</p>
       <CorrelationEditor
         paths={vars.map((v) => v.path || "(ยังไม่ระบุ)")}
         value={cfg.correlation}
@@ -693,7 +693,7 @@ function CorrelationEditor({
   const manual = !!value;
   return (
     <fieldset className="min-w-0 rounded-lg border border-border p-2">
-      <legend className="px-1 text-[11px] font-medium">การพึ่งพากัน / Correlation</legend>
+      <legend className="px-1 text-xs font-medium">การพึ่งพากัน / Correlation</legend>
       <div className="flex flex-wrap gap-3">
         <label className="flex items-center gap-1">
           <input type="radio" name="mc-dependence" checked={!manual} onChange={() => onChange(undefined)} />
@@ -707,7 +707,7 @@ function CorrelationEditor({
       {manual && value && (
         <div className="mt-2 space-y-2">
           <div className="overflow-x-auto">
-            <table className="table text-[11px]" aria-label="Correlation matrix">
+            <table className="table text-xs" aria-label="Correlation matrix">
               <thead>
                 <tr>
                   <th />
@@ -759,7 +759,7 @@ function CorrelationEditor({
               • {e}
             </p>
           ))}
-          {check && !check.errors.length && check.psd && <p className="text-[11px] text-pos">ผ่านการตรวจ: สมมาตร แนวทแยง = 1 และ positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)})</p>}
+          {check && !check.errors.length && check.psd && <p className="text-xs text-pos">ผ่านการตรวจ: สมมาตร แนวทแยง = 1 และ positive semidefinite (eigenvalue ต่ำสุด {check.minEigenvalue?.toFixed(4)})</p>}
           {check && !check.errors.length && !check.psd && (
             <div className="rounded-lg border border-warn/40 p-2 text-warn" role="alert">
               <p>
@@ -797,7 +797,7 @@ function CorrelationEditor({
               )}
             </div>
           )}
-          <p className="text-[11px] text-muted">Gaussian copula: ρ คือ correlation ของตัวแปรปกติที่ใช้สุ่ม (ไม่ใช่ correlation ของค่าที่ได้ตรง ๆ) · ใส่ตามเหตุผลทางธุรกิจ — ระบบไม่ประมาณจากราคาหุ้น</p>
+          <p className="text-xs text-muted">Gaussian copula: ρ คือ correlation ของตัวแปรปกติที่ใช้สุ่ม (ไม่ใช่ correlation ของค่าที่ได้ตรง ๆ) · ใส่ตามเหตุผลทางธุรกิจ — ระบบไม่ประมาณจากราคาหุ้น</p>
         </div>
       )}
     </fieldset>
@@ -843,7 +843,7 @@ function McResult({ r }: { r: MonteCarloResult }) {
   const maxC = Math.max(1, ...r.histogram.map((h) => h.count));
   return (
     <div className="space-y-2" role="status">
-      <div className={clsx("text-[11px]", r.usable ? "text-muted" : "text-neg")}>
+      <div className={clsx("text-xs", r.usable ? "text-muted" : "text-neg")}>
         {r.usable ? "ใช้ได้" : "ผลใช้ไม่ได้"} · {r.valid.toLocaleString()} จาก {r.drawsRun.toLocaleString()} รอบใช้ได้ ({fmtPct(r.invalidShare, 1)} คำนวณไม่ได้) · seed {r.seed} · {r.elapsedMs} ms
         {r.timedOut && " · หยุดเพราะครบเวลา"}
       </div>
@@ -857,7 +857,7 @@ function McResult({ r }: { r: MonteCarloResult }) {
             {p.p50 != null && <rect x={x(p.p50) - 1} width={2} y={66} height={14} className="fill-accent" />}
             {r.price != null && r.price >= lo && r.price <= hi && <line x1={x(r.price)} x2={x(r.price)} y1={0} y2={84} className="stroke-muted" strokeDasharray="3 3" />}
           </svg>
-          <figcaption className="text-[11px] text-muted">แท่ง = จำนวนรอบในแต่ละช่วงมูลค่า · แถบล่าง = P10–P90 · ขีด = P50 · เส้นประ = ราคาตลาด</figcaption>
+          <figcaption className="text-xs text-muted">แท่ง = จำนวนรอบในแต่ละช่วงมูลค่า · แถบล่าง = P10–P90 · ขีด = P50 · เส้นประ = ราคาตลาด</figcaption>
         </figure>
       )}
       <table className="table text-xs">
@@ -883,7 +883,7 @@ function McResult({ r }: { r: MonteCarloResult }) {
         </tbody>
       </table>
       {[...r.errors, ...r.warnings, ...r.invalidReasons.map((x) => `คำนวณไม่ได้ ${x.count} รอบ: ${x.reason}`)].map((w) => (
-        <p key={w} className="text-[11px] text-muted">• {w}</p>
+        <p key={w} className="text-xs text-muted">• {w}</p>
       ))}
     </div>
   );
@@ -903,7 +903,7 @@ function NotesTab({ input, set, summary, update }: { input: ValuationInput; set?
   };
   return (
     <div className="space-y-4">
-      <p className="text-[11px] text-muted">ร่างสร้างจากตัวเลขและแหล่งที่มาในข้อมูลนำเข้าเท่านั้น · ข้อความที่คุณแก้จะถูกบันทึกและไม่ถูกเขียนทับอัตโนมัติ</p>
+      <p className="text-xs text-muted">ร่างสร้างจากตัวเลขและแหล่งที่มาในข้อมูลนำเข้าเท่านั้น · ข้อความที่คุณแก้จะถูกบันทึกและไม่ถูกเขียนทับอัตโนมัติ</p>
       {summary.scenarios.map((r) => {
         const generated = generateScenarioNoteTh(input, summary, r);
         const mine = stored.find((s) => s.id === r.scenarioId)?.noteTh;
@@ -925,7 +925,7 @@ function NotesTab({ input, set, summary, update }: { input: ValuationInput; set?
               )}
             </div>
             {diffFor === r.scenarioId && d && (
-              <div className="rounded-lg border border-border p-2 text-[11px]">
+              <div className="rounded-lg border border-border p-2 text-xs">
                 {d.removed.map((l) => (
                   <div key={`-${l}`} className="text-neg">− {l}</div>
                 ))}

@@ -96,12 +96,12 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
         <div className="flex flex-wrap items-center gap-2 text-xs [&_.menu-item]:btn-ghost [&_.menu-item]:py-1 [&_.menu-item]:text-xs">{items}</div>
       )}
       {msg && (
-        <span role="status" className={clsx("text-[11px]", msg.ok ? "text-pos" : "text-neg", variant === "chip" && "absolute top-full left-0 z-30 mt-1 w-64 rounded-lg border border-border bg-panel-solid p-2")}>
+        <span role="status" className={clsx("text-xs", msg.ok ? "text-pos" : "text-neg", variant === "chip" && "absolute top-full left-0 z-30 mt-1 w-64 rounded-lg border border-border bg-panel-solid p-2")}>
           {msg.text}
         </span>
       )}
       <dialog ref={dialog} aria-labelledby={`del-${asset.id}`} className="m-auto w-[min(26rem,92vw)] rounded-2xl border border-border bg-panel-solid p-5 text-text backdrop:bg-black/50">
-        <h2 id={`del-${asset.id}`} className="text-[15px] font-semibold text-neg">
+        <h2 id={`del-${asset.id}`} className="text-base font-semibold text-neg">
           ลบ {asset.symbol} ถาวร
         </h2>
         <p className="mt-2 text-xs text-muted">ลบสินทรัพย์นี้และข้อมูลทั้งหมดที่ผูกกับมัน — กู้คืนไม่ได้ บันทึก (notes) ยังอยู่แต่จะไม่ผูกกับสินทรัพย์นี้แล้ว</p>
@@ -123,7 +123,7 @@ export function AssetActionsMenu({ asset, hidden, archived, held, dependencyCoun
             <span className="text-muted">ไม่มีข้อมูลอื่นผูกอยู่</span>
           )}
         </div>
-        {!held && <p className="mt-2 text-[11px] text-muted">ถ้าแค่ต้องการเอาออกจากหน้าจอ ใช้ “ซ่อน” หรือ “เก็บถาวร” แทน (ข้อมูลยังอยู่ครบ)</p>}
+        {!held && <p className="mt-2 text-xs text-muted">ถ้าแค่ต้องการเอาออกจากหน้าจอ ใช้ “ซ่อน” หรือ “เก็บถาวร” แทน (ข้อมูลยังอยู่ครบ)</p>}
         <label className="mt-3 block">
           <span className="label">พิมพ์ {asset.symbol} เพื่อยืนยัน</span>
           <input className="input" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />

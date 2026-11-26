@@ -91,7 +91,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
             >
               <div className="font-semibold">{DIVIDEND_PRESETS[id].label}</div>
               <div className="mt-1 text-xs text-muted">{DIVIDEND_PRESETS[id].description}</div>
-              <div className="mt-2 text-[11px] text-muted">เวอร์ชัน {DIVIDEND_PRESETS[id].version}</div>
+              <div className="mt-2 text-xs text-muted">เวอร์ชัน {DIVIDEND_PRESETS[id].version}</div>
             </button>
           ))}
         </div>
@@ -238,7 +238,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                                 <div className="h-2 rounded-full bg-linear-to-r from-accent to-accent-2" style={{ width: `${r.score * 100}%` }} />
                               </div>
                               <span className="tabular-nums">{r.score.toFixed(2)}</span>
-                              {r.coverage < 1 && <span className="text-[11px] text-warn">{(r.coverage * 100).toFixed(0)}%</span>}
+                              {r.coverage < 1 && <span className="text-xs text-warn">{(r.coverage * 100).toFixed(0)}%</span>}
                             </div>
                           </td>
                           <td className="num">{fmtPct(p.ttmYieldRegular.value, 2)}</td>
@@ -264,11 +264,11 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                                 ))}
                               </div>
                               {r.warnings.map((w2) => (
-                                <p key={w2} className="mt-1 text-[11px] text-warn">
+                                <p key={w2} className="mt-1 text-xs text-warn">
                                   {w2}
                                 </p>
                               ))}
-                              <p className="mt-1 text-[11px] text-muted">
+                              <p className="mt-1 text-xs text-muted">
                                 Yield รวม {fmtPct(p.ttmYieldTotal.value, 2)} · Forward {p.forwardYield.value == null ? p.forwardYield.warnings[0] : fmtPct(p.forwardYield.value, 2)} · ปันผลรายปีจาก{" "}
                                 {p.annualDps.source === "statements" ? "งบการเงิน" : p.annualDps.source === "events" ? "เหตุการณ์ปันผล" : "–"} · ลด {p.consistency.cuts} ครั้ง · งด {p.consistency.missedYears} ปี · Total shareholder yield: ไม่รองรับ (ไม่มีข้อมูลซื้อหุ้นคืน)
                               </p>

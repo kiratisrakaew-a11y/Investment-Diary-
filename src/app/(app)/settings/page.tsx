@@ -43,7 +43,7 @@ export default async function SettingsPage() {
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span
-      className={`ml-1 rounded px-1 text-[11px] ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}
+      className={`ml-1 rounded-md px-1 text-xs ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}
     >
       {p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}
     </span>
@@ -452,7 +452,7 @@ export default async function SettingsPage() {
                   ["thai_stock", "us_stock", "fund", "bond", "gold"] as const
                 ).map((c) => (
                   <div key={c}>
-                    <label className="text-[11px] text-muted">
+                    <label className="text-xs text-muted">
                       {ASSET_CLASS_LABEL[c]}
                     </label>
                     <input

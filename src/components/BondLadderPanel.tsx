@@ -78,7 +78,7 @@ export function BondLadderPanel() {
               ["DV01 (บาท/1bp)", fmtNum(plan.totals.dv01, 0)],
             ].map(([k, v]) => (
               <div key={k} className="rounded-xl border border-border bg-panel-2/60 p-3">
-                <div className="text-[11px] text-muted uppercase">{k}</div>
+                <div className="text-xs text-muted uppercase">{k}</div>
                 <div className="text-lg font-semibold tabular-nums">{v}</div>
               </div>
             ))}

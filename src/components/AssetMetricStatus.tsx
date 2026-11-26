@@ -13,7 +13,7 @@ const STATUS_STYLE: Record<MetricStatus, { text: string; icon: string }> = {
 export function StatusBadge({ status, title }: { status: MetricStatus; title?: string }) {
   const s = STATUS_STYLE[status];
   return (
-    <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-[11px]", s.text)} title={title}>
+    <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-xs", s.text)} title={title}>
       <span aria-hidden>{s.icon}</span>
       {STATUS_LABEL[status]}
     </span>

@@ -95,7 +95,7 @@ export default async function OptimizerPage({
         <>
           {picker}
           <section className="card space-y-2 border-l-4 border-l-neg" data-testid="window-insufficient">
-            <h2 className="text-[15px] font-semibold text-neg">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
+            <h2 className="text-base font-semibold text-neg">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
             <p className="text-sm">
               มีเพียง {u!.windowInfo!.obsPerAsset.toFixed(1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
               {u!.windowInfo!.limitedBy.length ? ` · ช่วงถูกจำกัดโดย ${u!.windowInfo!.limitedBy.map((l) => `${l.symbol} (เริ่ม ${l.firstDate})`).join(", ")}` : ""}

@@ -22,7 +22,7 @@ export function Ring({ value, color = "orange", children, size = 48, className }
         <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeOpacity={0.22} strokeWidth="4" />
         {v != null && <circle cx="24" cy="24" r={r} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${v * c} ${c}`} style={{ filter: "drop-shadow(0 0 4px currentColor)" }} />}
       </svg>
-      <div className="relative text-[11px] font-semibold">{children}</div>
+      <div className="relative text-xs font-semibold">{children}</div>
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function Stat({
       style={color ? { backgroundImage: `radial-gradient(circle at 0% 0%, color-mix(in srgb, ${TONE_VAR[color]} 30%, transparent), transparent 70%)` } : undefined}
     >
       {color && <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${TONE_VAR[color]}, transparent)` }} />}
-      <div className="text-[11px] font-semibold tracking-wide text-muted uppercase">{label}</div>
+      <div className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</div>
       <div className="mt-2 flex items-center gap-3">
         {color && (
           <Ring value={ring} color={color} className="hidden sm:grid">
@@ -64,7 +64,7 @@ export function Stat({
           </Ring>
         )}
         <div className="min-w-0">
-          <div className={clsx("text-[22px] leading-tight font-semibold break-words tabular-nums sm:text-[24px]", tone)}>{value}</div>
+          <div className={clsx("text-xl leading-tight font-semibold break-words tabular-nums sm:text-xl", tone)}>{value}</div>
           {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
         </div>
       </div>
@@ -109,7 +109,7 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel px-5 py-4">
       <div className="min-w-0">
-        <h1 className="text-[21px] leading-tight font-semibold tracking-wide">{title}</h1>
+        <h1 className="text-xl leading-tight font-semibold tracking-wide">{title}</h1>
         {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -122,7 +122,7 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
 
 export function Badge({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-[11px] text-muted", className)}>
+    <span title={title} className={clsx("inline-block rounded-full border border-border bg-panel-2 px-2 py-0.5 text-xs text-muted", className)}>
       {children}
     </span>
   );

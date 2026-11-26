@@ -110,7 +110,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                       <Link href={`/valuation/stock/${encodeURIComponent(g.symbol)}`} className="font-medium text-accent">
                         {g.symbol}
                       </Link>
-                      <div className="text-[11px] text-muted">{g.count} valuation</div>
+                      <div className="text-xs text-muted">{g.count} valuation</div>
                     </td>
                     <td className="whitespace-normal">
                       <div className="flex flex-wrap gap-1">
@@ -128,15 +128,15 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                     </td>
                     <td>
                       <RangeBar values={g.methods.map((m) => ({ label: m.label, v: m.value }))} price={g.price} />
-                      <div className="mt-1 text-[11px] text-muted tabular-nums">{g.low != null ? `${fmtNum(g.low)} – ${fmtNum(g.high)}` : "–"}</div>
+                      <div className="mt-1 text-xs text-muted tabular-nums">{g.low != null ? `${fmtNum(g.low)} – ${fmtNum(g.high)}` : "–"}</div>
                     </td>
                     <td className="num">
                       <span className="font-semibold">{fmtNum(g.average)}</span>
-                      <div className="text-[11px] text-muted">มัธยฐาน {fmtNum(g.median)}</div>
+                      <div className="text-xs text-muted">มัธยฐาน {fmtNum(g.median)}</div>
                     </td>
                     <td className="num">
                       {fmtNum(g.price)}
-                      <div className={clsx("text-[11px]", isStale ? "text-warn" : "text-muted")}>
+                      <div className={clsx("text-xs", isStale ? "text-warn" : "text-muted")}>
                         {g.priceDate ? `ณ ${g.priceDate}${isStale ? ` · ${g.priceAgeDays} วัน` : ""}` : "ราคาวันประเมิน (ไม่มีราคาในระบบ)"}
                       </div>
                     </td>
@@ -145,7 +145,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
                       {g.consensus ? (
                         <>
                           {fmtNum(g.consensus.target)}
-                          <div className={clsx("text-[11px]", g.consensus.stale ? "text-warn" : signClass(g.consensus.upside) || "text-muted")}>
+                          <div className={clsx("text-xs", g.consensus.stale ? "text-warn" : signClass(g.consensus.upside) || "text-muted")}>
                             {fmtPct(g.consensus.upside, 1)}
                             {g.consensus.stale && " · เก่า"}
                           </div>
@@ -167,7 +167,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
           </table>
         </div>
       )}
-      <p className="text-[11px] text-muted">ราคาเป็นราคาปิดล่าสุดที่บันทึกในระบบ ไม่ใช่ราคาเรียลไทม์ · เกณฑ์ราคาเก่าตั้งได้ในหน้าตั้งค่า (เกณฑ์วันที่ข้อมูล)</p>
+      <p className="text-xs text-muted">ราคาเป็นราคาปิดล่าสุดที่บันทึกในระบบ ไม่ใช่ราคาเรียลไทม์ · เกณฑ์ราคาเก่าตั้งได้ในหน้าตั้งค่า (เกณฑ์วันที่ข้อมูล)</p>
     </section>
   );
 }
@@ -198,7 +198,7 @@ function RangeBar({ values, price }: { values: { label: string; v: number | null
       {vs.map((x) => (
         <span key={x.label} title={`${x.label} ${fmtNum(x.v)}`} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel-solid bg-accent" style={{ left: `${pos(x.v)}%` }} />
       ))}
-      {price != null && <span title={`ราคา ${fmtNum(price)}`} className="absolute top-0 h-5 w-0.5 -translate-x-1/2 rounded bg-text" style={{ left: `${pos(price)}%` }} />}
+      {price != null && <span title={`ราคา ${fmtNum(price)}`} className="absolute top-0 h-5 w-0.5 -translate-x-1/2 rounded-md bg-text" style={{ left: `${pos(price)}%` }} />}
     </div>
   );
 }

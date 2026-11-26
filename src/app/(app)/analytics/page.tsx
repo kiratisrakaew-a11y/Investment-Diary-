@@ -186,13 +186,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                       <tr key={h.key}>
                         <td>
                           {h.label}
-                          {Number.isFinite(h.periods) && <span className="block text-[11px] text-muted">{h.periods} งวด{h.calendarDays != null ? ` ≈ ${Math.round(h.calendarDays)} วัน` : ""}</span>}
+                          {Number.isFinite(h.periods) && <span className="block text-xs text-muted">{h.periods} งวด{h.calendarDays != null ? ` ≈ ${Math.round(h.calendarDays)} วัน` : ""}</span>}
                         </td>
                         <td className="num">{fmtPct(pick?.var95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.es95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.var99 ?? null)}</td>
                         <td className="num">{pick?.var95 != null && navNow > 0 ? Math.round(pick.var95 * navNow).toLocaleString() : "–"}</td>
-                        <td className="whitespace-normal text-[11px] text-muted">
+                        <td className="whitespace-normal text-xs text-muted">
                           {h.unavailable ?? (pick === h.nonOverlapping ? kind : h.notes.join(" · "))}
                           {h.periods > 1 && h.sqrtScaledVar95 != null && ` · เทียบ √h (สมมติอิสระกัน): ${fmtPct(h.sqrtScaledVar95)}`}
                         </td>
@@ -202,7 +202,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 </tbody>
               </table>
             </div>
-            <p className="mt-1 text-[11px] text-muted">
+            <p className="mt-1 text-xs text-muted">
               R_H = Π(1 + rₜ) − 1 จากข้อมูลจริง — สถานะซื้อที่ไม่กู้ยืมขาดทุนไม่เกิน 100% · ไม่แสดงช่วงที่ข้อมูลไม่พอ (ไม่ขยายด้วย √h) · บาท = VaR × NAV ปัจจุบัน
             </p>
           </details>

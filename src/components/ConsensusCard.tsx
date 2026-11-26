@@ -54,10 +54,10 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
     <section className="card space-y-3" aria-labelledby="consensus-title">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 id="consensus-title" className="text-[15px] font-semibold">
+          <h2 id="consensus-title" className="text-base font-semibold">
             ราคาเป้าหมายนักวิเคราะห์ (Consensus)
           </h2>
-          <p className="text-[11px] text-muted">ความเห็นของนักวิเคราะห์ ไม่ใช่การประเมินของคุณ — แสดงแยก ไม่นำไปเฉลี่ยกับ valuation ในแอป</p>
+          <p className="text-xs text-muted">ความเห็นของนักวิเคราะห์ ไม่ใช่การประเมินของคุณ — แสดงแยก ไม่นำไปเฉลี่ยกับ valuation ในแอป</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-ghost text-xs" onClick={refresh} disabled={pending}>
@@ -82,12 +82,12 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
               <dd className="text-2xl font-semibold tabular-nums">
                 {fmtNum(view.target)} {latest.currency && <span className="text-xs font-normal text-muted">{latest.currency}</span>}
               </dd>
-              {latest.targetMean != null && latest.targetMedian != null && <dd className="text-[11px] text-muted">มัธยฐาน {fmtNum(latest.targetMedian)}</dd>}
+              {latest.targetMean != null && latest.targetMedian != null && <dd className="text-xs text-muted">มัธยฐาน {fmtNum(latest.targetMedian)}</dd>}
             </div>
             <div>
               <dt className="text-xs text-muted">ช่วงเป้าหมาย</dt>
               <dd className="text-2xl font-semibold tabular-nums">{latest.targetLow != null && latest.targetHigh != null ? `${fmtNum(latest.targetLow)} – ${fmtNum(latest.targetHigh)}` : "–"}</dd>
-              <dd className="text-[11px] text-muted">
+              <dd className="text-xs text-muted">
                 {latest.analysts != null ? `${latest.analysts} นักวิเคราะห์` : "ไม่ระบุจำนวนนักวิเคราะห์"}
                 {recLabel(latest.recommendationKey) && ` · คำแนะนำ: ${recLabel(latest.recommendationKey)}`}
               </dd>
@@ -95,12 +95,12 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
             <div>
               <dt className="text-xs text-muted">Upside จากราคาล่าสุด</dt>
               <dd className={clsx("text-2xl font-semibold tabular-nums", signClass(view.upside))}>{fmtPct(view.upside, 1)}</dd>
-              <dd className="text-[11px] text-muted">{price != null ? `เทียบ ${fmtNum(price)}${priceDate ? ` ณ ${priceDate}` : ""}` : "ไม่มีราคาในระบบ"}</dd>
+              <dd className="text-xs text-muted">{price != null ? `เทียบ ${fmtNum(price)}${priceDate ? ` ณ ${priceDate}` : ""}` : "ไม่มีราคาในระบบ"}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted">ที่มา</dt>
               <dd className="text-sm font-medium">{CONSENSUS_SOURCE_LABEL[latest.source] ?? latest.source}</dd>
-              <dd className="text-[11px] text-muted">
+              <dd className="text-xs text-muted">
                 ณ {latest.asOf} · {view.ageDays === 0 ? "วันนี้" : `${view.ageDays} วันก่อน`}
                 {latest.sourceNote && latest.source !== "yahoo" ? ` · ${latest.sourceNote}` : ""}
               </dd>
@@ -156,7 +156,7 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
           </div>
         </details>
       )}
-      <p className="text-[11px] text-muted">Yahoo Finance เป็นแหล่งข้อมูลไม่เป็นทางการ หุ้นไทยหลายตัวอาจไม่มีข้อมูลหรือไม่ทันสมัย · ถ้า Yahoo ไม่มีข้อมูล ระบบจะไม่ลบของเดิม และยังแสดงชุดล่าสุดที่เคยพบ</p>
+      <p className="text-xs text-muted">Yahoo Finance เป็นแหล่งข้อมูลไม่เป็นทางการ หุ้นไทยหลายตัวอาจไม่มีข้อมูลหรือไม่ทันสมัย · ถ้า Yahoo ไม่มีข้อมูล ระบบจะไม่ลบของเดิม และยังแสดงชุดล่าสุดที่เคยพบ</p>
 
       <Modal open={open} onClose={() => setOpen(false)} title={`กรอก consensus ของ ${symbol}`}>
         <ConsensusForm
@@ -233,7 +233,7 @@ function ConsensusForm({ symbol, today, currency, onDone }: { symbol: string; to
         </select>
       </label>
       <div className="col-span-2">{field("note", "หมายเหตุ", { maxLength: 500 })}</div>
-      <p className="col-span-2 text-[11px] text-muted">ต้องมีเป้าหมายเฉลี่ยหรือมัธยฐานอย่างน้อยหนึ่งค่า · กรอกเฉพาะตัวเลขที่มีในรายงาน ช่องที่ไม่รู้ให้เว้นว่าง · วันที่เดียวกันจะแทนที่รายการเดิม</p>
+      <p className="col-span-2 text-xs text-muted">ต้องมีเป้าหมายเฉลี่ยหรือมัธยฐานอย่างน้อยหนึ่งค่า · กรอกเฉพาะตัวเลขที่มีในรายงาน ช่องที่ไม่รู้ให้เว้นว่าง · วันที่เดียวกันจะแทนที่รายการเดิม</p>
       {error && (
         <p role="alert" className="col-span-2 text-xs text-neg">
           {error}

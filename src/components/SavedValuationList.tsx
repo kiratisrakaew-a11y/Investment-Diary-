@@ -88,7 +88,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                       ภาพ {snap.horizon} ปี จาก {snap.sourceYears} ปี
                     </Badge>
                   ) : (
-                    !v.isLatestForMethod && <span className="ml-2 text-[11px] text-muted">(ฉบับเก่า)</span>
+                    !v.isLatestForMethod && <span className="ml-2 text-xs text-muted">(ฉบับเก่า)</span>
                   )}
                   {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
                   {oldVersion &&
@@ -108,12 +108,12 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                 <span className="text-right">
                   <span className="font-semibold tabular-nums" title="มูลค่ากรณีฐาน">{fmtNum(v.intrinsicValue)}</span>
                   {v.scenario && (
-                    <span className={clsx("block text-[11px] tabular-nums", v.scenario.qualityStatus === "preliminary" ? "text-warn" : "text-muted")}>
+                    <span className={clsx("block text-xs tabular-nums", v.scenario.qualityStatus === "preliminary" ? "text-warn" : "text-muted")}>
                       ถ่วงน้ำหนัก {v.scenario.scenarios.length} scenario: {v.scenario.probabilityWeightedValue != null ? fmtNum(v.scenario.probabilityWeightedValue) : "—"}
                       {v.scenario.qualityStatus === "preliminary" && " (เบื้องต้น)"}
                     </span>
                   )}
-                  <span className="block text-[11px] text-muted">
+                  <span className="block text-xs text-muted">
                     ราคาวันประเมิน {fmtNum(v.priceAtValuation)} ({fmtPct(upThen, 1)}) · ตอนนี้ <span className={signClass(upNow)}>{fmtPct(upNow, 1)}</span>
                   </span>
                 </span>
@@ -132,7 +132,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                         ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation?.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
                       </p>
                     )}
-                  <p className="text-[11px] text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
+                  <p className="text-xs text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
                   {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
                   {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
                 </div>
