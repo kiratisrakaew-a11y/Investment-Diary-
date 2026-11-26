@@ -3,6 +3,8 @@
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { formatChange, formatNumber, formatPercent } from "@/lib/format";
 import { Badge, Card, Collapsible, EmptyState, ErrorState, KpiCard, PageHeader, Section, Skeleton } from "./ui";
+import { AppIcon, CATEGORY, EmptyIcon, IconButton, IconChip, StatusIcon, type Category } from "./icons";
+import { Gear, Trash } from "@phosphor-icons/react/ssr";
 import { CHART, ChartContainer, DataTable, Tabs, type Column } from "./ui-client";
 
 interface Row {
@@ -97,7 +99,24 @@ export function DesignShowcase() {
           <ErrorState message="โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้านี้อีกครั้ง" />
         </Card>
       </div>
-      <EmptyState title="ยังไม่มี Valuation" description="เพิ่ม Valuation แรกเพื่อดูมูลค่ายุติธรรมของสินทรัพย์นี้" action={<button className="btn">เพิ่ม Valuation</button>} />
+      <Section title="Icon system" subtitle="Phosphor · ขนาด 16/20/24 · chip 36–40px พื้นหลังสีหมวด ~12%">
+        <div className="flex flex-wrap items-center gap-4">
+          {(Object.keys(CATEGORY) as Category[]).map((c) => (
+            <div key={c} className="flex items-center gap-2">
+              <IconChip category={c} label={CATEGORY[c].label} />
+              <span className="text-sm">{CATEGORY[c].label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm">
+          <span className="flex items-center gap-2"><AppIcon icon={Gear} size="sm" /> 16 regular</span>
+          <span className="flex items-center gap-2"><AppIcon icon={Gear} size="md" weight="duotone" /> 20 duotone</span>
+          <span className="flex items-center gap-2"><AppIcon icon={Gear} size="lg" weight="fill" /> 24 fill</span>
+          <span className="flex items-center gap-2"><StatusIcon status="green" /> <StatusIcon status="yellow" /> <StatusIcon status="red" /> status (fill)</span>
+          <span className="flex items-center gap-2"><IconButton icon={Trash} label="ลบรายการ" /> ปุ่มไอคอน (aria-label + tooltip)</span>
+        </div>
+      </Section>
+      <EmptyState icon={<EmptyIcon />} title="ยังไม่มี Valuation" description="เพิ่ม Valuation แรกเพื่อดูมูลค่ายุติธรรมของสินทรัพย์นี้" action={<button className="btn">เพิ่ม Valuation</button>} />
     </div>
   );
 }

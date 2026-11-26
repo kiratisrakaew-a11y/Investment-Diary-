@@ -46,3 +46,11 @@ All displayed numbers go through: `formatNumber`, `formatPercent` (fraction → 
 Static (`src/components/ui.tsx`): `Card`, `Section`, `PageHeader`, `KpiCard` (label muted · big value · ▲▼ change · note), `Badge` (`status` green/yellow/red/info adds a glyph — not colour alone), `Skeleton`, `EmptyState` (title + what to do next + action), `ErrorState` (human sentence, `role=alert`), `Collapsible` (native `<details>`).
 Interactive (`src/components/ui-client.tsx`): `Tabs` (ARIA tablist, ←/→/Home/End), `DataTable` (sticky header, sortable with `aria-sort`, numeric columns right-aligned + tabular-nums, units in header, empties sort last, loading/empty/error built in), `ChartContainer` + `CHART` tokens (series `chart-1..6`, faint grid, muted axes, tooltip style; format values with the Phase 2 helpers).
 Reference page: `/design` (not in the menu). Legacy `Stat` / `Empty` stay until each page is migrated in Phase 4.
+
+## Icons (Phase 3.5, `src/components/icons.tsx`)
+One library: Phosphor (`@phosphor-icons/react/ssr`; works in server + client components). No mixing, no hand-drawn SVG icons.
+- Sizes: 16 (`sm`, in text/buttons) · 20 (`md`, menu) · 24 (`lg`, cards/headings). Empty-state icon 48–64px duotone (`EmptyIcon`).
+- Weights: sidebar idle `regular`, active `duotone`; card icons `duotone`/`fill`; status icons `fill`.
+- `IconChip`: 36/40px circle, category colour at 12% behind a duotone icon of that colour. Categories (`cat-*`): หุ้น `ChartLineUp` blue · กองทุน `Stack` purple · ตราสารหนี้ `Certificate` teal · Valuation `Calculator` orange · Notes `NotePencil` amber · Metrics `Gauge` pink · Event `CalendarStar` red-orange.
+- Status: `CheckCircle` / `Warning` / `XCircle` (fill) via `Badge status` / `StatusIcon` — always with text, never colour alone.
+- Icon without text → `IconButton` (required `aria-label` + `title` tooltip). Decorative icons are `aria-hidden`.

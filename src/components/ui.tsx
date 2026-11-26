@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { ExplainButton, type ExplainSpec } from "./ExplainButton";
 import { formatChange } from "@/lib/format";
+import { EmptyIcon, StatusIcon } from "./icons";
 
 export type Tone = "orange" | "blue" | "green" | "yellow" | "purple" | "red";
 const TONE_VAR: Record<Tone, string> = {
@@ -122,27 +123,23 @@ export function PageHeader({ title, subtitle, action, explain }: { title: string
 }
 
 export type BadgeStatus = "green" | "yellow" | "red" | "info" | "neutral";
-const BADGE_STYLE: Record<BadgeStatus, { cls: string; glyph: string; label: string }> = {
-  green: { cls: "border-positive/40 bg-positive/10 text-positive", glyph: "✓", label: "ปกติ" },
-  yellow: { cls: "border-warning/40 bg-warning/10 text-warning", glyph: "!", label: "เฝ้าระวัง" },
-  red: { cls: "border-negative/40 bg-negative/10 text-negative", glyph: "✕", label: "ผิดปกติ" },
-  info: { cls: "border-primary/40 bg-primary/10 text-primary", glyph: "i", label: "ข้อมูล" },
-  neutral: { cls: "border-border bg-panel-2 text-text-muted", glyph: "", label: "" },
+const BADGE_STYLE: Record<BadgeStatus, { cls: string; label: string }> = {
+  green: { cls: "border-positive/40 bg-positive/10 text-positive", label: "ปกติ" },
+  yellow: { cls: "border-warning/40 bg-warning/10 text-warning", label: "เฝ้าระวัง" },
+  red: { cls: "border-negative/40 bg-negative/10 text-negative", label: "ผิดปกติ" },
+  info: { cls: "border-primary/40 bg-primary/10 text-primary", label: "ข้อมูล" },
+  neutral: { cls: "border-border bg-panel-2 text-text-muted", label: "" },
 };
 /**
- * Status / category chip. `status` adds a glyph so colour is never the only signal
- * (Phase 3.5 swaps the glyph for the CheckCircle / Warning / XCircle icons).
+ * Status / category chip. `status` adds an icon so colour is never the only signal
+ * (CheckCircle / Warning / XCircle, filled).
  */
 export function Badge({ children, className, title, status = "neutral" }: { children: React.ReactNode; className?: string; title?: string; status?: BadgeStatus }) {
   const st = BADGE_STYLE[status];
   return (
     <span title={title} className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", st.cls, className)}>
-      {st.glyph && (
-        <span aria-hidden className="font-semibold">
-          {st.glyph}
-        </span>
-      )}
-      {st.glyph && <span className="sr-only">{st.label}: </span>}
+      {status !== "neutral" && <StatusIcon status={status} />}
+      {st.label && <span className="sr-only">{st.label}: </span>}
       {children}
     </span>
   );
@@ -209,11 +206,11 @@ export function Skeleton({ className, lines }: { className?: string; lines?: num
   return <div aria-hidden className={clsx("animate-pulse rounded-md bg-panel-2", className ?? "h-4")} />;
 }
 
-/** Nothing here yet: say what to do next (action = a button / link). Icon slot is 48–64px duotone (Phase 3.5). */
+/** Nothing here yet: say what to do next (action = a button / link). Icon is 48–64px duotone (default Tray; pass <EmptyIcon icon={…} />). */
 export function EmptyState({ title, description, action, icon, className }: { title: string; description?: React.ReactNode; action?: React.ReactNode; icon?: React.ReactNode; className?: string }) {
   return (
     <div className={clsx("flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-6 py-8 text-center", className)}>
-      {icon && <div className="mb-1 text-text-muted">{icon}</div>}
+      <div className="mb-1">{icon ?? <EmptyIcon />}</div>
       <div className="text-base font-medium">{title}</div>
       {description && <p className="max-w-md text-sm text-text-muted">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
@@ -226,7 +223,7 @@ export function ErrorState({ title = "เกิดข้อผิดพลาด
   return (
     <div role="alert" className={clsx("flex flex-col gap-1 rounded-xl border border-negative/40 bg-negative/10 px-4 py-3 text-sm", className)}>
       <div className="font-medium text-negative">
-        <span aria-hidden>✕ </span>
+        <StatusIcon status="red" className="mr-1 inline align-text-bottom" />
         {title}
       </div>
       {message && <div className="text-text-muted">{message}</div>}
