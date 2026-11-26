@@ -146,7 +146,7 @@ export function DataTable<T>({
                   key={c.key}
                   scope="col"
                   aria-sort={on ? (sort!.dir === "asc" ? "ascending" : "descending") : sortable ? "none" : undefined}
-                  className={clsx("sticky top-0 z-10 border-b border-border bg-panel-solid px-3 py-2 text-xs font-semibold whitespace-nowrap text-text-muted", c.numeric ? "text-right" : "text-left")}
+                  className={clsx("sticky top-0 z-10 border-b border-border bg-panel-solid px-2 py-2 text-xs font-semibold whitespace-nowrap text-text-muted", c.numeric ? "text-right" : "text-left")}
                 >
                   {sortable ? (
                     <button
@@ -177,7 +177,7 @@ export function DataTable<T>({
           {sorted.map((r, i) => (
             <tr key={rowKey(r, i)} className="border-b border-border/60 last:border-0 even:bg-panel-2/30 hover:bg-panel-2/60">
               {columns.map((c) => (
-                <td key={c.key} className={clsx("px-3 py-2", c.numeric ? "text-right tabular-nums" : "text-left", c.className)}>
+                <td key={c.key} className={clsx("px-2 py-2", c.numeric ? "text-right tabular-nums" : "text-left", c.className)}>
                   {c.render(r)}
                 </td>
               ))}

@@ -163,9 +163,15 @@ export function KpiCard({
   note,
   hint,
   className,
+  icon,
+  valueClassName,
 }: {
   label: string;
   value: React.ReactNode;
+  /** Icon chip shown top-right (an <IconChip/>). */
+  icon?: React.ReactNode;
+  /** Gain/loss colour class for the value (positive / negative only). */
+  valueClassName?: string;
   change?: number | null;
   changeKind?: "percent" | "number" | "money";
   changeLabel?: string;
@@ -176,8 +182,11 @@ export function KpiCard({
   const ch = change === undefined ? null : formatChange(change, changeKind);
   return (
     <div className={clsx("card", className)} title={hint}>
-      <div className="text-sm text-text-muted">{label}</div>
-      <div className="mt-1 text-2xl leading-tight font-semibold break-words tabular-nums">{value}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-sm text-text-muted">{label}</div>
+        {icon}
+      </div>
+      <div className={clsx("mt-1 text-2xl leading-tight font-semibold break-words tabular-nums", valueClassName)}>{value}</div>
       {(ch || note) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs">
           {ch && (
