@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-26 — Optimizer bullet chart: asset details on hover / tap
+- Hovering (or tapping on a phone) an asset point in the "รูปหัวกระสุน" chart on the optimizer page shows a box next to the point:
+  - symbol, name, asset class and sector;
+  - σ, the E[R] used and where it came from (method or edited by hand), the asset's own Sharpe;
+  - β, historical μ vs CAPM μ;
+  - held weight → recommended weight (the same figures as the allocation table).
+- Other points and lines keep the σ / E[R] tooltip. Recharts does not raise item tooltips for scatter points in this composed chart, so the chart tracks the hovered asset itself. No calculation changed.
+
 ## 2026-11-20 — MPT fix, phase 5 (BACKTEST_SPEC BT-7, modelVersion)
 - **BT-7**: checks that total_return + dividend cash flows is refused (dividends would be counted twice). Also checks that, on the same universe, `total_return` (adjusted closes) and `price_return` + cash dividends (no withholding, paid on the ex-date) give CAGRs within 0.3%/yr (TEST data: 4.64% vs 4.75%). The per-asset total-return policy (gold / no-dividend stocks on closes, `returnBasisByAsset`) has been in the backtest since MPT phase 2.
 - **MODEL_VERSION `2026.11-mpt5`** (was `2026.10-val6`): the portfolio estimation changes of MPT phases 2–4, the backtest phases and the price-basis spec. Valuation formulas are unchanged; saved valuations recompute to the same value and differ only in the version label. Docs: `docs/MODEL_DOCUMENTATION.md` §4 (μ estimators, sampling, history policy) and the version note.

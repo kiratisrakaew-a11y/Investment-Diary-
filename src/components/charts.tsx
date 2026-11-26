@@ -18,7 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useId } from "react";
+import { useId, useRef, useState } from "react";
 import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtThb } from "@/lib/format";
 import type { AssetClass } from "@/db/schema";
 
@@ -184,6 +184,78 @@ export function FrontierChart({
 
 type Pt2 = { volatility: number; expectedReturn: number };
 
+/** Details shown when an asset point of the bullet chart is hovered / tapped. */
+export interface AssetPointDetail {
+  name: string;
+  assetClass: string;
+  sector: string | null;
+  beta: number | null;
+  historicalReturn: number;
+  capmReturn: number | null;
+  /** Where the E[R] used comes from (method or "แก้เอง"). */
+  muSource: string;
+  currentWeight: number | null;
+  recommendedWeight: number | null;
+}
+
+/** Default tooltip (lines / portfolio points); hidden while an asset point shows its own box. */
+function BulletTip({
+  active,
+  payload,
+  hideFor,
+}: {
+  active?: boolean;
+  payload?: { name?: string; payload?: Pt2 }[];
+  hideFor?: unknown;
+}) {
+  const p = payload?.[0]?.payload;
+  if (hideFor || !active || !p) return null;
+  const f = (v: number) => `${(v * 100).toFixed(1)}%`;
+  return (
+    <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px" }}>
+      {payload?.[0]?.name && <div style={{ color: "var(--muted)" }}>{payload[0].name}</div>}
+      <div>
+        σ {f(p.volatility)} · E[R] {f(p.expectedReturn)}
+      </div>
+    </div>
+  );
+}
+
+/** Asset point details (hover on desktop, tap on mobile). */
+function AssetTipBox({ p, rf }: { p: Pt2 & { symbol: string; detail?: AssetPointDetail }; rf: number }) {
+  const f = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`);
+  const d = p.detail;
+  const sharpe = p.volatility > 0 ? (p.expectedReturn - rf) / p.volatility : null;
+  const row = (k: string, v: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ color: "var(--muted)" }}>{k}</span>
+      <span style={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{v}</span>
+    </div>
+  );
+  return (
+    <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px", width: 250, boxShadow: "0 4px 16px rgba(0,0,0,.25)" }} data-testid="bullet-asset-tip">
+      <div style={{ fontWeight: 600 }}>
+        {p.symbol} {d && <span style={{ fontWeight: 400, color: "var(--muted)" }}>{d.name}</span>}
+      </div>
+      {d && (
+        <div style={{ color: "var(--muted)", marginBottom: 4 }}>
+          {d.assetClass} · {d.sector ?? "ยังไม่ระบุหมวด"}
+        </div>
+      )}
+      {row("ความเสี่ยง σ ต่อปี", f(p.volatility))}
+      {row(`E[R] ที่ใช้${d ? ` (${d.muSource})` : ""}`, f(p.expectedReturn))}
+      {row("Sharpe (รายตัว)", sharpe == null ? "–" : sharpe.toFixed(2))}
+      {d && (
+        <>
+          {row("β", d.beta == null ? "–" : d.beta.toFixed(2))}
+          {row("μ ในอดีต / CAPM", `${f(d.historicalReturn)} / ${f(d.capmReturn)}`)}
+          {row("น้ำหนัก ถือ → แนะนำ", `${d.currentWeight ? f(d.currentWeight) : "ไม่ได้ถือ"} → ${f(d.recommendedWeight)}`)}
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * The Markowitz "bullet": minimum-variance set in risk/return space. Upper arm
  * (solid) is efficient, lower arm (dashed) inefficient. Shows both the
@@ -201,7 +273,7 @@ export function BulletChart({
 }: {
   unconstrained: (Pt2 & { efficient: boolean })[];
   constrained: (Pt2 & { efficient: boolean })[];
-  assets: (Pt2 & { symbol: string })[];
+  assets: (Pt2 & { symbol: string; detail?: AssetPointDetail })[];
   current: Pt2 | null;
   recommended: Pt2;
   gmv: Pt2;
@@ -229,20 +301,25 @@ export function BulletChart({
           { volatility: maxVol, expectedReturn: rf + slope * maxVol },
         ]
       : [];
+  const [hover, setHover] = useState<{ symbol: string; x: number; y: number } | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const hoverAsset = hover ? (assets.find((a) => a.symbol === hover.symbol) ?? null) : null;
+  const hoverAt = hover ? { x: hover.x, y: hover.y } : null;
+  // Recharts passes the point with its pixel position (cx, cy) inside the chart.
+  const pick = (d: unknown) => {
+    const q = d as { symbol?: string; cx?: number; cy?: number; payload?: { symbol?: string } };
+    const symbol = q.symbol ?? q.payload?.symbol;
+    setHover(symbol && q.cx != null && q.cy != null ? { symbol, x: q.cx, y: q.cy } : null);
+  };
   const uncGmv = unconstrained.reduce((m, p) => (p.volatility < m.volatility ? p : m), unconstrained[0] ?? gmv);
-  const fmt = (v: number) => `${(v * 100).toFixed(1)}%`;
   return (
+    <div className="relative" ref={boxRef}>
     <ResponsiveContainer width="100%" height={420}>
       <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
         <CartesianGrid stroke="var(--grid)" />
         <XAxis type="number" dataKey="volatility" {...axis} tickFormatter={pct} domain={[0, maxVol]} allowDataOverflow label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 11, fill: "var(--muted)" }} />
         <YAxis type="number" dataKey="expectedReturn" {...axis} tickFormatter={pct} width={48} domain={["auto", "auto"]} allowDataOverflow />
-        <Tooltip
-          {...tooltipStyle}
-          cursor={{ strokeDasharray: "3 3" }}
-          formatter={(v, n) => [fmt(Number(v)), n === "volatility" ? "σ" : n === "expectedReturn" ? "E[R]" : String(n)]}
-          labelFormatter={() => ""}
-        />
+        <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<BulletTip hideFor={hoverAsset} />} />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
         {unconstrained.length > 0 && (
           <>
@@ -253,7 +330,19 @@ export function BulletChart({
         <Line name="Efficient frontier ตามข้อจำกัด (ลงทุนได้จริง)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
         <Line name="ส่วนไม่มีประสิทธิภาพ" data={arm(constrained, false, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
         {cml.length > 0 && <Line name="Capital Market Line (จาก Rf)" data={cml} dataKey="expectedReturn" stroke="var(--series-3)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />}
-        <Scatter name="สินทรัพย์" data={assets} fill="var(--series-4)" stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false} />
+        {/* Scatter points do not drive this composed chart's tooltip: track the hovered / tapped asset ourselves. */}
+        <Scatter
+          name="สินทรัพย์"
+          data={assets}
+          fill="var(--series-4)"
+          stroke="var(--panel-solid)"
+          strokeWidth={2}
+          isAnimationActive={false}
+          onMouseEnter={(d) => pick(d)}
+          onMouseLeave={() => setHover(null)}
+          onClick={(d) => pick(d)}
+          style={{ cursor: "pointer" }}
+        />
         {current && <Scatter name="พอร์ตปัจจุบัน" data={[current]} fill="var(--series-2)" stroke="var(--panel-solid)" strokeWidth={2} shape="diamond" isAnimationActive={false} />}
         <Scatter name="Min variance" data={[gmv]} fill="var(--series-5)" stroke="var(--panel-solid)" strokeWidth={2} shape="triangle" isAnimationActive={false} />
         {tangency && <Scatter name="Max Sharpe (tangency)" data={[tangency]} fill="var(--series-3)" stroke="var(--panel-solid)" strokeWidth={2} shape="star" isAnimationActive={false} />}
@@ -261,6 +350,18 @@ export function BulletChart({
         <Scatter name="แนะนำ" data={[recommended]} fill="var(--series-6)" stroke="var(--panel-solid)" strokeWidth={2} shape="square" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>
+      {hoverAsset && hoverAt && (
+        <div
+          className="pointer-events-none absolute z-10"
+          style={{
+            top: Math.max(4, Math.min(hoverAt.y - 20, 420 - 210)),
+            ...(hoverAt.x < (boxRef.current?.clientWidth ?? 0) / 2 ? { left: hoverAt.x + 14 } : { right: (boxRef.current?.clientWidth ?? 0) - hoverAt.x + 14 }),
+          }}
+        >
+          <AssetTipBox p={hoverAsset} rf={rf} />
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -19,6 +19,13 @@ import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
 
 type ReturnMethod = "historical" | "capm" | "blend" | "shrinkage" | "black_litterman";
+const METHOD_LABEL: Record<ReturnMethod, string> = {
+  historical: "ค่าเฉลี่ยในอดีต",
+  capm: "CAPM",
+  blend: "ผสม",
+  shrinkage: "Shrinkage",
+  black_litterman: "Black–Litterman",
+};
 
 const OBJECTIVES: { value: Objective; label: string }[] = [
   { value: "max_sharpe", label: "Max Sharpe (tangency)" },
@@ -467,7 +474,26 @@ export function OptimizerClient({
             <BulletChart
               unconstrained={r.unconstrained?.curve ?? []}
               constrained={r.bullet}
-              assets={result!.idx.map((i) => ({ symbol: assets[i].symbol, volatility: Math.sqrt(cov[i][i]), expectedReturn: mu[i] }))}
+              assets={result!.idx.map((i) => {
+                const a = assets[i];
+                const alloc = r.allocations.find((x) => x.symbol === a.symbol);
+                return {
+                  symbol: a.symbol,
+                  volatility: Math.sqrt(cov[i][i]),
+                  expectedReturn: mu[i],
+                  detail: {
+                    name: a.name,
+                    assetClass: ASSET_CLASS_LABEL[a.assetClass],
+                    sector: a.sector,
+                    beta: a.beta,
+                    historicalReturn: a.historicalReturn,
+                    capmReturn: a.capmReturn,
+                    muSource: overrides[a.symbol] != null ? "แก้เอง" : METHOD_LABEL[method],
+                    currentWeight: alloc?.currentWeight ?? null,
+                    recommendedWeight: alloc?.weight ?? null,
+                  },
+                };
+              })}
               current={r.current}
               recommended={{ volatility: r.final.volatility, expectedReturn: r.final.expectedReturn }}
               gmv={r.gmv}
