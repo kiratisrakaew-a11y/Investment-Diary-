@@ -72,7 +72,8 @@ export function OptimizerClient({
   erp: number;
   period: string;
 }) {
-  const [included, setIncluded] = useState<Set<string>>(new Set(assets.map((a) => a.symbol)));
+  // spec-mpt-selected-universe: `assets` is already the checked set (the server loaded μ / Σ / β from it only).
+  const included = useMemo(() => new Set(assets.map((a) => a.symbol)), [assets]);
   const [method, setMethod] = useState<ReturnMethod>("blend");
   const [overrides, setOverrides] = useState<Record<string, number | null>>({});
   const [objective, setObjective] = useState<Objective>("max_sharpe");
@@ -103,7 +104,8 @@ export function OptimizerClient({
   const [tau, setTau] = useState(0.05);
   const [views, setViews] = useState<BlView[]>([]);
   const [postCov, setPostCov] = useState(false);
-  const [result, setResult] = useState<{
+  const [resultRaw, setResultRaw] = useState<{
+    sig: string;
     r: RecommendOutcome;
     idx: number[];
     prior: RecommendOutcome | null;
@@ -111,6 +113,11 @@ export function OptimizerClient({
     built?: ReturnType<typeof buildConstraints>;
     exposure?: ReturnType<typeof exposureReport> | null;
   } | null>(null);
+  // The checked set changes with the page (server-side); a result computed for another set is never shown.
+  const sig = assets.map((a) => a.symbol).join(",");
+  type ResultValue = Omit<NonNullable<typeof resultRaw>, "sig">;
+  const result = resultRaw && resultRaw.sig === sig ? resultRaw : null;
+  const setResult = (v: ResultValue | null) => setResultRaw(v ? { ...v, sig } : null);
   const [error, setError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
@@ -124,7 +131,8 @@ export function OptimizerClient({
       symbols: idxIncluded.map((i) => assets[i].symbol),
       cov: idxIncluded.map((i) => idxIncluded.map((j) => cov[i][j])),
       rf,
-      marketWeights: Object.fromEntries(Object.entries(mktW).filter((e): e is [string, number] => e[1] != null)),
+      // Only checked assets carry market weights (an unchecked asset has no influence).
+      marketWeights: Object.fromEntries(Object.entries(mktW).filter((e): e is [string, number] => e[1] != null && included.has(e[0]))),
       riskAversion: delta ?? undefined,
       marketPremium: erp,
       tau,
@@ -385,19 +393,9 @@ export function OptimizerClient({
               </thead>
               <tbody>
                 {assets.map((a, i) => (
-                  <tr key={a.symbol} className={clsx(!included.has(a.symbol) && "opacity-40")}>
+                  <tr key={a.symbol}>
                     <td>
-                      <input
-                        type="checkbox"
-                        className="accent-[var(--accent)]"
-                        checked={included.has(a.symbol)}
-                        onChange={(e) => {
-                          const s = new Set(included);
-                          if (e.target.checked) s.add(a.symbol);
-                          else s.delete(a.symbol);
-                          setIncluded(s);
-                        }}
-                      />
+                      <input type="checkbox" className="accent-[var(--accent)]" checked readOnly disabled title="เปลี่ยนชุดสินทรัพย์ที่ด้านบนของหน้า" />
                     </td>
                     <td>
                       <span className="font-medium">{a.symbol}</span> <span className="text-xs text-muted">{ASSET_CLASS_LABEL[a.assetClass]}</span>
@@ -466,6 +464,9 @@ export function OptimizerClient({
 
       {r && (
         <>
+          <p className="text-xs text-muted" data-testid="universe-used">
+            ชุดสินทรัพย์ที่ใช้: {result!.idx.length} ตัว — {result!.idx.map((i) => assets[i].symbol).join(", ")}
+          </p>
           <section className="card">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-[15px] font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>

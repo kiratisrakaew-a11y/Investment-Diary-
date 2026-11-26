@@ -263,6 +263,8 @@ export async function loadBacktestData(x: BacktestDataRequest) {
     getSettings(),
     getTradingCosts(),
   ]);
+  if (x.symbols && x.symbols.length === 0)
+    throw new Error("ไม่ได้เลือกสินทรัพย์ (symbols ว่าง) — เลือกอย่างน้อย 1 ตัว หรือไม่ส่ง symbols เพื่อใช้ทุกตัว");
   const { candidates, skipped, wanted } = selectCandidates(assets, x.symbols);
   if (wanted) {
     const missing = [...wanted].filter(

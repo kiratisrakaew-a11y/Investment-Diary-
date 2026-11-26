@@ -202,6 +202,16 @@ export async function getMptAnalysis(
   const held = snap.positions.filter((p) => p.quantity > 0 && p.assetClass !== "cash");
   // spec-lookback-window: the same universe loader as optimize_portfolio (window, frequency, history policy,
   // price basis), so the two report the same period and windowInfo for the same input.
+  if (!held.length)
+    return {
+      ok: false as const,
+      reason: "ยังไม่มีสินทรัพย์ที่ถืออยู่",
+      skipped: [] as string[],
+      skippedDetail: [],
+      priceBasis: priceBasisReport(resolveReturnBasis(opts.returnBasis, null, "price_return")),
+      windowInfo: undefined,
+      coverage: undefined,
+    };
   const { loadUniverse } = await import("./optimizer");
   const u = await loadUniverse(lookbackDays, held.map((p) => p.symbol), {
     withSeries: true,

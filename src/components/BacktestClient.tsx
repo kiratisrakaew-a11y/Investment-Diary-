@@ -573,6 +573,10 @@ export function BacktestClient({
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <WindowBanner info={res.windowInfo} />
+          <p className="text-xs text-muted" data-testid="universe-used">
+            ชุดสินทรัพย์ที่ใช้: {res.universe.length} ตัว — {res.universe.join(", ")}
+          </p>
+
           <div className="flex justify-end">
             <ExplainButton
               topic={`ผล Backtest (${res.strategy})`}

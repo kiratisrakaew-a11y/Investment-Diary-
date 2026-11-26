@@ -12,17 +12,22 @@ import { WindowBanner, WindowPicker } from "@/components/WindowPicker";
 import { CoverageTable } from "@/components/CoverageTable";
 import { WindowError, windowFromPageQuery, type WindowPreset } from "@/lib/finance/window";
 import Link from "next/link";
+import { listAssets } from "@/server/services/assets";
+import { ASSET_CLASS_LABEL } from "@/lib/format";
+import { UniversePicker } from "@/components/UniversePicker";
+import { pageBenchmark, parseSelection, periodUnit } from "@/lib/finance/universe-selection";
 
 export default async function OptimizerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ basis?: string; bench?: string; win?: string; from?: string; to?: string; mu?: string; hp?: string; ack?: string }>;
+  searchParams: Promise<{ basis?: string; bench?: string; win?: string; from?: string; to?: string; mu?: string; hp?: string; ack?: string; sel?: string }>;
 }) {
   const q = await searchParams;
   const [settings, benchmarks] = await Promise.all([getSettings(), listBenchmarks()]);
   // PRICE_BASIS_BENCHMARK_SPEC F3: ?basis=…&bench=… override Settings for this page; μ/Σ are recomputed server-side.
   const returnBasis = isReturnBasis(q.basis) ? q.basis : settings.defaultReturnBasis;
-  const benchmark = q.bench?.trim() || settings.defaultBenchmark;
+  // spec-mpt-selected-universe 8: on total_return an unchosen index becomes "auto" (a total-return index when stored).
+  const benchmark = pageBenchmark(returnBasis, q.bench?.trim() || settings.defaultBenchmark);
   const basis: { returnBasis: typeof returnBasis; benchmark: string; window?: unknown } = { returnBasis, benchmark };
   // spec-lookback-window: ?win=…&from=…&to=…&mu=… (data period) and ?hp=… (history policy) for this page.
   const winQ = windowFromPageQuery(q);
@@ -33,10 +38,15 @@ export default async function OptimizerPage({
     endDate: winQ.request?.endDate,
     muPreset: winQ.request?.muWindow?.preset,
   };
+  // spec-mpt-selected-universe: the checked assets (?sel=) are the universe — nothing else reaches μ / Σ / β.
+  const catalogAssets = (await listAssets()).filter((a) => a.assetClass !== "cash" && !a.archivedAt);
+  const catalog = catalogAssets.map((a) => ({ symbol: a.symbol, name: a.name, assetClassLabel: ASSET_CLASS_LABEL[a.assetClass], held: false }));
+  const selected = parseSelection(q.sel, catalog.map((c) => c.symbol));
   let u: Awaited<ReturnType<typeof loadUniverse>> | null = null;
   let benchError: string | null = winQ.error ? `ช่วงข้อมูลไม่ถูกต้อง: ${winQ.error}` : null;
   try {
-    u = await loadUniverse(undefined, undefined, { withSeries: true, returnBasis, benchmark, window: winQ.request, historyPolicy });
+    // Nothing selected → no run (never a silent fallback to every asset).
+    if (selected.length) u = await loadUniverse(undefined, selected, { withSeries: true, returnBasis, benchmark, window: winQ.request, historyPolicy });
   } catch (e) {
     if (e instanceof BenchmarkError) benchError = `${e.message} [${e.code}] — ${e.issue.suggestion}`;
     else if (e instanceof WindowError) benchError = `${e.message} [${e.code}]${e.hint ? ` — ${e.hint}` : ""}`;
@@ -49,8 +59,11 @@ export default async function OptimizerPage({
   };
   basis.window = winQ.request;
   const insufficient = u?.windowInfo?.quality === "insufficient" && q.ack !== "1";
+  const heldSet = new Set(u?.assets.filter((a) => a.held).map((a) => a.symbol) ?? []);
+  for (const c of catalog) c.held = heldSet.has(c.symbol);
   const picker = (
     <div className="card space-y-2">
+      <UniversePicker catalog={catalog} selected={selected} skipped={u?.skipped ?? []} />
       <BasisBenchmarkPicker
         mode="query"
         value={{ basis: returnBasis, bench: benchmark }}
@@ -101,7 +114,7 @@ export default async function OptimizerPage({
         <>
           {picker}
           <Empty>
-            {benchError ?? u?.reason}
+            {benchError ?? (selected.length === 0 ? "ยังไม่ได้เลือกสินทรัพย์ — เลือกอย่างน้อย 2 ตัวเพื่อคำนวณ" : u?.reason)}
             {u && u.skipped.length > 0 && <div className="mt-2 text-xs">{u.skipped.map((s) => `${s.symbol}: ${s.reason}`).join(" · ")}</div>}
           </Empty>
         </>
@@ -127,9 +140,9 @@ export default async function OptimizerPage({
                 basis={basis}
                 years={universeYears(u)}
                 muCap={settings.muCapPct != null ? settings.muCapPct / 100 : null}
-                erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} วัน)`} scenarios={u.series?.returns} />
+                erp={u.equityRiskPremium} period={`${u.from} → ${u.to} (${u.observations} ${periodUnit(u.frequency)})`} scenarios={u.series?.returns} />
             }
-            comparison={<ModelComparisonClient assets={u.assets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} basis={basis} benchmarks={benchmarks} initialWindow={winValue} />}
+            comparison={<ModelComparisonClient assets={catalogAssets.map((a) => ({ symbol: a.symbol, assetClass: a.assetClass }))} defaultIncluded={selected} basis={basis} benchmarks={benchmarks} initialWindow={winValue} />}
           />
         </>
       )}

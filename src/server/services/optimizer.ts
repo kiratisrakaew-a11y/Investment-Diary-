@@ -370,6 +370,13 @@ export async function loadUniverse(
     assetClass: a.assetClass,
     currency: a.currency,
   }));
+  // An explicit empty selection is an error, never "every asset" (spec-mpt-selected-universe 6).
+  if (symbols && symbols.length === 0)
+    throw new OptimizerError({
+      code: "INVALID_INPUT",
+      message: "ไม่ได้เลือกสินทรัพย์ (symbols ว่าง)",
+      suggestion: "เลือกอย่างน้อย 2 สินทรัพย์ หรือไม่ส่ง symbols เพื่อใช้ทุกตัว",
+    });
   const { candidates, skipped } = selectCandidates(assets, symbols);
   // spec-lookback-window: one resolved period; nothing after endDate is used (prices, adj, FX, benchmark).
   const lastPriceDate = candidates.reduce((m, a) => {
@@ -1320,6 +1327,7 @@ export async function optimizePortfolio(p: OptimizeRequest) {
     returnBasisByAsset: u.returnBasisByAsset,
     priceBasis: u.priceBasis,
     benchmark: u.benchmark,
+    windowInfo: u.windowInfo,
     objective: r.objective,
     allocations: r.allocations,
     ...(r.riskBased

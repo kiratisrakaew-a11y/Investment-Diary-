@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-26 — Optimizer page uses only the assets the user selected (spec-mpt-selected-universe)
+- **Root cause**: the page loaded μ / Σ / β, the period, the frequency and the warnings from every asset (29), and only then filtered by the checkboxes in the browser. An unchecked asset therefore still decided the result: a new listing cut the period to 1.0 year, a US-time close forced weekly sampling, an unchecked stock's missing adjusted closes raised a warning, and the blend weight followed the shortened data.
+- **Fix**: the checked set is part of the URL (`?sel=A,B,C`). The server loads the universe from those symbols only, every time (also when all are checked).
+  - New `UniversePicker` at the top of the page (tick / untick with a short delay, "เลือกทั้งหมด / ล้าง", selected assets that could not be used show the reason). The server recomputes the period, coverage table, banner and warnings, so each change refreshes the preview.
+  - Default E[R] follows the set; edited E[R] stays for assets still checked. Black–Litterman market weights only include checked assets.
+  - Nothing checked → a message and no run; it never falls back to every asset.
+  - The result shows "ชุดสินทรัพย์ที่ใช้: N ตัว — …" (also for model comparison and backtest).
+  - The page result equals `optimize_portfolio({ symbols, window, returnBasis, dryRun })` for the same set (`optimize_portfolio` also returns `windowInfo`).
+  - The comparison tab lists every asset and starts from the page's selection.
+- **Empty `symbols: []` is now an error** in `optimize_portfolio`, `get_investment_universe`, `backtest_portfolio` (model comparison already required at least 2). It used to mean every asset. Not sending `symbols` still means every asset. An empty holdings list in `get_portfolio_optimization` returns a clear "no holdings" result.
+- **Benchmark**: on total_return, when no index is chosen the page passes `auto` (a total-return index such as SETTRI when stored) instead of falling to the price index, so β / CAPM no longer carry the basis-mismatch warning. **β / CAPM on that page can change** when a total-return index is stored.
+- **Label**: the period in the Rf / ERP box uses the frequency's unit (วัน / สัปดาห์ / เดือน) instead of always "วัน".
+- Checks: new `npm run check:universe` (TEST data: a late listing, a USD asset and a dividend payer without adj_close, all unchecked, change nothing in the same checked set's output, warnings or windowInfo; the page universe equals the dry run; checking the late listing shortens the period and unchecking restores it; USD switches to weekly only when checked; empty selection errors). New `e2e/universe-smoke.mjs`. Unit tests for the selection and benchmark helpers.
+
 ## 2026-11-26 — Lookback window, phase W3 (UI, Settings, spec 8.2 / 8.3, docs)
 - **Period picker** (`components/WindowPicker.tsx`): 1Y … 10Y / ทั้งหมด / กำหนดเอง (start date); under "ขั้นสูง", an analysis date and a separate period for expected returns.
   - Pages use the URL (`?win=…&from=…&to=…&mu=…`): the optimizer page and the MPT section of the analytics page.

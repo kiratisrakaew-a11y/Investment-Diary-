@@ -90,6 +90,7 @@ export function ModelComparisonClient({
   basis: initialBasis,
   benchmarks = [],
   initialWindow,
+  defaultIncluded,
 }: {
   assets: Asset[];
   /** Page values (PRICE_BASIS_BENCHMARK_SPEC F4); changed here for this comparison only. */
@@ -97,6 +98,8 @@ export function ModelComparisonClient({
   benchmarks?: PickerBenchmark[];
   /** Page / Settings data period (spec-lookback-window); changed here for this comparison only. */
   initialWindow?: WindowValue;
+  /** Symbols checked at first (the optimizer page's selection); default = every asset. */
+  defaultIncluded?: string[];
 }) {
   const [win, setWin] = useState<WindowValue>(initialWindow ?? { preset: "3y" });
   const [basis, setBasis] = useState<BasisBenchmarkValue>({
@@ -104,7 +107,7 @@ export function ModelComparisonClient({
     bench: initialBasis?.benchmark ?? "default",
   });
   const [included, setIncluded] = useState<Set<string>>(
-    new Set(assets.map((a) => a.symbol)),
+    new Set(defaultIncluded ?? assets.map((a) => a.symbol)),
   );
   const [splitPct, setSplitPct] = useState(70);
   const [windowDays, setWindowDays] = useState(252);
@@ -360,6 +363,10 @@ export function ModelComparisonClient({
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <WindowBanner info={res.windowInfo} />
+          <p className="text-xs text-muted" data-testid="universe-used">
+            ชุดสินทรัพย์ที่ใช้: {res.symbols.length} ตัว — {res.symbols.join(", ")}
+          </p>
+
           <div className="flex flex-wrap items-center gap-3">
             <div
               role="group"
