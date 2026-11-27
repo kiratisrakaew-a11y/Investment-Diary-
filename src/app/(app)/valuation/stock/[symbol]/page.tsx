@@ -7,8 +7,10 @@ import { getStatements } from "@/server/services/statements";
 import { getTimestampPolicy } from "@/server/services/settings";
 import { priceDateAt, statementsAsOfAt, timestampFlags } from "@/lib/governance";
 import { SavedValuationList, type SavedValuationRow } from "@/components/SavedValuationList";
-import { PageHeader, Section } from "@/components/ui";
-import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
+import { Card, KpiCard, PageHeader, Section } from "@/components/ui";
+import { Tabs } from "@/components/ui-client";
+import { IconChip } from "@/components/icons";
+import { METHOD_LABEL, fmtNum, fmtPct, formatChange } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
 import { consensusSummary } from "@/server/services/consensus";
 import { ConsensusCard } from "@/components/ConsensusCard";
@@ -47,7 +49,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
   const max = Math.max(price ?? 0, cons?.targetHigh ?? 0, consTarget ?? 0, ...(group?.latestByMethod.map((r) => r.intrinsicValue ?? 0) ?? [0])) * 1.1 || 1;
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title={`มูลค่าหุ้น ${symbol}`}
         subtitle={asset ? asset.name : undefined}
@@ -58,31 +60,23 @@ export default async function StockValuationPage({ params }: { params: Promise<{
                 + ประเมินด้วย {METHOD_LABEL[unused[0]]}
               </Link>
             )}
-            <Link href={`/valuation/new?symbol=${symbol}`} className="btn-ghost">+ valuation ใหม่</Link>
+            <Link href={`/valuation/new?symbol=${symbol}`} className={unused.length > 0 ? "btn-ghost" : "btn"}>+ valuation ใหม่</Link>
             <Link href={`/valuation/new?symbol=${symbol}&method=sotp`} className="btn-ghost">+ SOTP</Link>
           </div>
         }
       />
 
-      <section className="card">
-        <dl className="flex flex-wrap gap-x-10 gap-y-3">
-          <Metric k="ราคาปิดล่าสุดในระบบ" v={fmtNum(price)} sub={hist.length ? `ณ ${hist[hist.length - 1].date} · ไม่ใช่ราคาเรียลไทม์` : "ไม่มีราคาในระบบ — ใช้ราคาวันประเมิน"} />
-          <Metric
-            k="มูลค่าเฉลี่ย (ล่าสุดของแต่ละวิธี)"
-            v={fmtNum(avg)}
-            sub={group ? `มัธยฐาน ${fmtNum(group.median)} · ${group.methods.length} วิธี · ${group.count} ครั้ง` : "ยังไม่มี"}
-          />
-          <Metric k="ช่วงมูลค่า" v={group?.low != null ? `${fmtNum(group.low)} – ${fmtNum(group.high)}` : "—"} />
-          <Metric
-            k="Upside จากค่าเฉลี่ย"
-            v={fmtPct(upside, 1)}
-            tone={signClass(upside)}
-            sub={upside != null && upside > 0 && avg ? `Margin of safety ${fmtPct(1 - (price ?? 0) / avg, 1)}` : undefined}
-          />
-        </dl>
-      </section>
-
-      <ConsensusCard symbol={symbol} latest={cons} view={consensus.view} history={consensus.history ?? []} price={consensus.price} priceDate={consensus.priceDate} today={today()} />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label="ราคาปิดล่าสุดในระบบ" value={fmtNum(price)} note={hist.length ? `ณ ${hist[hist.length - 1].date} · ไม่ใช่ราคาเรียลไทม์` : "ไม่มีราคาในระบบ — ใช้ราคาวันประเมิน"} icon={<IconChip category="stock" label="ราคา" />} />
+        <KpiCard label="มูลค่าเฉลี่ย (FV)" value={fmtNum(avg)} note={group ? `มัธยฐาน ${fmtNum(group.median)} · ${group.methods.length} วิธี · ${group.count} ครั้ง` : "ยังไม่มี"} icon={<IconChip category="valuation" label="มูลค่าเฉลี่ย" />} />
+        <KpiCard
+          label="Upside จากค่าเฉลี่ย"
+          value={upside == null ? "—" : formatChange(upside).text}
+          valueClassName={formatChange(upside).className}
+          note={upside != null && upside > 0 && avg ? `Margin of safety ${fmtPct(1 - (price ?? 0) / avg, 1)}` : undefined}
+        />
+        <KpiCard label="ช่วงมูลค่า" value={group?.low != null ? `${fmtNum(group.low)} – ${fmtNum(group.high)}` : "—"} note="ต่ำสุด – สูงสุดของแต่ละวิธี" />
+      </div>
 
       {group && (
         <Section title="เทียบแต่ละวิธี (ฉบับล่าสุด)" explain={{ data: compact({ symbol, ราคาล่าสุด: hist.at(-1) ?? null, ต่ำสุด: group.low, สูงสุด: group.high, เฉลี่ย: group.average, มัธยฐาน: group.median, รายวิธี: group.latestByMethod.map((v) => ({ วิธี: v.method, วันที่: v.date, มูลค่าต่อหุ้น: v.intrinsicValue })) }), hint: "แต่ละวิธีใช้สมมติฐานต่างกัน ช่วงมูลค่าที่กว้างแปลว่าความไม่แน่นอนสูง" }}>
@@ -91,7 +85,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
               <div key={r.id} className="text-xs">
                 <div className="mb-0.5 flex justify-between">
                   <span>
-                    {METHOD_LABEL[r.method]} <span className="text-muted">· {r.date}{r.title ? ` · ${r.title}` : ""}</span>
+                    {METHOD_LABEL[r.method]} <span className="text-text-muted">· {r.date}{r.title ? ` · ${r.title}` : ""}</span>
                   </span>
                   <span className="tabular-nums">{fmtNum(r.intrinsicValue)}</span>
                 </div>
@@ -101,7 +95,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
                   aria-label={`${METHOD_LABEL[r.method]} ${fmtNum(r.intrinsicValue)}${price != null ? ` เทียบราคา ${fmtNum(price)}` : ""}`}
                 >
                   {r.intrinsicValue != null && r.intrinsicValue > 0 && (
-                    <div className="h-2.5 rounded-full bg-linear-to-r from-accent-2 to-accent" style={{ width: `${Math.min(100, (r.intrinsicValue / max) * 100)}%` }} />
+                    <div className="h-2.5 rounded-full bg-primary" style={{ width: `${Math.min(100, (r.intrinsicValue / max) * 100)}%` }} />
                   )}
                   {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded-md bg-text" style={{ left: `${(price / max) * 100}%` }} />}
                 </div>
@@ -163,24 +157,32 @@ export default async function StockValuationPage({ params }: { params: Promise<{
         )}
       </Section>
 
-      <Section title="งบการเงินย้อนหลัง">
-        <p className="text-sm">
-          {statements.length
-            ? `มีข้อมูล ${statements.length} ปี (${statements[0].fiscalYear}–${statements[statements.length - 1].fiscalYear})`
-            : "ยังไม่มีงบการเงิน"}{" "}
-          · <Link href={`/valuation/new?symbol=${symbol}`} className="text-accent">อัปโหลด / แก้ไขงบในหน้าประเมินมูลค่า →</Link>
-        </p>
-      </Section>
-    </>
-  );
-}
-
-function Metric({ k, v, sub, tone }: { k: string; v: string; sub?: string; tone?: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted">{k}</dt>
-      <dd className={`text-2xl font-semibold tabular-nums ${tone ?? ""}`}>{v}</dd>
-      {sub && <dd className="text-xs text-muted">{sub}</dd>}
+      <Card>
+        <Tabs
+          ariaLabel="รายละเอียดเพิ่มเติมของหุ้น"
+          tabs={[
+            {
+              id: "consensus",
+              label: "Consensus นักวิเคราะห์",
+              content: (
+      <ConsensusCard symbol={symbol} latest={cons} view={consensus.view} history={consensus.history ?? []} price={consensus.price} priceDate={consensus.priceDate} today={today()} />
+              ),
+            },
+            {
+              id: "statements",
+              label: "งบการเงินย้อนหลัง",
+              content: (
+                <p className="text-sm">
+                  {statements.length ? `มีข้อมูล ${statements.length} ปี (${statements[0].fiscalYear}–${statements[statements.length - 1].fiscalYear})` : "ยังไม่มีงบการเงิน"} ·{" "}
+                  <Link href={`/valuation/new?symbol=${symbol}`} className="text-primary">
+                    อัปโหลด / แก้ไขงบในหน้าประเมินมูลค่า →
+                  </Link>
+                </p>
+              ),
+            },
+          ]}
+        />
+      </Card>
     </div>
   );
 }

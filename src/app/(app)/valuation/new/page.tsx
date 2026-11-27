@@ -12,18 +12,18 @@ export default async function NewValuationPage({ searchParams }: { searchParams:
   if (sp.method === "sotp") {
     const { defaults, symbols } = await editorDefaults(symbol);
     return (
-      <>
+      <div className="space-y-6">
         <PageHeader title={`SOTP ${symbol}`} subtitle="Sum of the parts — แต่ละส่วนงานใช้โมเดลประเมินมูลค่าเดิม แล้วกระทบยอด EV → มูลค่าส่วนของผู้ถือหุ้น" />
         <SotpEditor symbol={symbol} symbols={symbols} defaults={defaults} />
-      </>
+      </div>
     );
   }
   const method = (METHODS as readonly string[]).includes(sp.method ?? "") ? (sp.method as (typeof METHODS)[number]) : "dcf_fcff";
   const [{ defaults, symbols }, statements] = await Promise.all([editorDefaults(symbol), getStatementsWithMeta(symbol)]);
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title={`ประเมินมูลค่า ${symbol}`} subtitle="ตัวเลขคำนวณใหม่ทันทีเมื่อแก้สมมติฐาน" />
       <ValuationEditor symbol={symbol} symbols={symbols} method={method} defaults={defaults} statements={statements} />
-    </>
+    </div>
   );
 }

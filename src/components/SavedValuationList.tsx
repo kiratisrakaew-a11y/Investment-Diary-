@@ -33,7 +33,7 @@ export interface SavedValuationRow {
 
 /** Every saved valuation of one stock; each row expands into its full calculation. */
 export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuationRow[]; currentPrice: number | null }) {
-  const [open, setOpen] = useState<number | null>(rows[0]?.id ?? null);
+  const [open, setOpen] = useState<number | null>(null);
   const [tab, setTab] = useState<string>("all");
   const methods = [...new Set(rows.map((r) => r.method))];
   const visible = tab === "all" ? rows : rows.filter((r) => r.method === tab);

@@ -12,15 +12,15 @@ export default async function EditValuationPage({ params }: { params: Promise<{ 
   if (v.method === "sotp") {
     const { defaults, symbols } = await editorDefaults(v.symbol);
     return (
-      <>
+      <div className="space-y-6">
         <PageHeader title={`SOTP ${v.symbol}`} subtitle={`บันทึกเมื่อ ${v.date}${v.title ? ` · ${v.title}` : ""}`} />
         <SotpEditor id={v.id} symbol={v.symbol} symbols={symbols} assumptions={v.assumptions} title={v.title} note={v.note} defaults={defaults} saved={v.result as { inputHash?: string; savedAt?: string }} />
-      </>
+      </div>
     );
   }
   const [{ defaults, symbols }, statements] = await Promise.all([editorDefaults(v.symbol), getStatementsWithMeta(v.symbol)]);
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title={`ประเมินมูลค่า ${v.symbol}`} subtitle={`บันทึกเมื่อ ${v.date}${v.title ? ` · ${v.title}` : ""}`} />
       <ValuationEditor
         id={v.id}
@@ -34,6 +34,6 @@ export default async function EditValuationPage({ params }: { params: Promise<{ 
         statements={statements}
         saved={v.result as { inputHash?: string; savedAt?: string }}
       />
-    </>
+    </div>
   );
 }

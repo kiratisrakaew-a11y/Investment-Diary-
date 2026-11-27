@@ -3,7 +3,9 @@ import { listValuationsGrouped, valueChangedSinceSave } from "@/server/services/
 import { listAssets } from "@/server/services/assets";
 import { loadPriceHistory } from "@/server/services/prices";
 import { getTimestampPolicy } from "@/server/services/settings";
-import { Empty, PageHeader } from "@/components/ui";
+import { Collapsible, EmptyState, PageHeader } from "@/components/ui";
+import { EmptyIcon } from "@/components/icons";
+import { Calculator } from "@phosphor-icons/react/ssr";
 import { ValuationOverview, type OverviewRow } from "@/components/ValuationOverview";
 import { METHOD_LABEL } from "@/lib/format";
 import { MODEL_VERSION } from "@/lib/governance";
@@ -47,23 +49,33 @@ export default async function ValuationListPage() {
   });
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="ประเมินมูลค่าหุ้น"
         subtitle="DCF (FCFF / FCFE), Dividend discount, Residual income, Multiples — รวมทุก valuation ของหุ้นแต่ละตัวไว้ที่เดียว"
         action={<Link href="/valuation/new" className="btn">+ ประเมินมูลค่าใหม่</Link>}
       />
-      {stocks.length > 0 && (
-        <div className="flex flex-wrap gap-2 text-sm">
-          <span className="self-center text-xs text-muted">ยังไม่ได้ประเมิน:</span>
-          {stocks.map((a) => (
-            <Link key={a.id} href={`/valuation/new?symbol=${a.symbol}`} className="btn-ghost">
-              {a.symbol}
-            </Link>
-          ))}
-        </div>
+      {groups.length === 0 ? (
+        <EmptyState
+          icon={<EmptyIcon icon={Calculator} />}
+          title="ยังไม่มี valuation"
+          description="เริ่มประเมินมูลค่าหุ้นตัวแรก หรือให้ AI ช่วยประเมินให้"
+          action={<Link href="/valuation/new" className="btn">+ ประเมินมูลค่าใหม่</Link>}
+        />
+      ) : (
+        <ValuationOverview rows={rows} staleAfterDays={policy.priceMaxGapDays} />
       )}
-      {groups.length === 0 ? <Empty>ยังไม่มี — กด “ประเมินมูลค่าใหม่” หรือให้ AI ช่วยประเมิน</Empty> : <ValuationOverview rows={rows} staleAfterDays={policy.priceMaxGapDays} />}
-    </>
+      {stocks.length > 0 && (
+        <Collapsible title="หุ้นที่ยังไม่ได้ประเมิน" meta={`${stocks.length} ตัว`} defaultOpen={groups.length === 0}>
+          <div className="flex flex-wrap gap-2 text-sm">
+            {stocks.map((a) => (
+              <Link key={a.id} href={`/valuation/new?symbol=${a.symbol}`} className="btn-ghost">
+                {a.symbol}
+              </Link>
+            ))}
+          </div>
+        </Collapsible>
+      )}
+    </div>
   );
 }
