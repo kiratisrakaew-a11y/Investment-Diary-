@@ -266,7 +266,7 @@ export function OptimizerClient({
           {(objective === "utility" || useRiskFree) && (
             <label className="block">
               <span className="label">Risk aversion (A) = {riskAversion} — {riskAversion <= 2 ? "รับความเสี่ยงสูง" : riskAversion <= 5 ? "ปานกลาง" : "ระมัดระวัง"}</span>
-              <input type="range" min={1} max={10} step={0.5} value={riskAversion} onChange={(e) => setRiskAversion(Number(e.target.value))} className="w-full accent-[var(--accent)]" />
+              <input type="range" min={1} max={10} step={0.5} value={riskAversion} onChange={(e) => setRiskAversion(Number(e.target.value))} className="w-full accent-[var(--primary)]" />
             </label>
           )}
           {objective === "target_return" && <NumField label="ผลตอบแทนเป้าหมายต่อปี" pct value={targetReturn} onChange={(v) => setTargetReturn(v ?? 0)} />}
@@ -275,13 +275,13 @@ export function OptimizerClient({
             <SelectField label="ระดับความเชื่อมั่น CVaR" value={String(cvarConf)} onChange={(v) => setCvarConf(Number(v))} options={[{ value: "0.95", label: "95%" }, { value: "0.99", label: "99%" }]} />
           )}
           {(objective === "risk_parity" || objective === "max_diversification" || objective === "min_cvar") && (
-            <p className="text-xs text-muted">กลยุทธ์เน้นความเสี่ยง: เลือกน้ำหนักจากความเสี่ยง/ความสัมพันธ์ ไม่ใช้ผลตอบแทนคาดหวัง{objective === "risk_parity" ? " · ใช้ร่วมกับเพดานผู้ออก/หมวดไม่ได้" : ""}</p>
+            <p className="text-xs text-text-muted">กลยุทธ์เน้นความเสี่ยง: เลือกน้ำหนักจากความเสี่ยง/ความสัมพันธ์ ไม่ใช้ผลตอบแทนคาดหวัง{objective === "risk_parity" ? " · ใช้ร่วมกับเพดานผู้ออก/หมวดไม่ได้" : ""}</p>
           )}
           <div className="grid grid-cols-2 gap-3">
             <NumField label="น้ำหนักต่ำสุด/ตัว" pct value={minW} onChange={(v) => setMinW(v ?? 0)} hint={allowShort ? "ติดลบได้ไม่เกินขีดชอร์ตต่อตัว" : "ติดลบไม่ได้เมื่อปิดการขายชอร์ต (จะแจ้งข้อผิดพลาด ไม่ปรับให้เอง)"} />
             <NumField label="น้ำหนักสูงสุด/ตัว" pct value={maxW} onChange={(v) => setMaxW(Math.min(1, Math.max(0.01, v ?? 1)))} />
           </div>
-          <div className={clsx("rounded-xl border p-3", allowShort ? "border-warn/50 bg-warn/5" : "border-border")}>
+          <div className={clsx("rounded-xl border p-3", allowShort ? "border-warning/50 bg-warning/5" : "border-border")}>
             <Toggle
               label="อนุญาตให้ขายชอร์ต (น้ำหนักติดลบ)"
               checked={allowShort}
@@ -291,7 +291,7 @@ export function OptimizerClient({
                 setMinW(on ? -maxShort : Math.max(0, minW));
               }}
             />
-            <p className="mt-1 text-xs text-muted">{allowShort ? SHORT_DISCLAIMER : "ปิดอยู่ (ค่าเริ่มต้น): ทุกน้ำหนัก ≥ 0 ในทุก objective"}</p>
+            <p className="mt-1 text-xs text-text-muted">{allowShort ? SHORT_DISCLAIMER : "ปิดอยู่ (ค่าเริ่มต้น): ทุกน้ำหนัก ≥ 0 ในทุก objective"}</p>
             {allowShort && (
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <NumField
@@ -314,7 +314,7 @@ export function OptimizerClient({
           <Toggle label="รวมสินทรัพย์ปลอดความเสี่ยง (Complete portfolio บน CML)" checked={useRiskFree} onChange={setUseRiskFree} />
           {useRiskFree && (
             <div className="space-y-2">
-              <p className="text-xs text-muted">ส่วนเสี่ยง = tangency portfolio; objective กำหนดสัดส่วนบนเส้น CAL · สัดส่วนปลอดความเสี่ยงเป็นสถานะจำลอง ไม่ผูกกับพันธบัตรที่ถือ</p>
+              <p className="text-xs text-text-muted">ส่วนเสี่ยง = tangency portfolio; objective กำหนดสัดส่วนบนเส้น CAL · สัดส่วนปลอดความเสี่ยงเป็นสถานะจำลอง ไม่ผูกกับพันธบัตรที่ถือ</p>
               <Toggle label="อนุญาตกู้ยืมเพื่อลงทุนเพิ่ม (y > 100%) — แยกจากการขายชอร์ต" checked={allowBorrow} onChange={setAllowBorrow} />
               {allowBorrow && (
                 <div className="grid grid-cols-2 gap-2">
@@ -339,12 +339,12 @@ export function OptimizerClient({
             <NumField label="สูงสุด/หมวด" pct nullable value={maxSector} onChange={setMaxSector} hint="ใช้หมวดที่ผู้ใช้ระบุพร้อมแหล่งที่มา — ตัวที่ไม่ระบุไม่ถูกจัดเข้าหมวด" />
             <NumField label="Duration สูงสุด (ปี)" nullable value={maxDuration} onChange={setMaxDuration} hint="Modified duration ของพอร์ตเสี่ยง (พันธบัตรจากราคาล่าสุด อื่น ๆ = 0)" />
           </div>
-          <div className="rounded-lg bg-panel-2 p-2 text-xs text-muted">
+          <div className="rounded-lg bg-panel-2 p-2 text-xs text-text-muted">
             <div>
               <b className="text-text">Rf {fmtPct(rf, 2)}</b> · {rfInfo ? `${rfInfo.label} · อายุ ${rfInfo.tenorYears} ปี · ${rfInfo.currency}` : "จากหน้าตั้งค่า"}
             </div>
             {rfInfo?.warnings.map((w) => (
-              <div key={w} className="text-warn">
+              <div key={w} className="text-warning">
                 ⚠️ {w}
               </div>
             ))}
@@ -359,7 +359,7 @@ export function OptimizerClient({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">สมมติฐานผลตอบแทนคาดหวัง (แก้ไขได้)</h2>
-              {muNote && <p className="mt-1 max-w-md text-xs text-muted" data-testid="mu-note">{muNote}</p>}
+              {muNote && <p className="mt-1 max-w-md text-xs text-text-muted" data-testid="mu-note">{muNote}</p>}
             </div>
             <div className="w-56">
               <SelectField
@@ -395,17 +395,17 @@ export function OptimizerClient({
                 {assets.map((a, i) => (
                   <tr key={a.symbol}>
                     <td>
-                      <input type="checkbox" className="accent-[var(--accent)]" checked readOnly disabled title="เปลี่ยนชุดสินทรัพย์ที่ด้านบนของหน้า" />
+                      <input type="checkbox" className="accent-[var(--primary)]" checked readOnly disabled title="เปลี่ยนชุดสินทรัพย์ที่ด้านบนของหน้า" />
                     </td>
                     <td>
-                      <span className="font-medium">{a.symbol}</span> <span className="text-xs text-muted">{ASSET_CLASS_LABEL[a.assetClass]}</span>
-                      {a.held && <span className="ml-1 text-xs text-accent">ถืออยู่</span>}
+                      <span className="font-medium">{a.symbol}</span> <span className="text-xs text-text-muted">{ASSET_CLASS_LABEL[a.assetClass]}</span>
+                      {a.held && <span className="ml-1 text-xs text-primary">ถืออยู่</span>}
                       {a.assetClass === "bond" && (
-                        <div className="mt-0.5 flex flex-wrap gap-1 text-xs">
+                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
                           {a.modifiedDuration != null && <span className="rounded-md border border-border px-1">D {fmtNum(a.modifiedDuration, 2)}</span>}
                           {a.bondExpected?.ok && <span className="rounded-md border border-border px-1" title={a.bondExpected.notes.join(" · ")}>YTM {fmtPct(a.bondExpected.ytm, 2)} · E[R] ล่วงหน้า {fmtPct(a.bondExpected.expectedReturn, 2)}</span>}
                           {a.rating && <span className="rounded-md border border-border px-1">{a.rating}</span>}
-                          <span className="rounded-md border border-warn/40 px-1 text-warn" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
+                          <span className="rounded-md border border-warning/40 px-1 text-warning" title="ราคาพันธบัตรมีความเสี่ยงอัตราดอกเบี้ยก่อนครบกำหนด">ไม่ใช่ Rf</span>
                         </div>
                       )}
                     </td>
@@ -429,7 +429,7 @@ export function OptimizerClient({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-text-muted">
             {isBl && "Black–Litterman: E[R] ที่ใช้ = posterior · "}อดีต = ค่าเฉลี่ยเลขคณิต × จำนวนงวดต่อปี (เฉพาะวันที่ทุกสินทรัพย์มีราคา, เป็นบาท) · ผสม 50/50 เป็นวิธีประมาณแบบง่าย ไม่ได้แก้ estimation error · ช่องที่แก้เองมีกรอบเน้น ลบค่าออกเพื่อกลับไปใช้วิธีตั้งต้น
           </p>
         </section>
@@ -452,25 +452,25 @@ export function OptimizerClient({
         />
       )}
 
-      {error && <p className="text-sm text-neg">{error}</p>}
+      {error && <p className="text-sm text-negative">{error}</p>}
       {outcome && !outcome.ok && (
-        <section className="card border-l-4 border-l-neg">
-          <h2 className="text-base font-semibold text-neg">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
+        <section className="card border-l-4 border-l-negative">
+          <h2 className="text-base font-semibold text-negative">คำนวณน้ำหนักไม่ได้ภายใต้ข้อจำกัดนี้</h2>
           <p className="mt-1 text-sm">{outcome.issue.message}</p>
-          {outcome.issue.suggestion && <p className="mt-1 text-sm text-muted">แนะนำ: {outcome.issue.suggestion}</p>}
-          <p className="mt-2 text-xs text-muted">ระบบไม่ผ่อนข้อจำกัดให้เอง เพื่อไม่ให้ได้น้ำหนักที่ขัดกับที่คุณตั้งไว้ ({outcome.issue.code})</p>
+          {outcome.issue.suggestion && <p className="mt-1 text-sm text-text-muted">แนะนำ: {outcome.issue.suggestion}</p>}
+          <p className="mt-2 text-xs text-text-muted">ระบบไม่ผ่อนข้อจำกัดให้เอง เพื่อไม่ให้ได้น้ำหนักที่ขัดกับที่คุณตั้งไว้ ({outcome.issue.code})</p>
         </section>
       )}
 
       {r && (
         <>
-          <p className="text-xs text-muted" data-testid="universe-used">
+          <p className="text-xs text-text-muted" data-testid="universe-used">
             ชุดสินทรัพย์ที่ใช้: {result!.idx.length} ตัว — {result!.idx.map((i) => assets[i].symbol).join(", ")}
           </p>
           <section className="card">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-base font-semibold">Minimum-variance frontier (“รูปหัวกระสุน”)</h2>
-              {computing && <span className="text-xs text-muted">กำลังคำนวณ…</span>}
+              {computing && <span className="text-xs text-text-muted">กำลังคำนวณ…</span>}
             </div>
             <BulletChart
               unconstrained={r.unconstrained?.curve ?? []}
@@ -501,7 +501,7 @@ export function OptimizerClient({
               tangency={r.tangency}
               rf={rf}
             />
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-xs text-text-muted">
               แขนบน = efficient frontier, แขนล่าง (เส้นประ) = พอร์ตที่ไม่มีประสิทธิภาพ · เส้นสีน้ำเงิน = ตามข้อจำกัดน้ำหนัก {fmtPct(minW, 0)}–{fmtPct(maxW, 0)} (ลงทุนได้จริง) · เส้นสีเทา = สูตรปิดแบบขายชอร์ตได้ไม่จำกัด ใช้เทียบทฤษฎีเท่านั้น (มีน้ำหนักติดลบ ลงทุนจริงไม่ได้)
             </p>
           </section>
@@ -521,7 +521,7 @@ export function OptimizerClient({
               <KV k="Sharpe" v={fmtRatio(r.final.sharpe)} />
               {r.riskBased && (
                 <>
-                  <p className="pt-2 text-xs font-medium text-muted">กลยุทธ์เน้นความเสี่ยง</p>
+                  <p className="pt-2 text-xs font-medium text-text-muted">กลยุทธ์เน้นความเสี่ยง</p>
                   <KV k="Diversification ratio" v={fmtRatio(r.riskBased.diversificationRatio)} />
                   {r.riskBased.maxBudgetDeviation != null && <KV k="ส่วนต่างจาก risk budget สูงสุด" v={r.riskBased.maxBudgetDeviation.toExponential(1)} />}
                   {r.riskBased.cvar && (
@@ -533,42 +533,42 @@ export function OptimizerClient({
                   <div className="pt-1 text-xs">
                     {result!.idx.map((i, k) => (
                       <div key={i} className="flex justify-between">
-                        <span className="text-muted">ส่วนแบ่งความเสี่ยง {assets[i].symbol}</span>
+                        <span className="text-text-muted">ส่วนแบ่งความเสี่ยง {assets[i].symbol}</span>
                         <span className="tabular-nums">{fmtPct(r.riskBased!.riskShares[k], 1)}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted">{r.riskBased.method} · {r.riskBased.status} · {r.riskBased.iterations} รอบ</p>
+                  <p className="text-xs text-text-muted">{r.riskBased.method} · {r.riskBased.status} · {r.riskBased.iterations} รอบ</p>
                 </>
               )}
               {useRiskFree && <KV k="สัดส่วนสินทรัพย์เสี่ยง y*" v={fmtPct(r.riskyShare, 1)} />}
               {r.current && (
                 <>
-                  <div className="pt-3 text-xs font-semibold text-muted">เทียบพอร์ตปัจจุบัน (เฉพาะสินทรัพย์ที่เลือก)</div>
+                  <div className="pt-3 text-xs font-semibold text-text-muted">เทียบพอร์ตปัจจุบัน (เฉพาะสินทรัพย์ที่เลือก)</div>
                   <KV k="E[R] / σ" v={`${fmtPct(r.current.expectedReturn)} / ${fmtPct(r.current.volatility)}`} />
                   <KV k="Sharpe" v={fmtRatio(r.current.sharpe)} />
                 </>
               )}
               {result?.built?.warnings.map((n) => (
-                <p key={n} className="pt-2 text-xs text-muted">ℹ️ {n}</p>
+                <p key={n} className="pt-2 text-xs text-text-muted">ℹ️ {n}</p>
               ))}
               {result?.exposure && (
                 <div className="pt-3 text-xs">
-                  <div className="font-semibold text-muted">การกระจุกตัวของพอร์ตที่แนะนำ</div>
+                  <div className="font-semibold text-text-muted">การกระจุกตัวของพอร์ตที่แนะนำ</div>
                   <div>ผู้ออก: {result.exposure.byIssuer.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
                   <div>หมวด: {result.exposure.bySector.map((g) => `${g.key} ${fmtPct(g.weight, 1)}`).join(" · ")}</div>
                   <div>Duration พอร์ต {fmtNum(result.exposure.duration, 2)} ปี{result.exposure.dv01Thb != null ? ` · DV01 ≈ ${fmtThb(result.exposure.dv01Thb)} ต่อ 1bp` : ""}</div>
                 </div>
               )}
               {r.warnings.map((n) => (
-                <p key={n} className="pt-2 text-xs text-neg">⚠️ {n}</p>
+                <p key={n} className="pt-2 text-xs text-negative">⚠️ {n}</p>
               ))}
               <div className="pt-3">
                 <button className="btn" onClick={applyTargets} disabled={applying || !r || hasShortOrLeverage(r)}>
                   ใช้เป็นเป้าหมาย asset allocation
                 </button>
-                {hasShortOrLeverage(r) && <p className="mt-1 text-xs text-muted">มีสถานะชอร์ต/กู้ยืม — เป้าหมาย asset allocation รับได้เฉพาะ 0–100%</p>}
-                {applyMsg && <p className="mt-1 text-xs text-pos">{applyMsg}</p>}
+                {hasShortOrLeverage(r) && <p className="mt-1 text-xs text-text-muted">มีสถานะชอร์ต/กู้ยืม — เป้าหมาย asset allocation รับได้เฉพาะ 0–100%</p>}
+                {applyMsg && <p className="mt-1 text-xs text-positive">{applyMsg}</p>}
               </div>
             </section>
 
@@ -651,13 +651,13 @@ export function OptimizerClient({
                   </table>
                 </div>
               )}
-              <p className="mt-2 text-xs text-muted">
+              <p className="mt-2 text-xs text-text-muted">
                 ⚠️ MPT อ่อนไหวต่อผลตอบแทนคาดหวังมาก ควรใช้ข้อจำกัดน้ำหนัก ทดลองหลายสมมติฐาน และปรับพอร์ตทีละน้อย — เป็นเครื่องมือประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
               </p>
             </section>
           </div>
           {hasShortOrLeverage(r) ? (
-            <section className="card text-sm text-muted">ข้อเสนอปรับพอร์ตไม่แสดงเมื่อผลลัพธ์มีการขายชอร์ตหรือกู้ยืม — ระบบไม่สร้างคำสั่งขายชอร์ตหรือกู้ยืม และไม่ส่งคำสั่งซื้อขายให้</section>
+            <section className="card text-sm text-text-muted">ข้อเสนอปรับพอร์ตไม่แสดงเมื่อผลลัพธ์มีการขายชอร์ตหรือกู้ยืม — ระบบไม่สร้างคำสั่งขายชอร์ตหรือกู้ยืม และไม่ส่งคำสั่งซื้อขายให้</section>
           ) : (
             <RebalancePanel suggested={r.allocations.map((a) => ({ symbol: a.symbol, weight: a.weight }))} extraCash={extraCash} basis={basis} />
           )}
@@ -669,8 +669,8 @@ export function OptimizerClient({
 
 function KV({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-border/60 py-1.5 text-sm">
-      <span className="text-muted">{k}</span>
+    <div className="flex justify-between gap-3 border-b border-border/60 py-2 text-sm">
+      <span className="text-text-muted">{k}</span>
       <span className="font-medium tabular-nums">{v}</span>
     </div>
   );
@@ -682,7 +682,7 @@ function WeightBar({ w }: { w: number }) {
       <div className="h-1.5 w-16 rounded-full bg-border/60">
         <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.abs(w) * 100)}%`, background: w < 0 ? "var(--series-2)" : "var(--series-1)" }} />
       </div>
-      <span className={clsx("w-12 text-right", w < 0 && "text-neg")}>{fmtPct(w, 1)}</span>
+      <span className={clsx("w-12 text-right", w < 0 && "text-negative")}>{fmtPct(w, 1)}</span>
     </div>
   );
 }
@@ -696,12 +696,12 @@ function LongShortExposure({ weights, riskFree }: { weights: { symbol: string; w
   if (e.short < 1e-9 && riskFree >= -1e-9) return null;
   return (
     <figure className="mb-4" aria-label={`Long ${fmtPct(e.long, 1)} short ${fmtPct(e.short, 1)} gross ${fmtPct(e.gross, 1)} net ${fmtPct(e.net, 1)}`}>
-      <div className="mb-2 flex flex-wrap gap-x-5 text-xs">
+      <div className="mb-2 flex flex-wrap gap-x-6 text-xs">
         <span>Long <b className="tabular-nums">{fmtPct(e.long, 1)}</b></span>
-        <span className="text-neg">Short <b className="tabular-nums">{fmtPct(e.short, 1)}</b></span>
+        <span className="text-negative">Short <b className="tabular-nums">{fmtPct(e.short, 1)}</b></span>
         <span>Gross <b className="tabular-nums">{fmtPct(e.gross, 1)}</b></span>
         <span>Net <b className="tabular-nums">{fmtPct(e.net, 1)}</b></span>
-        {riskFree < -1e-9 && <span className="text-neg">กู้ยืม {fmtPct(-riskFree, 1)}</span>}
+        {riskFree < -1e-9 && <span className="text-negative">กู้ยืม {fmtPct(-riskFree, 1)}</span>}
       </div>
       <div className="space-y-1">
         {weights.map((x) => (
@@ -711,11 +711,11 @@ function LongShortExposure({ weights, riskFree }: { weights: { symbol: string; w
               {x.weight < 0 && <div className="h-2 rounded-l bg-[var(--series-2)]" style={{ width: `${(Math.abs(x.weight) / scale) * 100}%` }} />}
             </div>
             <div className="flex">{x.weight > 0 && <div className="h-2 rounded-r bg-[var(--series-1)]" style={{ width: `${(x.weight / scale) * 100}%` }} />}</div>
-            <span className={clsx("text-right tabular-nums", x.weight < 0 && "text-neg")}>{fmtPct(x.weight, 1)}</span>
+            <span className={clsx("text-right tabular-nums", x.weight < 0 && "text-negative")}>{fmtPct(x.weight, 1)}</span>
           </div>
         ))}
       </div>
-      <figcaption className="mt-1 text-xs text-muted">ซ้ายของเส้นศูนย์ = ชอร์ต · ขวา = ซื้อ (long)</figcaption>
+      <figcaption className="mt-1 text-xs text-text-muted">ซ้ายของเส้นศูนย์ = ชอร์ต · ขวา = ซื้อ (long)</figcaption>
     </figure>
   );
 }
@@ -727,7 +727,7 @@ function OverrideInput({ value, overridden, onChange }: { value: number; overrid
   }, [value, overridden]);
   return (
     <input
-      className={clsx("input w-20 text-right tabular-nums", overridden && "border-accent")}
+      className={clsx("input w-20 text-right tabular-nums", overridden && "border-primary")}
       inputMode="decimal"
       value={text}
       onChange={(e) => {
@@ -801,7 +801,7 @@ function BlPanel({
           ตั้งน้ำหนักตลาดเท่ากันทุกตัว
         </button>
       </div>
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         Prior Π = δΣw<sub>ตลาด</sub> (ผลตอบแทนส่วนเกินดุลยภาพ) · ใส่น้ำหนักตลาดเอง เช่น ตามมูลค่าตลาดหรือน้ำหนักในดัชนี — ระบบไม่ใช้พอร์ตที่คุณถือแทนให้ ·
         Ω ของแต่ละ view = ((1 − ความมั่นใจ) ÷ ความมั่นใจ) × pτΣpᵀ (50% = He–Litterman, 100% = view เป็นจริงแน่นอน)
       </p>
@@ -812,7 +812,7 @@ function BlPanel({
           <Toggle label="ใช้ posterior covariance (Σ + M)" checked={postCov} onChange={setPostCov} />
         </div>
       </div>
-      {bl?.ok && <p className="text-xs text-muted">δ = {fmtNum(bl.riskAversion, 2)} ({bl.riskAversionSource === "given" ? "กำหนดเอง" : "คำนวณจาก ERP"}) · τ = {bl.tau}</p>}
+      {bl?.ok && <p className="text-xs text-text-muted">δ = {fmtNum(bl.riskAversion, 2)} ({bl.riskAversionSource === "given" ? "กำหนดเอง" : "คำนวณจาก ERP"}) · τ = {bl.tau}</p>}
 
       <div className="space-y-2">
         {views.map((v, k) => (
@@ -861,7 +861,7 @@ function BlPanel({
               ลบ
             </button>
             {bl?.ok && bl.views[k] && (
-              <span className="text-xs text-muted">
+              <span className="text-xs text-text-muted">
                 ดุลยภาพ {fmtPct(bl.views[k].priorValue, 2)} → view {fmtPct(bl.views[k].q, 2)} → posterior {fmtPct(bl.views[k].posteriorValue, 2)}
               </span>
             )}
@@ -871,8 +871,8 @@ function BlPanel({
           + เพิ่ม view
         </button>
       </div>
-      {bl && !bl.ok && bl.errors.map((e) => <p key={e} className="text-sm text-neg">{e}</p>)}
-      {bl?.ok && bl.warnings.map((w) => <p key={w} className="text-xs text-muted">ℹ️ {w}</p>)}
+      {bl && !bl.ok && bl.errors.map((e) => <p key={e} className="text-sm text-negative">{e}</p>)}
+      {bl?.ok && bl.warnings.map((w) => <p key={w} className="text-xs text-text-muted">ℹ️ {w}</p>)}
     </section>
   );
 }

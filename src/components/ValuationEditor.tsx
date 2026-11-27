@@ -364,7 +364,7 @@ export function ValuationEditor({
               }}
             />
           </label>
-          {msg && <span className={clsx("text-sm", msg.ok ? "text-pos" : "text-neg")}>{msg.text}</span>}
+          {msg && <span className={clsx("text-sm", msg.ok ? "text-positive" : "text-negative")}>{msg.text}</span>}
         </div>
       </div>
 
@@ -377,12 +377,12 @@ export function ValuationEditor({
           ["#val-result", isDcfMethod ? "6 · ผลลัพธ์" : "2 · ผลลัพธ์"],
           ...(method === "residual_income" && result?.details.horizonComparison != null ? [["#val-rim", "3 · 5Y vs 10Y & sensitivity"]] : []),
         ].map(([href, label]) => (
-          <a key={href} href={href} className="rounded-xl px-3 py-1.5 whitespace-nowrap text-muted hover:bg-panel-2 hover:text-text">
+          <a key={href} href={href} className="rounded-xl px-3 py-2 whitespace-nowrap text-text-muted hover:bg-panel-2 hover:text-text">
             {label}
           </a>
         ))}
         {method === "residual_income" && rimHorizons.length > 0 && (
-          <div role="group" aria-label="เลือก horizon ของ Residual income" className="ml-auto flex shrink-0 items-center gap-1 rounded-xl border border-border bg-panel-2 p-0.5">
+          <div role="group" aria-label="เลือก horizon ของ Residual income" className="ml-auto flex shrink-0 items-center gap-1 rounded-xl border border-border bg-panel-2 p-1">
             {rimHorizons.map((h) => (
               <button
                 key={h}
@@ -392,7 +392,7 @@ export function ValuationEditor({
                   setRimHorizon(h);
                   document.getElementById("val-rim")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
-                className={clsx("rounded-lg px-2.5 py-1 whitespace-nowrap", activeHorizon === h ? "bg-accent text-accent-ink" : "text-muted hover:text-text")}
+                className={clsx("rounded-lg px-3 py-1 whitespace-nowrap", activeHorizon === h ? "bg-primary text-primary-ink" : "text-text-muted hover:text-text")}
               >
                 {h}Y
               </button>
@@ -422,18 +422,18 @@ export function ValuationEditor({
                 <button type="button" className="btn-ghost text-xs" disabled={betaPending || !symbol} onClick={recomputeBeta}>
                   {betaPending ? "กำลังคำนวณ…" : "คำนวณ β ใหม่"}
                 </button>
-                {betaMsg && <span className={`text-xs ${betaMsg.ok ? "text-pos" : "text-neg"}`}>{betaMsg.text}</span>}
+                {betaMsg && <span className={`text-xs ${betaMsg.ok ? "text-positive" : "text-negative"}`}>{betaMsg.text}</span>}
               </div>
             </div>
           )}
           {!(dcfA.inputMeta?.rfSource && dcfA.inputMeta?.erpSource) && method !== "multiples" && (
-            <p className="-mt-2 text-xs text-muted">Rf / ERP ที่ไม่ได้ระบุที่มาถือเป็นค่าตัวอย่าง — ควรใช้อัตราสกุลเงินและอายุเดียวกับกระแสเงินสด (เช่น พันธบัตรไทยระยะยาวสำหรับ DCF เงินบาท) และ ERP แบบคาดการณ์ ไม่ใช่ผลตอบแทนในอดีต</p>
+            <p className="-mt-2 text-xs text-text-muted">Rf / ERP ที่ไม่ได้ระบุที่มาถือเป็นค่าตัวอย่าง — ควรใช้อัตราสกุลเงินและอายุเดียวกับกระแสเงินสด (เช่น พันธบัตรไทยระยะยาวสำหรับ DCF เงินบาท) และ ERP แบบคาดการณ์ ไม่ใช่ผลตอบแทนในอดีต</p>
           )}
 
           {(method === "dcf_fcff" || method === "dcf_fcfe") && (
             <>
               <div id="val-forecast" className="scroll-mt-16 space-y-2">
-                <h3 className="text-sm font-medium text-muted">รูปแบบประมาณการ</h3>
+                <h3 className="text-sm font-medium text-text-muted">รูปแบบประมาณการ</h3>
                 <DcfStageEditor a={dcfA} model={method === "dcf_fcff" ? "fcff" : "fcfe"} setA={setDcfA} errors={stageErrors} />
               </div>
               <Group title="ประมาณการรายได้และกำไร (หน่วยเดียวกันทั้งหมด เช่น ล้านบาท)">
@@ -528,7 +528,7 @@ export function ValuationEditor({
                   <Toggle label="Mid-year convention" checked={dcfA.midYear} onChange={(v) => setDcfA((a) => ({ ...a, midYear: v }))} />
                 </div>
               </Group>
-              <p className="text-xs text-muted">DCF แบบ FCFF ไม่เหมาะกับธนาคาร/สถาบันการเงิน (หนี้เป็นวัตถุดิบในการดำเนินงาน) — ใช้ DDM หรือ Residual income แทน</p>
+              <p className="text-xs text-text-muted">DCF แบบ FCFF ไม่เหมาะกับธนาคาร/สถาบันการเงิน (หนี้เป็นวัตถุดิบในการดำเนินงาน) — ใช้ DDM หรือ Residual income แทน</p>
             </>
           )}
 
@@ -579,7 +579,7 @@ export function ValuationEditor({
                 />
               )}
               <NumField label="Growth ระยะยาว" pct value={ri.terminalGrowth} onChange={(v) => setRi((a) => ({ ...a, terminalGrowth: v ?? 0 }))} hint="g = ROE × (1 − payout)" />
-              <div className="flex items-end pb-2 text-xs text-muted">g ยั่งยืน = {fmtPct(ri.roe * (1 - ri.payoutRatio))}</div>
+              <div className="flex items-end pb-2 text-xs text-text-muted">g ยั่งยืน = {fmtPct(ri.roe * (1 - ri.payoutRatio))}</div>
             </Group>
           )}
 
@@ -619,30 +619,30 @@ export function ValuationEditor({
             />
             {result?.value != null ? (
               <>
-                <div className="text-xs text-muted">มูลค่าที่เหมาะสมต่อหุ้น</div>
+                <div className="text-xs text-text-muted">มูลค่าที่เหมาะสมต่อหุ้น</div>
                 <div className="text-3xl font-semibold tabular-nums">{fmtNum(result.value)}</div>
                 <div className={clsx("mt-1 text-sm font-medium", signClass(result.upside))}>
                   {result.upside != null && `${result.upside >= 0 ? "Upside" : "Downside"} ${fmtPct(Math.abs(result.upside), 1)} จากราคา ${fmtNum(result.price)}`}
                 </div>
                 {result.upside != null && result.upside > 0 && (
-                  <div className="text-xs text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
+                  <div className="text-xs text-text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
                 )}
                 <KeyDrivers a={method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA} show={method !== "multiples"} />
                 {method !== "multiples" &&
                   editorTimestampFlags(method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA, defaults, statements?.years.map((y) => y.fiscalYear) ?? []).map((f) => (
-                    <p key={f} className="mt-1 text-xs text-warn">⚠️ {f}</p>
+                    <p key={f} className="mt-1 text-xs text-warning">⚠️ {f}</p>
                   ))}
                 {activeExplanation && activeExplanation.warnings.length > 0 && method !== "dcf_fcff" && method !== "dcf_fcfe" && (
                   <div className="mt-3 space-y-1">
                     {activeExplanation.warnings.slice(0, 4).map((w) => (
-                      <p key={w} className="text-xs text-neg">⚠️ {w}</p>
+                      <p key={w} className="text-xs text-negative">⚠️ {w}</p>
                     ))}
                   </div>
                 )}
                 <Details method={method} details={result.details} />
                 {activeExplanation && (
                   <details className="mt-4">
-                    <summary className="cursor-pointer text-sm font-medium text-accent">วิธีคำนวณโดยละเอียด ›</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-primary">วิธีคำนวณโดยละเอียด ›</summary>
                     <div className="mt-3">
                       <CalculationDetail e={activeExplanation} compact />
                     </div>
@@ -650,7 +650,7 @@ export function ValuationEditor({
                 )}
               </>
             ) : (
-              <div className="space-y-1 text-sm text-neg">
+              <div className="space-y-1 text-sm text-negative">
                 <p>คำนวณไม่ได้</p>
                 {((result?.details.errors as { message: string }[] | undefined) ?? [{ message: "ตรวจสอบว่าอัตราคิดลด > growth และข้อมูลครบ" }]).map((e) => (
                   <p key={e.message} className="text-xs">• {e.message}</p>
@@ -662,7 +662,7 @@ export function ValuationEditor({
           <section className="card">
             <CardTitle title="เทียบทุกวิธี" explain={{ data: compact({ ราคาปัจจุบัน: dcfA.currentPrice, ผลแต่ละวิธี: allResults.map((x) => ({ วิธี: x.label, มูลค่าต่อหุ้น: x.result })) }), hint: "football field: ช่วงมูลค่าจากหลายวิธีเทียบราคาตลาด" }} />
             <FootballField rows={allResults} price={dcfA.currentPrice} active={method} onOpen={(r) => r.explanation && setDrawer(r.explanation)} />
-            <p className="mt-2 text-xs text-muted">กดที่แต่ละวิธีเพื่อดูสมมติฐานและวิธีคำนวณ · แต่ละวิธีใช้สมมติฐานในแท็บของตัวเอง — สลับวิธีด้านบนเพื่อแก้ไข</p>
+            <p className="mt-2 text-xs text-text-muted">กดที่แต่ละวิธีเพื่อดูสมมติฐานและวิธีคำนวณ · แต่ละวิธีใช้สมมติฐานในแท็บของตัวเอง — สลับวิธีด้านบนเพื่อแก้ไข</p>
           </section>
         </div>
       </div>
@@ -731,7 +731,7 @@ function KeyDrivers({ a, show }: { a: { riskFree: number; equityRiskPremium: num
           <span>
             {k} <b className="tabular-nums">{v}</b>
           </span>
-          <span className={clsx("truncate text-right", s ? "text-muted" : "text-neg")} title={src(s)}>
+          <span className={clsx("truncate text-right", s ? "text-text-muted" : "text-negative")} title={src(s)}>
             {src(s)}
           </span>
         </div>
@@ -743,7 +743,7 @@ function KeyDrivers({ a, show }: { a: { riskFree: number; equityRiskPremium: num
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">{title}</legend>
+      <legend className="mb-2 text-xs font-semibold tracking-wide text-text-muted uppercase">{title}</legend>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</div>
     </fieldset>
   );
@@ -751,8 +751,8 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 
 function KV({ k, v, tone }: { k: string; v: string; tone?: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-border/60 py-1.5 text-sm">
-      <span className="text-muted">{k}</span>
+    <div className="flex justify-between gap-3 border-b border-border/60 py-2 text-sm">
+      <span className="text-text-muted">{k}</span>
       <span className={clsx("tabular-nums", tone)}>{v}</span>
     </div>
   );
@@ -779,7 +779,7 @@ function Details({ method, details }: { method: Method; details: Record<string, 
             />
           )}
           {(d.warnings as string[]).map((w) => (
-            <p key={w} className="mt-2 text-xs text-neg">⚠️ {w}</p>
+            <p key={w} className="mt-2 text-xs text-negative">⚠️ {w}</p>
           ))}
         </>
       )}
@@ -805,7 +805,7 @@ function Details({ method, details }: { method: Method; details: Record<string, 
           <KV k="P/BV ตลาด" v={fmtNum(n("marketPBV"))} />
           <KV k="g ที่สอดคล้อง = ROE × (1 − payout)" v={fmtPct(n("sustainableGrowth"))} />
           {((d.warnings as string[] | undefined) ?? []).map((w) => (
-            <p key={w} className="mt-2 text-xs text-warn">⚠️ {w}</p>
+            <p key={w} className="mt-2 text-xs text-warning">⚠️ {w}</p>
           ))}
         </>
       )}
@@ -838,15 +838,15 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
             type="button"
             onClick={() => onOpen(r)}
             disabled={!r.explanation}
-            className="block w-full rounded-md px-1.5 py-1 text-left text-xs hover:bg-border/40 disabled:cursor-default"
+            className="block w-full rounded-md px-2 py-1 text-left text-xs hover:bg-border/40 disabled:cursor-default"
             title="ดูวิธีคำนวณ"
           >
-            <div className="mb-0.5 flex justify-between gap-2">
+            <div className="mb-1 flex justify-between gap-2">
               <span className={clsx(r.method === active && "font-semibold")}>
                 {r.label} {warn && <span title={r.explanation!.warnings.join("\n")}>⚠️</span>}
               </span>
               <span className="tabular-nums">
-                {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "—"} <span className="text-accent">›</span>
+                {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "—"} <span className="text-primary">›</span>
               </span>
             </div>
             <div className="relative h-2.5 rounded-full bg-border/50">
@@ -858,7 +858,7 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
           </button>
         );
       })}
-      <div className="text-right text-xs text-muted">เส้นตั้ง = ราคาปัจจุบัน {fmtNum(price)}</div>
+      <div className="text-right text-xs text-text-muted">เส้นตั้ง = ราคาปัจจุบัน {fmtNum(price)}</div>
     </div>
   );
 }
@@ -885,7 +885,7 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
   return (
     <fieldset className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Residual income หลายช่วง (ประมาณการรายปี)</legend>
+        <legend className="text-xs font-semibold tracking-wide text-text-muted uppercase">Residual income หลายช่วง (ประมาณการรายปี)</legend>
         <Toggle
           label="ใช้ประมาณการรายปี (multi_stage)"
           checked={on}
@@ -893,7 +893,7 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
         />
       </div>
       {!on ? (
-        <p className="text-xs text-muted">ปิดอยู่ = ใช้สูตรช่วงเดียว V₀ = B₀ + (ROE − Ke)B₀ ÷ (Ke − g) · เปิดเพื่อใส่ ROE / payout / Book value รายปี แล้วเลือก continuing value</p>
+        <p className="text-xs text-text-muted">ปิดอยู่ = ใช้สูตรช่วงเดียว V₀ = B₀ + (ROE − Ke)B₀ ÷ (Ke − g) · เปิดเพื่อใส่ ROE / payout / Book value รายปี แล้วเลือก continuing value</p>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -925,7 +925,7 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
                       <CellInput value={r.bookValueEnd} placeholder="clean surplus" onChange={(v) => setRow(i, { bookValueEnd: v ?? undefined })} />
                     </td>
                     <td>
-                      <button type="button" className="text-xs text-muted hover:text-neg" onClick={() => setRi((a) => ({ ...a, forecast: (a.forecast ?? []).filter((_, j) => j !== i) }))}>
+                      <button type="button" className="text-xs text-text-muted hover:text-negative" onClick={() => setRi((a) => ({ ...a, forecast: (a.forecast ?? []).filter((_, j) => j !== i) }))}>
                         ลบ
                       </button>
                     </td>
@@ -960,7 +960,7 @@ function RiForecastEditor({ ri, setRi }: { ri: Ri; setRi: React.Dispatch<React.S
               <NumField label="Persistence ω (0–1)" value={ri.persistence ?? 0.6} onChange={(v) => setRi((a) => ({ ...a, persistence: Math.min(1, Math.max(0, v ?? 0.6)) }))} />
             )}
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-text-muted">
             RIₜ = Eₜ − Ke × Bₜ₋₁ · Bₜ = Bₜ₋₁ + E − D (clean surplus) เว้นแต่ใส่ BV ปลายปีเอง · Growth ระยะยาว (g) อยู่ในช่องด้านล่าง ใช้กับแบบโตต่อเนื่อง
           </p>
         </>
@@ -1068,7 +1068,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-text-muted">
           PV รวม {fmt(r.sumPvCashFlows)} + PV terminal {fmt(r.pvTerminalValue)} (TV {fmt(r.terminalValue)} คิดลด {t.discountYears} ปี) · TV คิดเป็น {fmtPct(r.terminalShareOfValue, 1)} ของมูลค่า
         </p>
         <h3 className="mt-4 mb-1 text-sm font-semibold">Terminal ปีที่ {r.years.length + 1} (steady state)</h3>
@@ -1101,23 +1101,23 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
         <table className="text-xs">
           <thead>
             <tr>
-              <th className="px-2 py-1 text-left text-muted">{model === "fcff" ? "WACC" : "Ke"} ↓ / {SENSITIVITY_AXES[axis].label} →</th>
+              <th className="px-2 py-1 text-left text-text-muted">{model === "fcff" ? "WACC" : "Ke"} ↓ / {SENSITIVITY_AXES[axis].label} →</th>
               {s.columns.map((g, j) => (
-                <th key={j} className="px-2 py-1 text-right text-muted">{fmtPct(g, 1)}</th>
+                <th key={j} className="px-2 py-1 text-right text-text-muted">{fmtPct(g, 1)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {s.grid.map((row, i) => (
               <tr key={i}>
-                <th className="px-2 py-1 text-left font-medium text-muted">{fmtPct(s.rates[i], 1)}</th>
+                <th className="px-2 py-1 text-left font-medium text-text-muted">{fmtPct(s.rates[i], 1)}</th>
                 {row.map((v, j) => {
                   const rel = v != null && base ? v / base - 1 : 0;
                   const c = Math.min(1, Math.abs(rel) * 2);
                   return (
                     <td
                       key={j}
-                      className={clsx("border-2 border-panel px-2 py-1.5 text-right tabular-nums", i === 2 && j === 2 && "font-semibold", v == null && "text-muted")}
+                      className={clsx("border-2 border-panel px-2 py-2 text-right tabular-nums", i === 2 && j === 2 && "font-semibold", v == null && "text-text-muted")}
                       style={v != null ? { background: `color-mix(in oklab, ${rel >= 0 ? "var(--series-3)" : "var(--series-2)"} ${c * 45}%, var(--panel))` } : undefined}
                     >
                       {v != null ? fmtNum(v) : "N/A"}
@@ -1128,7 +1128,7 @@ function DcfTables({ a, model }: { a: DcfAssumptions; model: "fcff" | "fcfe" }) 
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">ราคาปัจจุบัน {fmtNum(a.currentPrice)} · N/A = สมมติฐานใช้ไม่ได้ (เช่น อัตราคิดลด ≤ g)</p>
+        <p className="mt-2 text-xs text-text-muted">ราคาปัจจุบัน {fmtNum(a.currentPrice)} · N/A = สมมติฐานใช้ไม่ได้ (เช่น อัตราคิดลด ≤ g)</p>
       </section>
     </div>
   );
@@ -1169,7 +1169,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
         </div>
       </div>
       {!sc?.length ? (
-        <p className="text-xs text-muted">เปิดเพื่อกำหนดสมมติฐานแต่ละกรณีพร้อมความน่าจะเป็น แล้วดูมูลค่าคาดหวังและช่วงมูลค่า — ค่าเริ่มต้นเป็นตัวอย่าง (growth ±2 จุด, margin ±15% จาก base)</p>
+        <p className="text-xs text-text-muted">เปิดเพื่อกำหนดสมมติฐานแต่ละกรณีพร้อมความน่าจะเป็น แล้วดูมูลค่าคาดหวังและช่วงมูลค่า — ค่าเริ่มต้นเป็นตัวอย่าง (growth ±2 จุด, margin ±15% จาก base)</p>
       ) : (
         <>
           <table className="table text-xs">
@@ -1231,7 +1231,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
                       )),
                     )}
                   <td className="num font-medium" title={res?.rows[i]?.errors.join(" · ") || undefined}>
-                    {res?.rows[i]?.value == null && res?.rows[i]?.errors.length ? <span className="text-neg">⚠️</span> : fmtNum(res?.rows[i]?.value)}
+                    {res?.rows[i]?.value == null && res?.rows[i]?.errors.length ? <span className="text-negative">⚠️</span> : fmtNum(res?.rows[i]?.value)}
                   </td>
                   <td className={clsx("num", signClass(res?.rows[i]?.upside))}>{fmtPct(res?.rows[i]?.upside, 1)}</td>
                 </tr>
@@ -1243,15 +1243,15 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
               <span>
                 มูลค่าคาดหวัง <b className="tabular-nums">{fmtNum(res.expectedValue)}</b> <span className={signClass(res.expectedUpside)}>({fmtPct(res.expectedUpside, 1)})</span>
               </span>
-              <span className="text-muted">
+              <span className="text-text-muted">
                 ช่วง {fmtNum(res.low)} – {fmtNum(res.high)} · σ {fmtNum(res.stdev)}
               </span>
               {res.errors.map((e) => (
-                <span key={e} className="text-xs text-neg">⚠️ {e}</span>
+                <span key={e} className="text-xs text-negative">⚠️ {e}</span>
               ))}
             </div>
           )}
-          {staged && <p className="mt-2 text-xs text-muted">โหมดหลายช่วง: กำหนด growth (g) / EBIT margin (M) รายช่วง</p>}
+          {staged && <p className="mt-2 text-xs text-text-muted">โหมดหลายช่วง: กำหนด growth (g) / EBIT margin (M) รายช่วง</p>}
           <ScenarioDisclaimer />
         </>
       )}

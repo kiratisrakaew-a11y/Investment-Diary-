@@ -9,8 +9,8 @@ import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
-  received: { label: "ได้รับแล้ว", cls: "border-pos/40 text-pos" },
-  missing_confirmation: { label: "ถึงกำหนด ยังไม่บันทึก", cls: "border-warn/40 text-warn" },
+  received: { label: "ได้รับแล้ว", cls: "border-positive/40 text-positive" },
+  missing_confirmation: { label: "ถึงกำหนด ยังไม่บันทึก", cls: "border-warning/40 text-warning" },
   announced: { label: "ประกาศแล้ว", cls: "border-info/40 text-info" },
   estimated: { label: "ประมาณการ", cls: "" },
 };
@@ -47,8 +47,8 @@ export default async function DividendsPage() {
         subtitle={`${income.window.from} → ${income.window.to} · จัดเดือนตามวันจ่าย (ถ้าไม่ทราบใช้ ex-date) · สุทธิหลังภาษีหัก ณ ที่จ่าย เป็นบาท`}
         explain={{ data: compact({ รายเดือน: income.byMonth, ภาษีสมมติ: income.assumptions.withholding, ไม่มีข้อมูลปันผล: income.coverageGaps }), hint: "received = เงินที่บันทึกในบัญชีจริง; missing_confirmation = ถึงวันจ่ายแล้วแต่ยังไม่มีรายการรับเงิน; announced = ประกาศแล้วยังไม่ถึงวันจ่าย; estimated = คาดจากปีก่อน" }}
       >
-        {income.byMonth.length ? <IncomeChart data={income.byMonth} /> : <p className="text-sm text-muted">ยังไม่มีข้อมูล — เพิ่มเหตุการณ์ปันผลด้านล่าง</p>}
-        {income.coverageGaps.length > 0 && <p className="mt-2 text-xs text-warn">ไม่มีข้อมูลปันผลของ: {income.coverageGaps.join(", ")}</p>}
+        {income.byMonth.length ? <IncomeChart data={income.byMonth} /> : <p className="text-sm text-text-muted">ยังไม่มีข้อมูล — เพิ่มเหตุการณ์ปันผลด้านล่าง</p>}
+        {income.coverageGaps.length > 0 && <p className="mt-2 text-xs text-warning">ไม่มีข้อมูลปันผลของ: {income.coverageGaps.join(", ")}</p>}
       </Section>
 
       <Section title="รายการปันผลที่คาดว่าจะได้รับ / ได้รับแล้ว" subtitle={income.note}>
@@ -78,13 +78,13 @@ export default async function DividendsPage() {
                     <Badge className={STATUS[r.status].cls}>{STATUS[r.status].label}</Badge>
                   </td>
                   <td>{r.exDate}</td>
-                  <td>{r.paymentDate ?? <span className="text-muted">ไม่ทราบ</span>}</td>
+                  <td>{r.paymentDate ?? <span className="text-text-muted">ไม่ทราบ</span>}</td>
                   <td className="num">{fmtNum(r.units, 0)}</td>
                   <td className="num">
                     {fmtNum(r.dpsLatestBasis, 4)} {r.currency !== "THB" && r.currency}
                   </td>
                   <td className="num">{fmtNum(r.gross, 2)}</td>
-                  <td className="num text-muted">{fmtPct(r.withholdingRate, 0)}</td>
+                  <td className="num text-text-muted">{fmtPct(r.withholdingRate, 0)}</td>
                   <td className="num">{r.netThb == null ? "—" : fmtThb(r.netThb)}</td>
                   <td className="num">{r.receivedThb == null ? "" : fmtThb(r.receivedThb)}</td>
                 </tr>
@@ -92,7 +92,7 @@ export default async function DividendsPage() {
             </tbody>
           </table>
         </div>
-        <ul className="mt-3 space-y-0.5 text-xs text-muted">
+        <ul className="mt-3 space-y-1 text-xs text-text-muted">
           {income.methodology.map((m) => (
             <li key={m}>• {m}</li>
           ))}

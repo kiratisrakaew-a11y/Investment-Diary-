@@ -85,7 +85,7 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
   const shown = events.filter((e) => !filter || e.symbol === filter).slice().reverse();
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         ข้อมูลประกาศจ่ายปันผลของบริษัท (ex-date / วันจ่าย / ปันผลต่อหุ้น) — แยกจาก “รายการรับปันผล” ในบัญชี · ไม่รู้วันไหนให้เว้นว่าง ระบบไม่เดาให้ · ปันผลต่อหุ้นใส่ตามฐานหุ้น ณ วัน XD (ระบบปรับตาม split ที่บันทึกไว้)
       </p>
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -120,11 +120,11 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
         <button className="btn-ghost" disabled={pending} onClick={importYahoo}>
           ดึงประวัติปันผลจาก Yahoo
         </button>
-        {msg && <span className={msg.ok ? "text-xs text-pos" : "text-xs text-neg"}>{msg.text}</span>}
+        {msg && <span className={msg.ok ? "text-xs text-positive" : "text-xs text-negative"}>{msg.text}</span>}
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted">แสดง</span>
+        <span className="text-xs text-text-muted">แสดง</span>
         <select className="input w-auto py-1 text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="">ทุกหุ้น ({events.length})</option>
           {[...new Set(events.map((e) => e.symbol))].map((s) => (
@@ -152,9 +152,9 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
             {shown.map((e) => (
               <tr key={e.id}>
                 <td className="font-medium">{e.symbol}</td>
-                <td>{e.exDate ?? <span className="text-muted">ไม่ทราบ</span>}</td>
-                <td>{e.paymentDate ?? <span className="text-muted">ไม่ทราบ</span>}</td>
-                <td>{e.announcedAt ?? <span className="text-muted">—</span>}</td>
+                <td>{e.exDate ?? <span className="text-text-muted">ไม่ทราบ</span>}</td>
+                <td>{e.paymentDate ?? <span className="text-text-muted">ไม่ทราบ</span>}</td>
+                <td>{e.announcedAt ?? <span className="text-text-muted">—</span>}</td>
                 <td className="num">
                   {fmtNum(e.dividendPerShare, 4)} {e.currency}
                 </td>
@@ -162,11 +162,11 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
                   <Badge>{KIND[e.kind] ?? e.kind}</Badge> {e.cashOrStock === "stock" && <Badge>หุ้น</Badge>}
                   {e.revisions.length > 0 && <Badge className="ml-1">แก้ไข {e.revisions.length}</Badge>}
                 </td>
-                <td className="max-w-48 truncate text-xs text-muted" title={e.source}>
+                <td className="max-w-48 truncate text-xs text-text-muted" title={e.source}>
                   {e.source} · {e.dataQualityStatus}
                 </td>
                 <td>
-                  <button className="text-xs text-muted hover:text-neg" onClick={() => remove(e.id)} disabled={pending}>
+                  <button className="text-xs text-text-muted hover:text-negative" onClick={() => remove(e.id)} disabled={pending}>
                     ลบ
                   </button>
                 </td>
@@ -174,7 +174,7 @@ export function DividendEventsPanel({ events, symbols }: { events: Event[]; symb
             ))}
           </tbody>
         </table>
-        {!shown.length && <p className="p-4 text-center text-sm text-muted">ยังไม่มีเหตุการณ์ปันผล — บันทึกจากประกาศ SET หรือดึงจาก Yahoo</p>}
+        {!shown.length && <p className="p-4 text-center text-sm text-text-muted">ยังไม่มีเหตุการณ์ปันผล — บันทึกจากประกาศ SET หรือดึงจาก Yahoo</p>}
       </div>
     </div>
   );

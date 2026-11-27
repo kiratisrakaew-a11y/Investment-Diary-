@@ -91,7 +91,7 @@ export function AdvisorChat({
             <Link
               key={t.id}
               href={`/advisor?thread=${t.id}`}
-              className={clsx("block truncate rounded-md px-2 py-1.5 text-sm", t.id === threadId ? "bg-accent/10 text-accent" : "text-muted hover:text-text")}
+              className={clsx("block truncate rounded-md px-2 py-2 text-sm", t.id === threadId ? "bg-primary/10 text-primary" : "text-text-muted hover:text-text")}
             >
               {t.title}
             </Link>
@@ -100,10 +100,10 @@ export function AdvisorChat({
       </aside>
 
       <section className="card flex min-h-[70vh] flex-col lg:col-span-3">
-        <div className="flex-1 space-y-5 overflow-y-auto pb-4">
+        <div className="flex-1 space-y-6 overflow-y-auto pb-4">
           {turns.length === 0 && (
             <div className="space-y-3">
-              <p className="text-sm text-muted">
+              <p className="text-sm text-text-muted">
                 AI ที่ปรึกษาอ่านพอร์ตจริงของคุณ และใช้เครื่องมือคำนวณของแอป (DCF, DDM, bond YTM/duration, Markowitz optimizer) ก่อนตอบ
               </p>
               <div className="flex flex-wrap gap-2">
@@ -117,7 +117,7 @@ export function AdvisorChat({
           )}
           {turns.map((t, i) => (
             <div key={i} className={clsx("flex", t.role === "user" && "justify-end")}>
-              <div className={clsx("max-w-[92%] rounded-xl px-4 py-3 text-sm", t.role === "user" ? "bg-accent/10" : "border border-border")}>
+              <div className={clsx("max-w-[92%] rounded-xl px-4 py-3 text-sm", t.role === "user" ? "bg-primary/10" : "border border-border")}>
                 {t.role === "assistant" ? (
                   <div className="prose-note advisor-md">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{t.content}</ReactMarkdown>
@@ -128,17 +128,17 @@ export function AdvisorChat({
                 {t.tools && t.tools.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1 border-t border-border/60 pt-2">
                     {t.tools.map((n) => (
-                      <span key={n} className="rounded-full bg-bg px-2 py-0.5 text-xs text-muted">🔧 {TOOL_LABEL[n] ?? n}</span>
+                      <span key={n} className="rounded-full bg-bg px-2 py-1 text-xs text-text-muted">🔧 {TOOL_LABEL[n] ?? n}</span>
                     ))}
                   </div>
                 )}
               </div>
             </div>
           ))}
-          {pending && <div className="animate-pulse text-sm text-muted">กำลังวิเคราะห์ข้อมูลพอร์ตและคำนวณ…</div>}
+          {pending && <div className="animate-pulse text-sm text-text-muted">กำลังวิเคราะห์ข้อมูลพอร์ตและคำนวณ…</div>}
           <div ref={bottom} />
         </div>
-        {error && <p className="mb-2 text-sm text-neg">{error}</p>}
+        {error && <p className="mb-2 text-sm text-negative">{error}</p>}
         <form
           className="flex gap-2 border-t border-border pt-3"
           onSubmit={(e) => {

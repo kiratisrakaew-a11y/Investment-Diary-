@@ -83,7 +83,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
           <div className="glass-inset space-y-3 rounded-xl p-3" role="group" aria-label="football field: มูลค่าล่าสุดของแต่ละวิธีเทียบราคา">
             {group.latestByMethod.map((r) => (
               <div key={r.id} className="text-xs">
-                <div className="mb-0.5 flex justify-between">
+                <div className="mb-1 flex justify-between">
                   <span>
                     {METHOD_LABEL[r.method]} <span className="text-text-muted">· {r.date}{r.title ? ` · ${r.title}` : ""}</span>
                   </span>
@@ -103,28 +103,28 @@ export default async function StockValuationPage({ params }: { params: Promise<{
             ))}
             {cons && consTarget != null && (
               <div className="border-t border-dashed border-border pt-2 text-xs">
-                <div className="mb-0.5 flex justify-between">
+                <div className="mb-1 flex justify-between">
                   <span>
-                    Consensus นักวิเคราะห์ <span className="text-muted">· {cons.asOf} · ไม่นับรวมในค่าเฉลี่ย</span>
+                    Consensus นักวิเคราะห์ <span className="text-text-muted">· {cons.asOf} · ไม่นับรวมในค่าเฉลี่ย</span>
                   </span>
                   <span className="tabular-nums">
                     {fmtNum(consTarget)}
-                    {cons.targetLow != null && cons.targetHigh != null && <span className="text-muted"> ({fmtNum(cons.targetLow)} – {fmtNum(cons.targetHigh)})</span>}
+                    {cons.targetLow != null && cons.targetHigh != null && <span className="text-text-muted"> ({fmtNum(cons.targetLow)} – {fmtNum(cons.targetHigh)})</span>}
                   </span>
                 </div>
                 <div className="relative h-2.5 rounded-full bg-panel-2" role="img" aria-label={`Consensus นักวิเคราะห์ ${fmtNum(consTarget)}${cons.targetLow != null && cons.targetHigh != null ? ` ช่วง ${fmtNum(cons.targetLow)}–${fmtNum(cons.targetHigh)}` : ""}`}>
                   {cons.targetLow != null && cons.targetHigh != null && (
                     <div
-                      className="absolute h-2.5 rounded-full border border-dashed border-muted/70 bg-muted/20"
+                      className="absolute h-2.5 rounded-full border border-dashed border-text-muted/70 bg-text-muted/20"
                       style={{ left: `${(cons.targetLow / max) * 100}%`, width: `${Math.max(0.5, ((cons.targetHigh - cons.targetLow) / max) * 100)}%` }}
                     />
                   )}
-                  <div className="absolute -top-[2px] h-3.5 w-3.5 -translate-x-1/2 rotate-45 rounded-[2px] border-2 border-panel-solid bg-muted" style={{ left: `${(consTarget / max) * 100}%` }} />
+                  <div className="absolute -top-[2px] h-3.5 w-3.5 -translate-x-1/2 rotate-45 rounded-[2px] border-2 border-panel-solid bg-text-muted" style={{ left: `${(consTarget / max) * 100}%` }} />
                   {price != null && <div className="absolute -top-[3px] h-4 w-0.5 rounded-md bg-text" style={{ left: `${(price / max) * 100}%` }} />}
                 </div>
               </div>
             )}
-            <div className="text-right text-xs text-muted">
+            <div className="text-right text-xs text-text-muted">
               เส้นตั้ง = ราคาปิดล่าสุด {fmtNum(price)}
               {hist.length ? ` ณ ${hist[hist.length - 1].date}` : ""}
             </div>
@@ -132,7 +132,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
         </Section>
       )}
 
-      <Section title={`Valuation ทั้งหมดของ ${symbol}`} action={<span className="text-xs text-muted">กดแต่ละรายการเพื่อดูสมมติฐานและวิธีคำนวณ</span>}>
+      <Section title={`Valuation ทั้งหมดของ ${symbol}`} action={<span className="text-xs text-text-muted">กดแต่ละรายการเพื่อดูสมมติฐานและวิธีคำนวณ</span>}>
         {group ? (
           <SavedValuationList
             currentPrice={price}
@@ -153,7 +153,7 @@ export default async function StockValuationPage({ params }: { params: Promise<{
             }))}
           />
         ) : (
-          <p className="text-sm text-muted">ยังไม่มี valuation ของหุ้นนี้</p>
+          <p className="text-sm text-text-muted">ยังไม่มี valuation ของหุ้นนี้</p>
         )}
       </Section>
 

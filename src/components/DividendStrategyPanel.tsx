@@ -78,7 +78,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
   const preset = DIVIDEND_PRESETS[strategy];
   const weightSum = Object.values(s.factors).reduce((a, f) => a + (f?.weight ?? 0), 0);
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <section className="card space-y-4">
         <CardTitle title="ตัวคัดกรองหุ้นปันผล" />
         <div className="grid gap-3 md:grid-cols-3">
@@ -87,11 +87,11 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
               key={id}
               type="button"
               onClick={() => pickPreset(id)}
-              className={clsx("rounded-xl border p-3 text-left transition-colors", id === strategy ? "border-accent bg-accent/10" : "border-border bg-panel-2 hover:border-accent/50")}
+              className={clsx("rounded-xl border p-3 text-left transition-colors", id === strategy ? "border-primary bg-primary/10" : "border-border bg-panel-2 hover:border-primary/50")}
             >
               <div className="font-semibold">{DIVIDEND_PRESETS[id].label}</div>
-              <div className="mt-1 text-xs text-muted">{DIVIDEND_PRESETS[id].description}</div>
-              <div className="mt-2 text-xs text-muted">เวอร์ชัน {DIVIDEND_PRESETS[id].version}</div>
+              <div className="mt-1 text-xs text-text-muted">{DIVIDEND_PRESETS[id].description}</div>
+              <div className="mt-2 text-xs text-text-muted">เวอร์ชัน {DIVIDEND_PRESETS[id].version}</div>
             </button>
           ))}
         </div>
@@ -133,7 +133,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
         </div>
 
         {showSettings && (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             <div>
               <h3 className="mb-2 text-sm font-semibold">เกณฑ์คัดกรอง (ว่าง = ไม่ใช้)</h3>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -153,7 +153,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
             </div>
             <div>
               <h3 className="mb-2 text-sm font-semibold">
-                น้ำหนักปัจจัย <span className="font-normal text-muted">(รวม {fmtPct(weightSum, 0)} — คำนวณสัดส่วนใหม่อัตโนมัติ)</span>
+                น้ำหนักปัจจัย <span className="font-normal text-text-muted">(รวม {fmtPct(weightSum, 0)} — คำนวณสัดส่วนใหม่อัตโนมัติ)</span>
               </h3>
               <table className="table">
                 <thead>
@@ -169,14 +169,14 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                       <td className="text-xs">{FACTOR_LABEL[k]}</td>
                       <td className="num w-24">
                         <input
-                          className="input py-0.5 text-right"
+                          className="input py-1 text-right"
                           inputMode="decimal"
                           value={Math.round((s.factors[k]?.weight ?? 0) * 100)}
                           onChange={(e) => setFactor(k, { weight: Math.min(1, Math.max(0, Number(e.target.value) / 100 || 0)) })}
                         />
                       </td>
                       <td>
-                        <input type="checkbox" className="accent-[var(--accent)]" checked={!!s.factors[k]?.required} onChange={(e) => setFactor(k, { required: e.target.checked })} />
+                        <input type="checkbox" className="accent-[var(--primary)]" checked={!!s.factors[k]?.required} onChange={(e) => setFactor(k, { required: e.target.checked })} />
                       </td>
                     </tr>
                   ))}
@@ -189,9 +189,9 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
           <button className="btn" onClick={run} disabled={pending || !symbols.length}>
             {pending ? "กำลังคัดกรอง…" : `คัดกรองด้วย “${preset.label}”`}
           </button>
-          <span className="text-xs text-muted">ค่าเริ่มต้นเป็นตัวอย่างที่แก้ได้ ไม่ใช่คำแนะนำการลงทุน · จักรวาล: {symbols.join(", ") || "—"}</span>
+          <span className="text-xs text-text-muted">ค่าเริ่มต้นเป็นตัวอย่างที่แก้ได้ ไม่ใช่คำแนะนำการลงทุน · จักรวาล: {symbols.join(", ") || "—"}</span>
         </div>
-        {error && <p className="text-sm text-neg">{error}</p>}
+        {error && <p className="text-sm text-negative">{error}</p>}
       </section>
 
       {res && (
@@ -228,22 +228,22 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                     return (
                       <Fragment key={r.symbol}>
                         <tr className="cursor-pointer" onClick={() => setOpen(open === r.symbol ? null : r.symbol)}>
-                          <td className="text-muted">{i + 1}</td>
+                          <td className="text-text-muted">{i + 1}</td>
                           <td className="font-medium">
-                            {r.symbol} {res.selected.includes(r.symbol) && <span className="text-xs text-accent">● เลือก</span>}
+                            {r.symbol} {res.selected.includes(r.symbol) && <span className="text-xs text-primary">● เลือก</span>}
                           </td>
                           <td>
                             <div className="flex items-center gap-2">
                               <div className="h-2 w-20 rounded-full bg-panel-2">
-                                <div className="h-2 rounded-full bg-linear-to-r from-accent to-accent-2" style={{ width: `${r.score * 100}%` }} />
+                                <div className="h-2 rounded-full bg-primary" style={{ width: `${r.score * 100}%` }} />
                               </div>
                               <span className="tabular-nums">{fmtNum(r.score, 2)}</span>
-                              {r.coverage < 1 && <span className="text-xs text-warn">{fmtPct(r.coverage, 0)}</span>}
+                              {r.coverage < 1 && <span className="text-xs text-warning">{fmtPct(r.coverage, 0)}</span>}
                             </div>
                           </td>
                           <td className="num">{fmtPct(p.ttmYieldRegular.value, 2)}</td>
-                          <td className="num">{p.earningsPayout.value == null ? <span className="text-muted">{p.earningsPayout.status}</span> : fmtPct(p.earningsPayout.value, 0)}</td>
-                          <td className="num">{p.fcfPayout.value == null ? <span className="text-muted">{p.fcfPayout.status}</span> : fmtPct(p.fcfPayout.value, 0)}</td>
+                          <td className="num">{p.earningsPayout.value == null ? <span className="text-text-muted">{p.earningsPayout.status}</span> : fmtPct(p.earningsPayout.value, 0)}</td>
+                          <td className="num">{p.fcfPayout.value == null ? <span className="text-text-muted">{p.fcfPayout.status}</span> : fmtPct(p.fcfPayout.value, 0)}</td>
                           <td className="num">{fmtPct(p.dpsCagr5.value, 1)}</td>
                           <td className="num">{p.consistency.consecutiveYears.value ?? "—"}</td>
                           <td className="num font-medium">{w ? fmtPct(w, 1) : "—"}</td>
@@ -254,21 +254,21 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                               <div className="grid gap-1 py-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
                                 {r.factors.map((f) => (
                                   <div key={f.key} className="flex justify-between gap-2 rounded-md px-2 py-1">
-                                    <span className="text-muted">{FACTOR_LABEL[f.key]}</span>
+                                    <span className="text-text-muted">{FACTOR_LABEL[f.key]}</span>
                                     <span className="tabular-nums">
                                       {fmtFactor(f.key, f.value)}
                                       {f.rank != null ? ` · เปอร์เซ็นไทล์ ${fmtNum(f.rank * 100, 0)}` : ` · ${f.status}`}
-                                      {f.contribution != null && <span className="text-accent"> +{fmtNum(f.contribution, 2)}</span>}
+                                      {f.contribution != null && <span className="text-primary"> +{fmtNum(f.contribution, 2)}</span>}
                                     </span>
                                   </div>
                                 ))}
                               </div>
                               {r.warnings.map((w2) => (
-                                <p key={w2} className="mt-1 text-xs text-warn">
+                                <p key={w2} className="mt-1 text-xs text-warning">
                                   {w2}
                                 </p>
                               ))}
-                              <p className="mt-1 text-xs text-muted">
+                              <p className="mt-1 text-xs text-text-muted">
                                 Yield รวม {fmtPct(p.ttmYieldTotal.value, 2)} · Forward {p.forwardYield.value == null ? p.forwardYield.warnings[0] : fmtPct(p.forwardYield.value, 2)} · ปันผลรายปีจาก{" "}
                                 {p.annualDps.source === "statements" ? "งบการเงิน" : p.annualDps.source === "events" ? "เหตุการณ์ปันผล" : "—"} · ลด {p.consistency.cuts} ครั้ง · งด {p.consistency.missedYears} ปี · Total shareholder yield: ไม่รองรับ (ไม่มีข้อมูลซื้อหุ้นคืน)
                               </p>
@@ -281,16 +281,16 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                 </tbody>
               </table>
             ) : (
-              <p className="text-sm text-muted">ไม่มีหุ้นผ่านเกณฑ์</p>
+              <p className="text-sm text-text-muted">ไม่มีหุ้นผ่านเกณฑ์</p>
             )}
             {res.diagnostics.length > 0 && (
-              <ul className="mt-3 space-y-0.5 text-xs text-muted">
+              <ul className="mt-3 space-y-1 text-xs text-text-muted">
                 {res.diagnostics.map((d) => (
                   <li key={d}>⚠ {d}</li>
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-xs text-muted">{res.disclaimer}</p>
+            <p className="mt-2 text-xs text-text-muted">{res.disclaimer}</p>
           </section>
 
           {res.excluded.length > 0 && (
@@ -311,7 +311,7 @@ export function DividendStrategyPanel({ symbols }: { symbols: string[] }) {
                       <td>
                         <Badge>{CODE_LABEL[e.code] ?? e.code}</Badge>
                       </td>
-                      <td className="text-xs whitespace-normal text-muted">{e.detail}</td>
+                      <td className="text-xs whitespace-normal text-text-muted">{e.detail}</td>
                     </tr>
                   ))}
                 </tbody>

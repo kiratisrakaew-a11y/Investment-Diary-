@@ -37,9 +37,9 @@ export function AssetProfileForm({ symbol, issuer, sector, sectorSource, sectorA
       </div>
       <div className="flex items-center gap-2">
         <button type="button" className="btn" onClick={save}>บันทึก</button>
-        {msg && <span className={`text-sm ${msg.ok ? "text-pos" : "text-neg"}`}>{msg.text}</span>}
+        {msg && <span className={`text-sm ${msg.ok ? "text-positive" : "text-negative"}`}>{msg.text}</span>}
       </div>
-      <p className="text-xs text-muted">ใช้จำกัดน้ำหนักต่อผู้ออก/หมวดในหน้าจัดพอร์ต และสรุปการกระจุกตัวใน stress test · ระบบไม่จัดหมวดให้เอง</p>
+      <p className="text-xs text-text-muted">ใช้จำกัดน้ำหนักต่อผู้ออก/หมวดในหน้าจัดพอร์ต และสรุปการกระจุกตัวใน stress test · ระบบไม่จัดหมวดให้เอง</p>
     </div>
   );
 }

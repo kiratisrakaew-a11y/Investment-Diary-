@@ -67,7 +67,7 @@ export function Modal({
       onClose={onClose}
       aria-label={title}
       className={clsx(
-        "m-auto max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-panel-solid p-5 text-text backdrop:bg-black/50",
+        "m-auto max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-panel-solid p-6 text-text backdrop:bg-black/50",
         wide ? "w-[min(40rem,94vw)]" : "w-[min(28rem,94vw)]",
       )}
     >
@@ -76,7 +76,7 @@ export function Modal({
         <button
           type="button"
           aria-label="ปิด"
-          className="text-muted hover:text-text"
+          className="text-text-muted hover:text-text"
           onClick={onClose}
         >
           ×
@@ -92,7 +92,7 @@ function Msg({ r }: { r: MetricActionResult | null }) {
   return (
     <p
       role={r.ok ? "status" : "alert"}
-      className={clsx("text-xs", r.ok ? "text-pos" : "text-neg")}
+      className={clsx("text-xs", r.ok ? "text-positive" : "text-negative")}
     >
       {r.ok ? "บันทึกแล้ว" : r.error}
     </p>
@@ -112,7 +112,7 @@ const Field = ({
     <span className="label">{label}</span>
     {children}
     {hint && (
-      <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+      <span className="mt-1 block text-xs text-text-muted">{hint}</span>
     )}
   </label>
 );
@@ -270,7 +270,7 @@ export function MetricForm({
       </Field>
       {needConfirm && (
         <div
-          className="rounded-lg border border-warn/40 p-2 text-xs text-warn"
+          className="rounded-lg border border-warning/40 p-2 text-xs text-warning"
           role="alert"
         >
           {res && !res.ok && res.error}
@@ -346,7 +346,7 @@ export function ObservationForm({
   const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
   if (!m)
     return (
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         ยังไม่มีตัวชี้วัด — เพิ่มตัวชี้วัดก่อน
       </p>
     );
@@ -506,7 +506,7 @@ function StartDateEditor({
     return (
       <button
         type="button"
-        className="btn-ghost mt-1 px-2 py-0.5 text-xs"
+        className="btn-ghost mt-1 px-2 py-1 text-xs"
         onClick={() => setOpen(true)}
       >
         แก้วันเริ่ม
@@ -524,7 +524,7 @@ function StartDateEditor({
       />
       <button
         type="button"
-        className="btn-ghost px-2 py-0.5"
+        className="btn-ghost px-2 py-1"
         disabled={pending || !from || from === version.effectiveFrom}
         onClick={() =>
           start(async () => {
@@ -544,7 +544,7 @@ function StartDateEditor({
       </button>
       <button
         type="button"
-        className="text-muted hover:underline"
+        className="text-text-muted hover:underline"
         onClick={() => {
           setOpen(false);
           setFrom(version.effectiveFrom);
@@ -553,12 +553,12 @@ function StartDateEditor({
       >
         ยกเลิก
       </button>
-      <span className="w-full text-muted">
+      <span className="w-full text-text-muted">
         สีสถานะของค่าตั้งแต่วันเริ่มใหม่จะคำนวณตามเกณฑ์นี้ ·
         เกณฑ์ฉบับก่อนหน้าจะสิ้นสุดที่วันนี้
       </span>
       {err && (
-        <span className="w-full text-neg" role="alert">
+        <span className="w-full text-negative" role="alert">
           {err}
         </span>
       )}
@@ -672,7 +672,7 @@ export function ThresholdForm({
     <div className="space-y-4 text-sm">
       {versions.length > 0 && (
         <details open>
-          <summary className="cursor-pointer text-xs font-medium text-accent">
+          <summary className="cursor-pointer text-xs font-medium text-primary">
             ประวัติเกณฑ์ ({versions.length} ฉบับ) — แก้วันเริ่มได้
           </summary>
           <ul className="mt-2 space-y-1 text-xs">
@@ -683,7 +683,7 @@ export function ThresholdForm({
                 </b>{" "}
                 · {RULE_LABEL[v.ruleType]} · {describeRule(v, metric.unit)}
                 {v.reason && (
-                  <span className="block text-muted">เหตุผล: {v.reason}</span>
+                  <span className="block text-text-muted">เหตุผล: {v.reason}</span>
                 )}
                 <StartDateEditor
                   assetId={assetId}
@@ -775,13 +775,13 @@ export function ThresholdForm({
           </Field>
         </div>
         {errs.length > 0 && (f.greenBound || f.yellowBound || f.greenMin) && (
-          <p className="text-xs text-neg" role="alert">
+          <p className="text-xs text-negative" role="alert">
             {errs[0]}
           </p>
         )}
         {backdated && (
           <div
-            className="space-y-2 rounded-lg border border-warn/40 p-2 text-xs"
+            className="space-y-2 rounded-lg border border-warning/40 p-2 text-xs"
             role="alert"
           >
             <p>
@@ -792,7 +792,7 @@ export function ThresholdForm({
             </p>
             <button
               type="button"
-              className="btn-ghost px-2 py-0.5"
+              className="btn-ghost px-2 py-1"
               disabled={pending}
               onClick={() =>
                 start(async () => {
@@ -832,7 +832,7 @@ export function ThresholdForm({
             ดูผลกระทบก่อนบันทึก
           </button>
           {preview && (
-            <span className="text-xs text-muted" role="status">
+            <span className="text-xs text-text-muted" role="status">
               ค่าตั้งแต่ {f.effectiveFrom}: {preview.affected} รายการ ·
               เปลี่ยนสถานะ {preview.changed} รายการ ·
               ค่าก่อนหน้านั้นคงใช้เกณฑ์เดิม
@@ -898,7 +898,7 @@ export function DeleteMetricForm({
   const [pending, start] = useTransition();
   return (
     <div className="space-y-3 text-sm">
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         ลบตัวชี้วัด <b>{metric.name}</b> พร้อมค่าที่บันทึก{" "}
         {metric.observationCount} รายการและเกณฑ์ทั้งหมด (บันทึกใน audit) —
         ถ้าแค่ไม่อยากเห็น ให้ใช้ “เก็บถาวร” แทน
@@ -918,7 +918,7 @@ export function DeleteMetricForm({
         </button>
         <button
           type="button"
-          className="inline-flex items-center rounded-lg bg-neg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          className="inline-flex items-center rounded-lg bg-negative px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
           disabled={pending || confirm.trim() !== metric.name}
           onClick={() =>
             start(async () => {

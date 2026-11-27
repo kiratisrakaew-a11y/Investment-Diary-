@@ -58,7 +58,7 @@ export function DcfStageEditor({ a, model, setA, errors }: { a: DcfAssumptions; 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div role="radiogroup" aria-label="รูปแบบประมาณการ" className="inline-flex rounded-xl border border-border bg-panel-2 p-0.5 text-sm">
+        <div role="radiogroup" aria-label="รูปแบบประมาณการ" className="inline-flex rounded-xl border border-border bg-panel-2 p-1 text-sm">
           {(
             [
               ["linear_fade", "Legacy fade"],
@@ -71,7 +71,7 @@ export function DcfStageEditor({ a, model, setA, errors }: { a: DcfAssumptions; 
               role="radio"
               aria-checked={(m === "staged") === staged}
               onClick={() => setMode(m)}
-              className={clsx("rounded-lg px-3 py-1 transition-colors", (m === "staged") === staged ? "bg-accent text-accent-ink" : "text-muted hover:text-fg")}
+              className={clsx("rounded-lg px-3 py-1 transition-colors", (m === "staged") === staged ? "bg-primary text-primary-ink" : "text-text-muted hover:text-text")}
             >
               {label}
             </button>
@@ -84,7 +84,7 @@ export function DcfStageEditor({ a, model, setA, errors }: { a: DcfAssumptions; 
                 {p.label}
               </button>
             ))}
-            <span className="text-xs text-muted">รวม {total} ปี · โครงตัวอย่างตัดจากเส้น fade ที่ตั้งไว้ ไม่ใช่คำแนะนำ</span>
+            <span className="text-xs text-text-muted">รวม {total} ปี · โครงตัวอย่างตัดจากเส้น fade ที่ตั้งไว้ ไม่ใช่คำแนะนำ</span>
           </>
         )}
       </div>
@@ -157,7 +157,7 @@ export function DcfStageEditor({ a, model, setA, errors }: { a: DcfAssumptions; 
                       </td>
                     ))}
                     <td>
-                      <button type="button" className="text-xs text-muted hover:text-neg disabled:opacity-40" disabled={stages.length <= 2} onClick={() => sync(stages.filter((_, j) => j !== k))} aria-label={`ลบช่วงที่ ${k + 1}`}>
+                      <button type="button" className="text-xs text-text-muted hover:text-negative disabled:opacity-40" disabled={stages.length <= 2} onClick={() => sync(stages.filter((_, j) => j !== k))} aria-label={`ลบช่วงที่ ${k + 1}`}>
                         ลบ
                       </button>
                     </td>
@@ -178,10 +178,10 @@ export function DcfStageEditor({ a, model, setA, errors }: { a: DcfAssumptions; 
             >
               + เพิ่มช่วง
             </button>
-            <span className="text-xs text-muted">2–4 ช่วง · รวม 1–20 ปี · ค่าเปลี่ยนเป็นเส้นตรงภายในแต่ละช่วง · ช่องว่าง = ใช้ค่าหลักด้านล่าง</span>
+            <span className="text-xs text-text-muted">2–4 ช่วง · รวม 1–20 ปี · ค่าเปลี่ยนเป็นเส้นตรงภายในแต่ละช่วง · ช่องว่าง = ใช้ค่าหลักด้านล่าง</span>
           </div>
           {errors.length > 0 && (
-            <ul className="space-y-0.5 text-xs text-neg" role="alert">
+            <ul className="space-y-1 text-xs text-negative" role="alert">
               {errors.map((e) => (
                 <li key={e}>• {e}</li>
               ))}
@@ -218,7 +218,7 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
           return (
             <g key={k}>
               <rect x={x0 + 1} y={2} width={Math.max(0, w - 2)} height={H - 4} rx={8} fill={STAGE_COLORS[k]} opacity={0.12} />
-              <text x={x0 + 8} y={14} fontSize={10} fill="var(--muted)">
+              <text x={x0 + 8} y={14} fontSize={12} fill="var(--text-muted)">
                 {s.name || `ช่วง ${k + 1}`} · {s.years}ป
               </text>
             </g>
@@ -232,7 +232,7 @@ function StageTimeline({ a }: { a: DcfAssumptions }) {
           </circle>
         ))}
       </svg>
-      <figcaption className="flex gap-4 px-1 text-xs text-muted">
+      <figcaption className="flex gap-4 px-1 text-xs text-text-muted">
         <span>
           <span className="mr-1 inline-block h-0.5 w-4 align-middle" style={{ background: "var(--series-1)" }} />
           Revenue growth

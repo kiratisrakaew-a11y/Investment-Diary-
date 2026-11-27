@@ -13,9 +13,9 @@ export function OptimizerTabs({ optimizer, comparison, picker }: { optimizer: Re
   return (
     <div className="space-y-4">
       {picker}
-      <div role="tablist" aria-label="เครื่องมือจัดพอร์ต" className="inline-flex rounded-xl border border-border p-0.5 text-sm">
+      <div role="tablist" aria-label="เครื่องมือจัดพอร์ต" className="inline-flex rounded-xl border border-border p-1 text-sm">
         {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} className={clsx("rounded-lg px-3 py-1.5", tab === t.id ? "bg-panel-2 font-medium text-text" : "text-muted hover:text-text")} onClick={() => setTab(t.id)}>
+          <button key={t.id} type="button" role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} className={clsx("rounded-lg px-3 py-2", tab === t.id ? "bg-panel-2 font-medium text-text" : "text-text-muted hover:text-text")} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}

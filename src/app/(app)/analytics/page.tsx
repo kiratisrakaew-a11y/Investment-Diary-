@@ -26,7 +26,7 @@ function Row({ label, value, formula, tone }: { label: string; value: string; fo
     <tr>
       <td>{label}</td>
       <td className={`num font-medium ${tone ?? ""}`}>{value}</td>
-      <td className="text-xs whitespace-normal text-muted">{formula}</td>
+      <td className="text-xs whitespace-normal text-text-muted">{formula}</td>
     </tr>
   );
 }
@@ -99,11 +99,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       <div className="card space-y-2">
         <BasisBenchmarkPicker mode="query" value={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} note={PERF_BASIS_NOTE} />
-        {be && <p className="text-xs text-neg">{`${be.message} [${be.code}] — ${be.issue.suggestion} · แสดงผลกับดัชนีตามค่าเดิมแทน`}</p>}
+        {be && <p className="text-xs text-negative">{`${be.message} [${be.code}] — ${be.issue.suggestion} · แสดงผลกับดัชนีตามค่าเดิมแทน`}</p>}
         <BasisSummary priceBasis={perf.priceBasis} benchmark={perf.benchmark} />
       </div>
 
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         สมมติฐานการคำนวณ: TWR — {TIMING_LABEL[perf.flowTiming]} · XIRR ใช้ ACT/365 · ความผันผวน/Sharpe ใช้ผลตอบแทนส่วนเกินรายงวด × √N โดย N มาจากข้อมูลจริง (ไม่ใช่ 252 ตายตัว) ·
         Rf ต่องวด = (1 + Rf)^(Δวัน/365) − 1{b && ` · ดัชนีอ้างอิง ${b.symbol} = ${b.kind === "price_index" ? "ดัชนีราคา (ไม่รวมปันผล)" : "ดัชนีผลตอบแทนรวม"}`}
       </p>
@@ -165,7 +165,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
           <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-medium text-accent">VaR / ES ตามช่วงเวลาลงทุน (ผลตอบแทนทบต้นจริง)</summary>
+            <summary className="cursor-pointer text-xs font-medium text-primary">VaR / ES ตามช่วงเวลาลงทุน (ผลตอบแทนทบต้นจริง)</summary>
             <div className="mt-2 overflow-x-auto">
               <table className="table text-xs">
                 <thead>
@@ -186,13 +186,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                       <tr key={h.key}>
                         <td>
                           {h.label}
-                          {Number.isFinite(h.periods) && <span className="block text-xs text-muted">{h.periods} งวด{h.calendarDays != null ? ` ≈ ${Math.round(h.calendarDays)} วัน` : ""}</span>}
+                          {Number.isFinite(h.periods) && <span className="block text-xs text-text-muted">{h.periods} งวด{h.calendarDays != null ? ` ≈ ${Math.round(h.calendarDays)} วัน` : ""}</span>}
                         </td>
                         <td className="num">{fmtPct(pick?.var95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.es95 ?? null)}</td>
                         <td className="num">{fmtPct(pick?.var99 ?? null)}</td>
                         <td className="num">{pick?.var95 != null && navNow > 0 ? fmtNum(pick.var95 * navNow, 0) : "—"}</td>
-                        <td className="whitespace-normal text-xs text-muted">
+                        <td className="whitespace-normal text-xs text-text-muted">
                           {h.unavailable ?? (pick === h.nonOverlapping ? kind : h.notes.join(" · "))}
                           {h.periods > 1 && h.sqrtScaledVar95 != null && ` · เทียบ √h (สมมติอิสระกัน): ${fmtPct(h.sqrtScaledVar95)}`}
                         </td>
@@ -202,7 +202,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 </tbody>
               </table>
             </div>
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-xs text-text-muted">
               R_H = Π(1 + rₜ) − 1 จากข้อมูลจริง — สถานะซื้อที่ไม่กู้ยืมขาดทุนไม่เกิน 100% · ไม่แสดงช่วงที่ข้อมูลไม่พอ (ไม่ขยายด้วย √h) · บาท = VaR × NAV ปัจจุบัน
             </p>
           </details>
@@ -243,7 +243,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={3} className="text-muted">ยังไม่มีข้อมูลดัชนีอ้างอิง — กด “ดึงราคาล่าสุด” ในหน้าสินทรัพย์</td>
+                    <td colSpan={3} className="text-text-muted">ยังไม่มีข้อมูลดัชนีอ้างอิง — กด “ดึงราคาล่าสุด” ในหน้าสินทรัพย์</td>
                   </tr>
                 )}
               </tbody>
@@ -287,7 +287,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           </Empty>
         ) : (
           <>
-            <p className="mb-3 text-xs text-muted">
+            <p className="mb-3 text-xs text-text-muted">
               {mpt.priceBasis.used === "total_return"
                 ? "ประมาณจากผลตอบแทนรวม (บาท, ราคาปรับปันผล — ปันผลรวมอยู่ในผลตอบแทน)"
                 : "ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — เลือกราคาปรับปันผลได้ที่หัวหน้า)"}{" "}
@@ -350,7 +350,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 </tfoot>
               </table>
             </div>
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-2 text-xs text-text-muted">
               ⚠️ ค่าคาดหวังจากข้อมูลในอดีตมีความคลาดเคลื่อนสูง (estimation error) — ใช้เป็นแนวทางประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
             </p>
           </>
@@ -365,14 +365,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <tr>
                   <th />
                   {mpt.symbols.map((s) => (
-                    <th key={s} className="px-2 py-1 font-medium text-muted">{s}</th>
+                    <th key={s} className="px-2 py-1 font-medium text-text-muted">{s}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {mpt.correlation.map((row, i) => (
                   <tr key={i}>
-                    <th className="pr-2 text-right font-medium text-muted">{mpt.symbols[i]}</th>
+                    <th className="pr-2 text-right font-medium text-text-muted">{mpt.symbols[i]}</th>
                     {row.map((c, j) => (
                       <td key={j} className="h-10 w-16 border-2 border-panel text-center tabular-nums" style={{ background: corrColor(c) }} title={`${mpt.symbols[i]} × ${mpt.symbols[j]}: ${fmtNum(c, 3)}`}>
                         {fmtNum(c, 2)}
@@ -407,7 +407,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     <td className="num">{fmtPct(a.weight, 1)}</td>
                     <td className="num">{fmtPct(a.mctr, 1)}</td>
                     <td className="num">{fmtPct(a.contribution, 2)}</td>
-                    <td className={`num ${a.share > a.weight + 0.05 ? "text-neg" : ""}`}>{fmtPct(a.share, 1)}</td>
+                    <td className={`num ${a.share > a.weight + 0.05 ? "text-negative" : ""}`}>{fmtPct(a.share, 1)}</td>
                     <td className="num">{mpt.risk.componentES95 ? fmtPct(mpt.risk.componentES95.assets[i].contribution, 2) : "—"}</td>
                   </tr>
                 ))}
@@ -424,7 +424,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               </tfoot>
             </table>
           </div>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-xs text-text-muted">
             MCTR = (Σw)ᵢ / σ · ส่วนร่วม = w × MCTR (รวมเท่ากับ σ พอร์ต) · กระจุกตัว: HHI {fmtNum(mpt.risk.concentration.hhi, 3)} → เทียบเท่า {fmtNum(mpt.risk.concentration.effectiveN, 1)} ตัว (น้ำหนัก),{" "}
             {fmtNum(mpt.risk.concentration.effectiveRiskN, 1)} ตัว (ความเสี่ยง) · ใหญ่สุด {fmtPct(mpt.risk.concentration.maxWeight, 1)} · 3 อันดับแรก {fmtPct(mpt.risk.concentration.top3, 1)} · สีแดง = ความเสี่ยงเกินน้ำหนักมากกว่า 5 จุด
           </p>

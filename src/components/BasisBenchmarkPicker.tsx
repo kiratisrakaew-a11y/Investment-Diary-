@@ -74,7 +74,7 @@ export function BasisBenchmarkPicker({
     >
       {showBasis && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted">ชนิดราคา</span>
+          <span className="text-xs text-text-muted">ชนิดราคา</span>
           <select
             className="input py-1"
             name="returnBasis"
@@ -94,7 +94,7 @@ export function BasisBenchmarkPicker({
       )}
       {showBenchmark && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted">ดัชนีอ้างอิง</span>
+          <span className="text-xs text-text-muted">ดัชนีอ้างอิง</span>
           <select
             className="input py-1"
             name="benchmark"
@@ -118,8 +118,8 @@ export function BasisBenchmarkPicker({
           </select>
         </label>
       )}
-      {pending && <span className="text-xs text-muted">กำลังคำนวณใหม่…</span>}
-      <div className="w-full space-y-0.5 text-xs text-muted">
+      {pending && <span className="text-xs text-text-muted">กำลังคำนวณใหม่…</span>}
+      <div className="w-full space-y-1 text-xs text-text-muted">
         {showBasis && value.basis === "total_return" && adjCoverage && (
           <p data-testid="adj-coverage">
             ราคาปรับปันผลครบ {adjCoverage.complete} ตัว · ไม่ครบ{" "}
@@ -129,7 +129,7 @@ export function BasisBenchmarkPicker({
               : ""}
           </p>
         )}
-        {disabledReason && <p className="text-neg">{disabledReason}</p>}
+        {disabledReason && <p className="text-negative">{disabledReason}</p>}
         {!disabledReason &&
           anyDisabled.map((r) => (
             <p key={r} data-testid="basis-disabled-reason">
@@ -169,17 +169,17 @@ export function BasisSummary({
       `ดัชนี: ${benchmark.symbol} (${BENCHMARK_KIND_LABEL[benchmark.kind]})`,
     );
   return (
-    <div className="space-y-0.5 text-xs" data-testid="basis-summary">
-      <p className="text-muted">{parts.join(" · ")}</p>
-      {benchmark?.warning && <p className="text-warn">{benchmark.warning}</p>}
+    <div className="space-y-1 text-xs" data-testid="basis-summary">
+      <p className="text-text-muted">{parts.join(" · ")}</p>
+      {benchmark?.warning && <p className="text-warning">{benchmark.warning}</p>}
       {priceBasis?.fallback?.length ? (
-        <p className="text-muted">
+        <p className="text-text-muted">
           ใช้ราคาปิดแทน:{" "}
           {priceBasis.fallback.map((f) => `${f.symbol} (${f.reason.replace(`${f.symbol}: `, "")})`).join(" · ")}
         </p>
       ) : null}
       {priceBasis?.excluded?.length ? (
-        <p className="text-neg">
+        <p className="text-negative">
           ไม่ได้นำมาคำนวณ:{" "}
           {priceBasis.excluded.map((f) => `${f.symbol} (${f.reason.replace(`${f.symbol}: `, "")})`).join(" · ")}
         </p>

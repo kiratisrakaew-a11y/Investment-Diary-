@@ -10,10 +10,10 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
   const [copied, setCopied] = useState(false);
   const groups = [...new Set(e.assumptions.map((a) => a.group))];
   return (
-    <div className="calc-detail space-y-5 text-sm">
+    <div className="calc-detail space-y-6 text-sm">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          {!compact && <div className="text-xs text-muted">{e.title}</div>}
+          {!compact && <div className="text-xs text-text-muted">{e.title}</div>}
           <div className="text-2xl font-semibold tabular-nums">{fmtNum(e.value)}</div>
           <div className={clsx("text-sm", signClass(e.upside))}>
             {e.upside != null && `${e.upside >= 0 ? "Upside" : "Downside"} ${fmtPct(Math.abs(e.upside), 1)} จากราคา ${fmtNum(e.price)}`}
@@ -38,7 +38,7 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
       </div>
 
       {e.warnings.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-neg/40 bg-neg/5 p-3 text-xs text-neg">
+        <ul className="space-y-1 rounded-lg border border-negative/40 bg-negative/5 p-3 text-xs text-negative">
           {e.warnings.map((w) => (
             <li key={w}>⚠️ {w}</li>
           ))}
@@ -50,12 +50,12 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
         <div className="grid gap-x-6 sm:grid-cols-2">
           {groups.map((g) => (
             <div key={g} className="mb-2">
-              <div className="mb-1 text-xs font-semibold text-muted">{g}</div>
+              <div className="mb-1 text-xs font-semibold text-text-muted">{g}</div>
               {e.assumptions
                 .filter((a) => a.group === g)
                 .map((a) => (
                   <div key={a.label} className="flex justify-between gap-3 border-b border-border/60 py-1">
-                    <span className="text-muted">
+                    <span className="text-text-muted">
                       {a.label}
                       {a.note && <span className="block text-xs">{a.note}</span>}
                     </span>
@@ -78,8 +78,8 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
                 </span>
                 <span className="font-semibold tabular-nums">{formatValue(s.result, s.unit)}</span>
               </div>
-              <div className="mt-1 font-mono text-xs text-accent">{s.formula}</div>
-              <div className="mt-0.5 font-mono text-xs break-words text-muted">
+              <div className="mt-1 font-mono text-xs text-primary">{s.formula}</div>
+              <div className="mt-1 font-mono text-xs break-words text-text-muted">
                 = {s.substitution} = {formatValue(s.result, s.unit)}
               </div>
             </li>
@@ -132,7 +132,7 @@ export function CalculationDrawer({ e, onClose }: { e: Explanation | null; onClo
   return (
     <div className="fixed inset-0 z-50 flex justify-end print:static print:block" role="dialog" aria-modal="true" aria-label={e.title}>
       <button type="button" aria-label="ปิด" className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} />
-      <div className="relative h-full w-full overflow-y-auto bg-panel-solid/90 p-5 shadow-xl backdrop-blur-xl sm:max-w-2xl print:max-w-none print:shadow-none">
+      <div className="relative h-full w-full overflow-y-auto bg-panel-solid/90 p-6 shadow-xl backdrop-blur-xl sm:max-w-2xl print:max-w-none print:shadow-none">
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold">วิธีคำนวณ: {e.title}</h2>
           <button type="button" className="btn-ghost text-xs print:hidden" onClick={onClose}>

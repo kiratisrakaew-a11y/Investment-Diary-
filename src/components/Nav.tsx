@@ -57,16 +57,16 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
     <>
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border glass lg:flex">
-        <Link href="/" className="flex items-center gap-3 border-b border-border px-5 py-5">
+        <Link href="/" className="flex items-center gap-3 border-b border-border px-4 py-6">
           <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
             <Icon name="journal" size="lg" active />
           </span>
           <span className="leading-tight">
             <span className="block text-sm font-semibold tracking-wide">INVESTMENT DIARY</span>
-            <span className="block text-xs text-muted">Portfolio analytics · THB</span>
+            <span className="block text-xs text-text-muted">Portfolio analytics · THB</span>
           </span>
         </Link>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 text-sm">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
           {LINKS.map((l) => (
             <Link
               key={l.href}
@@ -84,7 +84,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
         <div className="flex items-center justify-between border-t border-border p-2">
           <ThemeToggle />
           <form action={logout}>
-            <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted hover:text-text">
+            <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text-muted hover:text-text">
               <Icon name="logout" size="md" /> ออก
             </button>
           </form>
@@ -102,7 +102,7 @@ export function Nav({ logout }: { logout: () => Promise<void> }) {
               <Link
                 key={l.href}
                 href={l.href}
-                className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap", isActive(l.href) ? "bg-primary font-medium text-primary-ink" : "text-text-muted hover:text-text")}
+                className={clsx("flex items-center gap-2 rounded-md px-3 py-1 whitespace-nowrap", isActive(l.href) ? "bg-primary font-medium text-primary-ink" : "text-text-muted hover:text-text")}
               >
                 <Icon name={l.icon} active={isActive(l.href)} />
                 {l.label}

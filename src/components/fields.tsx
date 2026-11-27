@@ -58,7 +58,7 @@ export function NumField({
         }}
       />
       {pct && value != null && value !== 0 && Math.abs(value) < 0.001 && (
-        <span className="mt-0.5 block text-xs text-neg">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {fmtPct(value, 3)})</span>
+        <span className="mt-1 block text-xs text-negative">ช่องนี้เป็น % — ใส่ 7 สำหรับ 7% (ตอนนี้ = {fmtPct(value, 3)})</span>
       )}
     </label>
   );
@@ -92,7 +92,7 @@ export function SelectField<T extends string>({
 export function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--accent)]" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--primary)]" />
       {label}
     </label>
   );

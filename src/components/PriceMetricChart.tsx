@@ -45,15 +45,15 @@ export interface OverlayMetric {
 }
 
 const axis = {
-  stroke: "var(--muted)",
-  fontSize: 11,
+  stroke: "var(--text-muted)",
+  fontSize: 12,
   tickLine: false,
   axisLine: false,
 } as const;
 const RING: Partial<Record<MetricStatus, string>> = {
-  GREEN: "var(--pos)",
-  YELLOW: "var(--warn)",
-  RED: "var(--neg)",
+  GREEN: "var(--positive)",
+  YELLOW: "var(--warning)",
+  RED: "var(--negative)",
 };
 const dateTick = (t: number) => new Date(t).toISOString().slice(0, 7);
 const tick = (v: number) =>
@@ -207,7 +207,7 @@ export function PriceMetricChart({
           role="group"
           aria-label="เพิ่ม Metric ลงกราฟราคา"
         >
-          <span className="text-xs text-muted">+ เพิ่ม Metric ลงกราฟ:</span>
+          <span className="text-xs text-text-muted">+ เพิ่ม Metric ลงกราฟ:</span>
           {usable.map((m) => {
             const on = selected.includes(m.id);
             const blocked = why(m);
@@ -219,10 +219,10 @@ export function PriceMetricChart({
                 disabled={!!blocked}
                 title={blocked ?? `${m.readings.length} ค่า`}
                 className={clsx(
-                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs disabled:cursor-not-allowed disabled:opacity-40",
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40",
                   on
-                    ? "border-accent/60 bg-panel-2 font-medium text-text"
-                    : "border-border text-muted",
+                    ? "border-primary/60 bg-panel-2 font-medium text-text"
+                    : "border-border text-text-muted",
                 )}
                 onClick={() =>
                   save(
@@ -237,7 +237,7 @@ export function PriceMetricChart({
                   style={{ background: colorFor(m) }}
                   aria-hidden
                 />
-                {m.name} <span className="text-muted">({m.unit})</span>
+                {m.name} <span className="text-text-muted">({m.unit})</span>
               </button>
             );
           })}
@@ -245,7 +245,7 @@ export function PriceMetricChart({
       )}
 
       {chosen.length > 0 && (
-        <div className="flex justify-between text-xs text-muted">
+        <div className="flex justify-between text-xs text-text-muted">
           <span>ราคา ({currency}) · แกนซ้าย</span>
           <span>แกนขวา · {rightUnit}</span>
         </div>
@@ -262,12 +262,12 @@ export function PriceMetricChart({
             <linearGradient id={`gpm-${assetId}`} x1="0" y1="0" x2="0" y2="1">
               <stop
                 offset="0%"
-                stopColor={chosen.length ? "var(--muted)" : "var(--series-1)"}
+                stopColor={chosen.length ? "var(--text-muted)" : "var(--series-1)"}
                 stopOpacity={chosen.length ? 0.18 : 0.45}
               />
               <stop
                 offset="100%"
-                stopColor={chosen.length ? "var(--muted)" : "var(--series-6)"}
+                stopColor={chosen.length ? "var(--text-muted)" : "var(--series-6)"}
                 stopOpacity={0}
               />
             </linearGradient>
@@ -338,7 +338,7 @@ export function PriceMetricChart({
                     if (v == null) return null;
                     const st = statusBy.get(key(m.id))?.get(date);
                     return (
-                      <div key={m.id} className="flex items-center gap-1.5">
+                      <div key={m.id} className="flex items-center gap-2">
                         <span
                           className="inline-block h-2 w-2 rounded-full"
                           style={{ background: colorFor(m) }}
@@ -348,7 +348,7 @@ export function PriceMetricChart({
                           {fmtNum(Number(v), m.decimals)} {m.unit}
                         </span>
                         {st && (
-                          <span className="text-muted">
+                          <span className="text-text-muted">
                             · {STATUS_LABEL[st]}
                           </span>
                         )}
@@ -380,7 +380,7 @@ export function PriceMetricChart({
                 key={`e-${k.date}-${k.label}`}
                 yAxisId="price"
                 x={k.t}
-                stroke="var(--accent)"
+                stroke="var(--primary)"
                 strokeDasharray="2 3"
                 strokeOpacity={0.8}
               />
@@ -463,7 +463,7 @@ export function PriceMetricChart({
 
       {chosen.length > 0 && (
         <div className="space-y-2 text-xs">
-          <p className="text-xs text-muted">
+          <p className="text-xs text-text-muted">
             สองแกนมีสเกลต่างกัน — อย่าตีความจากจุดตัดหรือความชันของเส้น ใช้ค่า
             correlation ด้านล่างแทน · จุด = วันที่มีค่าจริง (เส้นประแค่เชื่อมจุด
             ไม่ใช่ค่าระหว่างกลาง) · วงสี = สถานะตามเกณฑ์ ณ วันนั้น
@@ -478,7 +478,7 @@ export function PriceMetricChart({
               <div
                 role="group"
                 aria-label="วันที่ใช้จับคู่ราคา"
-                className="ml-auto inline-flex rounded-lg border border-border p-0.5"
+                className="ml-auto inline-flex rounded-lg border border-border p-1"
               >
                 {(
                   [
@@ -491,10 +491,10 @@ export function PriceMetricChart({
                     type="button"
                     aria-pressed={basis === k}
                     className={clsx(
-                      "rounded-md px-2 py-0.5",
+                      "rounded-md px-2 py-1",
                       basis === k
                         ? "bg-panel-2 font-medium text-text"
-                        : "text-muted",
+                        : "text-text-muted",
                     )}
                     onClick={() => setBasis(k)}
                   >
@@ -503,13 +503,13 @@ export function PriceMetricChart({
                 ))}
               </div>
             </div>
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {corr.map(({ m, c }) => (
                 <li
                   key={m.id}
                   className="flex flex-wrap items-baseline gap-x-2"
                 >
-                  <span className="inline-flex items-center gap-1.5 font-medium">
+                  <span className="inline-flex items-center gap-2 font-medium">
                     <span
                       className="inline-block h-2 w-2 rounded-full"
                       style={{ background: colorFor(m) }}
@@ -528,17 +528,17 @@ export function PriceMetricChart({
                       ช่วง
                     </span>
                   ) : (
-                    <span className="text-muted">{c.reason}</span>
+                    <span className="text-text-muted">{c.reason}</span>
                   )}
                   {c.warnings.map((w) => (
-                    <span key={w} className="text-warn">
+                    <span key={w} className="text-warning">
                       · {w}
                     </span>
                   ))}
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-2 text-xs text-text-muted">
               วัดจากการเปลี่ยนแปลงระหว่างค่าที่บันทึกติดกัน: % เปลี่ยนของราคา
               เทียบกับการเปลี่ยนของ metric (
               {rightUnit && /%/.test(rightUnit)

@@ -79,7 +79,7 @@ export default async function TransactionsPage() {
 
       <Section title="แตกพาร์ / รวมพาร์ (stock split)">
         {assets.length ? <SplitForm symbols={assets.filter((a) => a.assetClass !== "cash").map((a) => a.symbol)} today={today()} /> : null}
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-text-muted">
           จำนวนหุ้นคูณตามอัตรา ต้นทุนรวมเท่าเดิม (ต้นทุนเฉลี่ยหาร) ไม่กระทบเงินสดและกำไรขาดทุน · รายการซื้อขายเก่าไม่ถูกแก้ · เศษหุ้นที่ได้เป็นเงินสด ให้บันทึกเป็น &quot;ขาย&quot; แยก
         </p>
       </Section>
@@ -113,11 +113,11 @@ export default async function TransactionsPage() {
                       <td className="font-medium">{symbol ?? "เงินสด"}</td>
                       <td className="num">{tx.type === "split" ? `×${fmtQty(tx.quantity)}` : tx.quantity ? fmtQty(tx.quantity) : "—"}</td>
                       <td className="num">
-                        {fmtNum(tx.price)} <span className="text-xs text-muted">{currency ?? "THB"}</span>
+                        {fmtNum(tx.price)} <span className="text-xs text-text-muted">{currency ?? "THB"}</span>
                       </td>
                       <td className="num">{tx.fee ? fmtNum(tx.fee) : "—"}</td>
                       <td className="num">{fmtThb(gross * tx.fxRate)}</td>
-                      <td className="max-w-48 truncate text-xs text-muted">
+                      <td className="max-w-48 truncate text-xs text-text-muted">
                         {tx.source !== "web" && <Badge className="mr-1">{tx.source}</Badge>}
                         {tx.memo}
                       </td>

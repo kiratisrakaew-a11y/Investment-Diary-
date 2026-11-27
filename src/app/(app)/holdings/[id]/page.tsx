@@ -207,7 +207,7 @@ export default async function AssetPage({
               frequency={asset.couponFrequency}
               dayCount={asset.dayCount}
             />
-            <div className="sm:col-span-5 mt-1 border-t border-border pt-3 text-xs font-medium text-muted">
+            <div className="sm:col-span-5 mt-1 border-t border-border pt-3 text-xs font-medium text-text-muted">
               ข้อมูลผู้ออกและลักษณะตราสาร (ไม่บังคับ —
               ใช้ตรวจความเหมาะสมเป็นตัวแทนปลอดความเสี่ยง)
             </div>
@@ -333,7 +333,7 @@ export default async function AssetPage({
                 ใช้เป็นตัวแทนปลอดความเสี่ยงได้ (eligibility เท่านั้น)
               </label>
             </div>
-            <p className="text-xs text-muted sm:col-span-5">
+            <p className="text-xs text-text-muted sm:col-span-5">
               {eligibility.eligible
                 ? "ผ่านเกณฑ์ตัวแทนปลอดความเสี่ยง — ระบบไม่ได้นำ YTM ของพันธบัตรนี้ไปใช้เป็น Rf ให้อัตโนมัติ (Rf มาจาก yield curve / หน้าตั้งค่า) และพันธบัตรที่ถือยังมีความเสี่ยงราคาก่อนครบกำหนด"
                 : `ยังไม่ผ่านเกณฑ์ตัวแทนปลอดความเสี่ยง: ${eligibility.reasons.join(" · ")}`}

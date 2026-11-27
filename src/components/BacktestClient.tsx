@@ -365,7 +365,7 @@ export function BacktestClient({
                 }
                 hint="ว่าง = ไม่นับปันผลที่ไม่มีวันจ่าย"
               />
-              <p className="text-xs text-muted">
+              <p className="text-xs text-text-muted">
                 กลยุทธ์ปันผลใช้เกณฑ์ค่าเริ่มต้นของแต่ละแบบ (แก้ได้ในหน้า
                 “ปันผล”) · น้ำหนักสูงสุด/ตัวใช้ค่าด้านบน
               </p>
@@ -393,7 +393,7 @@ export function BacktestClient({
           <h2 className="mb-2 font-semibold">
             สินทรัพย์{" "}
             {needsWeights && (
-              <span className="text-xs font-normal text-muted">
+              <span className="text-xs font-normal text-text-muted">
                 —{" "}
                 {strategy === "black_litterman"
                   ? "ใส่น้ำหนักตลาด (%)"
@@ -422,7 +422,7 @@ export function BacktestClient({
                   <td>
                     <input
                       type="checkbox"
-                      className="accent-[var(--accent)]"
+                      className="accent-[var(--primary)]"
                       checked={included.has(a.symbol)}
                       onChange={(e) => {
                         const s = new Set(included);
@@ -434,7 +434,7 @@ export function BacktestClient({
                   </td>
                   <td>
                     <span className="font-medium">{a.symbol}</span>{" "}
-                    <span className="text-xs text-muted">
+                    <span className="text-xs text-text-muted">
                       {ASSET_CLASS_LABEL[a.assetClass]}
                     </span>
                   </td>
@@ -470,14 +470,14 @@ export function BacktestClient({
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-xs text-text-muted">
             วันเริ่มต้นจริง = วันที่ทุกสินทรัพย์ที่เลือกมีราคา · กลยุทธ์ที่ใช้
             optimizer เริ่มซื้อขายหลังช่วงฝึก
           </p>
         </section>
       </div>
 
-      {error && <p className="text-sm text-neg">{error}</p>}
+      {error && <p className="text-sm text-negative">{error}</p>}
 
       {compare && (
         <section className="card overflow-x-auto">
@@ -545,7 +545,7 @@ export function BacktestClient({
                       </td>
                       <td className="num">{fmtPct(r.metrics.volatility, 1)}</td>
                       <td className="num">{fmtRatio(r.metrics.sharpe)}</td>
-                      <td className="num text-neg">
+                      <td className="num text-negative">
                         {fmtPct(r.metrics.maxDrawdown, 1)}
                       </td>
                       <td className="num">{fmtThb(r.costs.total)}</td>
@@ -554,7 +554,7 @@ export function BacktestClient({
                       </td>
                     </>
                   ) : (
-                    <td colSpan={8} className="text-xs text-neg">
+                    <td colSpan={8} className="text-xs text-negative">
                       {e}
                     </td>
                   )}
@@ -562,7 +562,7 @@ export function BacktestClient({
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-xs text-text-muted">
             กลยุทธ์ที่ใช้ optimizer เริ่มหลังช่วงฝึก ช่วงเวลาจึงสั้นกว่า buy and
             hold / equal weight — เทียบด้วยค่าต่อปีและ Sharpe
           </p>
@@ -573,7 +573,7 @@ export function BacktestClient({
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <WindowBanner info={res.windowInfo} />
-          <p className="text-xs text-muted" data-testid="universe-used">
+          <p className="text-xs text-text-muted" data-testid="universe-used">
             ชุดสินทรัพย์ที่ใช้: {res.universe.length} ตัว — {res.universe.join(", ")}
           </p>
 
@@ -620,7 +620,7 @@ export function BacktestClient({
                 <Stat
                   k="ได้รับสุทธิ"
                   v={fmtThb(res.dividends.netReceived)}
-                  tone="text-pos"
+                  tone="text-positive"
                 />
                 <Stat
                   k="ค้างรับ ณ วันสุดท้าย"
@@ -629,7 +629,7 @@ export function BacktestClient({
                 <Stat
                   k="ผลตอบแทนจากปันผล"
                   v={fmtPct(res.dividends.incomeReturn, 2)}
-                  tone="text-pos"
+                  tone="text-positive"
                 />
                 <Stat
                   k="ส่วนจากราคาและอื่น ๆ"
@@ -637,7 +637,7 @@ export function BacktestClient({
                   tone={signClass(res.dividends.priceAndOtherReturn)}
                 />
               </div>
-              <p className="mt-2 text-xs text-muted">
+              <p className="mt-2 text-xs text-text-muted">
                 เหตุการณ์ในช่วง {res.dividends.events} ครั้ง · มีสิทธิ์{" "}
                 {res.dividends.entitledEvents} ครั้ง · นำไปลงทุนต่อ{" "}
                 {fmtThb(res.dividends.reinvested)} ·{" "}
@@ -647,17 +647,17 @@ export function BacktestClient({
               </p>
               {res.decisions && (
                 <details className="mt-2 text-xs">
-                  <summary className="cursor-pointer text-muted">
+                  <summary className="cursor-pointer text-text-muted">
                     การคัดเลือกแต่ละรอบ ({res.decisions.length})
                   </summary>
-                  <ul className="mt-1 space-y-0.5">
+                  <ul className="mt-1 space-y-1">
                     {res.decisions.map((d) => (
                       <li key={d.date}>
                         <span className="tabular-nums">{d.date}</span>{" "}
                         (ข้อมูลถึง {d.cutoff}):{" "}
                         <b>{d.selected.join(", ") || "ถือเงินสด"}</b>
                         {d.diagnostics.length > 0 && (
-                          <span className="text-muted">
+                          <span className="text-text-muted">
                             {" "}
                             · {d.diagnostics.slice(0, 4).join(" · ")}
                           </span>
@@ -692,7 +692,7 @@ export function BacktestClient({
             <Stat
               k="Max drawdown"
               v={fmtPct(m.maxDrawdown, 1)}
-              tone="text-neg"
+              tone="text-negative"
             />
             <Stat
               k={`β / α (vs ${m.benchmark?.symbol ?? "—"})`}
@@ -706,7 +706,7 @@ export function BacktestClient({
 
           <section className="card">
             <h2 className="mb-1 font-semibold">Equity curve เทียบดัชนี</h2>
-            <p className="mb-2 text-xs text-muted">
+            <p className="mb-2 text-xs text-text-muted">
               {res.period.from} → {res.period.to} · {res.period.rebalances}{" "}
               รอบปรับพอร์ต (ทุก {res.input.rebalanceEveryObservations}{" "}
               วันที่มีราคา) · มูลค่าสุดท้าย {fmtThb(res.values.at(-1)!.value)} ·
@@ -746,7 +746,7 @@ export function BacktestClient({
             <h2 className="mb-2 font-semibold">
               ประวัติการซื้อขาย{" "}
               {res.trades.length > 200 && (
-                <span className="text-xs font-normal text-muted">
+                <span className="text-xs font-normal text-text-muted">
                   (แสดง 200 รายการล่าสุด)
                 </span>
               )}
@@ -772,7 +772,7 @@ export function BacktestClient({
                       <td>{t.date}</td>
                       <td className="font-medium">{t.symbol}</td>
                       <td
-                        className={t.side === "buy" ? "text-pos" : "text-neg"}
+                        className={t.side === "buy" ? "text-positive" : "text-negative"}
                       >
                         {t.side === "buy" ? "ซื้อ" : "ขาย"}
                       </td>
@@ -788,21 +788,21 @@ export function BacktestClient({
             </table>
           </section>
 
-          <section className="card space-y-2 text-xs text-muted">
-            <h2 className="text-sm font-semibold text-[var(--text)]">
+          <section className="card space-y-2 text-xs text-text-muted">
+            <h2 className="text-sm font-semibold text-text">
               วิธีคำนวณและข้อจำกัด
             </h2>
-            <ul className="list-disc space-y-1 pl-5">
+            <ul className="list-disc space-y-1 pl-6">
               {[...res.methodology, ...res.limitations].map((t) => (
                 <li key={t}>{t}</li>
               ))}
               {res.excluded.map((e) => (
-                <li key={e.symbol} className="text-neg">
+                <li key={e.symbol} className="text-negative">
                   ไม่รวม {e.symbol}: {e.reason}
                 </li>
               ))}
               {[...res.warnings, ...m.dataQuality.warnings].map((w) => (
-                <li key={w} className="text-neg">
+                <li key={w} className="text-negative">
                   {w}
                 </li>
               ))}
@@ -817,7 +817,7 @@ export function BacktestClient({
 function Stat({ k, v, tone }: { k: string; v: string; tone?: string }) {
   return (
     <div className="card">
-      <div className="text-xs text-muted">{k}</div>
+      <div className="text-xs text-text-muted">{k}</div>
       <div className={clsx("mt-1 text-lg font-semibold tabular-nums", tone)}>
         {v}
       </div>
@@ -827,8 +827,8 @@ function Stat({ k, v, tone }: { k: string; v: string; tone?: string }) {
 
 function KV({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-border/60 py-1.5">
-      <span className="text-muted">{k}</span>
+    <div className="flex justify-between gap-3 border-b border-border/60 py-2">
+      <span className="text-text-muted">{k}</span>
       <span className="font-medium tabular-nums">{v}</span>
     </div>
   );

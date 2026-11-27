@@ -210,7 +210,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
               <DateField label="วันจ่ายคูปองแรก (ถ้าไม่ปกติ)" value={firstCoupon} onChange={setFirstCoupon} />
               <DateField label="วันจ่ายคูปองงวดรองสุดท้าย (ถ้างวดสุดท้ายไม่ปกติ)" value={penultimate} onChange={setPenultimate} />
             </div>
-            <p className="mt-2 text-xs text-muted">ใช้เงื่อนไขตามหนังสือชี้ชวน/ThaiBMA ของตราสารนั้น · การเลื่อนวันจ่ายพิจารณาเฉพาะเสาร์–อาทิตย์ (ไม่รวมวันหยุดนักขัตฤกษ์) และไม่เปลี่ยนการคิดดอกเบี้ย</p>
+            <p className="mt-2 text-xs text-text-muted">ใช้เงื่อนไขตามหนังสือชี้ชวน/ThaiBMA ของตราสารนั้น · การเลื่อนวันจ่ายพิจารณาเฉพาะเสาร์–อาทิตย์ (ไม่รวมวันหยุดนักขัตฤกษ์) และไม่เปลี่ยนการคิดดอกเบี้ย</p>
           </details>
           <details className="rounded-lg border border-border p-3">
             <summary className="cursor-pointer text-sm font-medium">สิทธิไถ่ถอนก่อนกำหนด (Yield to call / worst)</summary>
@@ -244,7 +244,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
         <section className="card lg:col-span-3">
           <CardTitle title="ผลลัพธ์" explain={r.ok ? { data: compact({ พันธบัตร: spec, ราคา: price, ผลวิเคราะห์: { ...r.a, cashflows: undefined } }), hint: "YTM = ผลตอบแทนต่อปีถ้าถือจนครบกำหนด; duration = ราคาเปลี่ยนกี่ % เมื่อดอกเบี้ยเปลี่ยน 1%; convexity = ความโค้ง" } : null} />
           {!r.ok ? (
-            <p className="text-sm text-neg">{r.error}</p>
+            <p className="text-sm text-negative">{r.error}</p>
           ) : (
             <div className="grid gap-x-8 sm:grid-cols-2">
               <div>
@@ -253,7 +253,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 <Row k="ดอกเบี้ยค้างรับ (accrued)" v={fmtNum(r.a.accruedInterest, 4)} />
                 <Row k="ราคา dirty (ที่จ่ายจริง)" v={fmtNum(r.a.dirtyPrice, 4)} />
                 <Row k="Current yield (คูปอง ÷ ราคา — ไม่ใช่ YTM)" v={fmtPct(r.a.currentYield, 3)} />
-                {worst && "error" in worst && <p className="py-1 text-xs text-neg">{worst.error}</p>}
+                {worst && "error" in worst && <p className="py-1 text-xs text-negative">{worst.error}</p>}
                 {worst && !("error" in worst) && (
                   <>
                     {worst.candidates
@@ -265,7 +265,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                   </>
                 )}
                 {(r.a.firstPeriod !== "regular" || r.a.lastPeriod !== "regular" || r.a.exCoupon) && (
-                  <p className="py-1 text-xs text-muted">
+                  <p className="py-1 text-xs text-text-muted">
                     {r.a.firstPeriod !== "regular" && `งวดแรก${r.a.firstPeriod === "short" ? "สั้น" : "ยาว"}กว่าปกติ · `}
                     {r.a.lastPeriod !== "regular" && `งวดสุดท้าย${r.a.lastPeriod === "short" ? "สั้น" : "ยาว"}กว่าปกติ · `}
                     {r.a.exCoupon && "อยู่ในช่วง ex-coupon: คูปองถัดไปเป็นของผู้ขาย (accrued ติดลบ)"}
@@ -294,7 +294,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 </div>
                 <table className="mt-2 w-full text-xs">
                   <thead>
-                    <tr className="text-muted">
+                    <tr className="text-text-muted">
                       <th className="text-left font-normal">Yield เปลี่ยน</th>
                       {r.a.scenarios.map((x) => (
                         <th key={x.shiftBp} className="text-right font-normal">
@@ -315,14 +315,14 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                       <td>เปลี่ยน (จริง / ประมาณ)</td>
                       {r.a.scenarios.map((x) => (
                         <td key={x.shiftBp} className="text-right tabular-nums">
-                          {fmtPct(x.change, 2)} <span className="text-muted">/ {fmtPct(x.approx, 2)}</span>
+                          {fmtPct(x.change, 2)} <span className="text-text-muted">/ {fmtPct(x.approx, 2)}</span>
                         </td>
                       ))}
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="mt-2 text-xs text-muted sm:col-span-2">
+              <p className="mt-2 text-xs text-text-muted sm:col-span-2">
                 {issuer || "ผู้ออกไม่ระบุ"} · {rating || "ไม่ระบุอันดับเครดิต"} — Yield รวมค่าชดเชยความเสี่ยงเครดิตและสภาพคล่อง ไม่ใช่ผลตอบแทนปลอดความเสี่ยง · day count {r.a.dayCount}
               </p>
             </div>
@@ -340,10 +340,10 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                   <AreaGradient id="gBondCurve" color="var(--series-1)" via="var(--series-5)" top={0.75} />
                 </defs>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="ytm" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => `${fmtPct(v, 1)}`} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis domain={["auto", "auto"]} stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} width={44} />
+                <XAxis dataKey="ytm" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => `${fmtPct(v, 1)}`} stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis domain={["auto", "auto"]} stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} width={44} />
                 <Tooltip
-                  contentStyle={{ background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" }}
+                  contentStyle={{ background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, color: "var(--text)" }}
                   formatter={(v) => [fmtNum(Number(v), 3), "ราคา clean"]}
                   labelFormatter={(v) => `YTM ${fmtPct(Number(v), 2)}`}
                 />
@@ -368,7 +368,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                     <tr key={f.date}>
                       <td>
                         {f.date}
-                        {f.payDate !== f.date && <span className="block text-xs text-muted">จ่ายจริง {f.payDate}</span>}
+                        {f.payDate !== f.date && <span className="block text-xs text-text-muted">จ่ายจริง {f.payDate}</span>}
                       </td>
                       <td className="num">{fmtNum(f.amount, 3)}</td>
                       <td className="num">{fmtNum(f.amount / (1 + r.a.ytm / spec.frequency) ** f.periods, 3)}</td>
@@ -390,7 +390,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
               <NumField label="ลงทุนต่อคูปองที่" pct value={reinvest} onChange={(v) => setReinvest(v ?? 0)} />
               <NumField label="Yield ตอนขาย" pct nullable value={exitYield} onChange={setExitYield} hint="เว้นว่าง = YTM ปัจจุบัน" />
             </div>
-            {horizon && "error" in horizon && <p className="text-sm text-neg">{horizon.error}</p>}
+            {horizon && "error" in horizon && <p className="text-sm text-negative">{horizon.error}</p>}
             {horizon && !("error" in horizon) && (
               <div>
                 <Row k="เงินลงทุน (dirty)" v={fmtNum(horizon.initialDirty, 3)} />
@@ -401,12 +401,12 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 <Row k="กำไร/ขาดทุนจากราคา (ขาย + เงินต้นคืน − ซื้อ)" v={fmtNum(horizon.priceReturn, 3)} />
                 <Row k="ผลตอบแทนรวม" v={fmtPct(horizon.totalReturn, 2)} />
                 <Row k="ผลตอบแทนต่อปี (ทบตามงวดคูปอง เทียบกับ YTM ได้)" v={fmtPct(horizon.annualizedReturn, 3)} strong />
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 text-xs text-text-muted">
                   YTM {r.ok ? fmtPct(r.a.ytm, 3) : "—"} คือผลตอบแทนถ้าถือจนครบกำหนดและนำคูปองไปลงทุนต่อที่ YTM เท่านั้น — ผลตอบแทนจริงเมื่อขายก่อนครบกำหนดขึ้นกับ yield ตอนขายและอัตราลงทุนต่อ จึงไม่รับประกัน
                 </p>
               </div>
             )}
-            {!horizonDate && <p className="text-xs text-muted">ใส่วันที่ขายเพื่อดูผลตอบแทนจริงซึ่งขึ้นกับ yield ตอนขายและอัตราที่นำคูปองไปลงทุนต่อ</p>}
+            {!horizonDate && <p className="text-xs text-text-muted">ใส่วันที่ขายเพื่อดูผลตอบแทนจริงซึ่งขึ้นกับ yield ตอนขายและอัตราที่นำคูปองไปลงทุนต่อ</p>}
           </section>
           <section className="card space-y-3">
             <h2 className="text-base font-semibold">มูลค่าจาก zero curve, Z-spread และ key-rate duration</h2>
@@ -414,7 +414,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
               <span className="label">Zero rate (ปี: % ต่อปี ทบต้นรายปี) บรรทัดละจุด</span>
               <textarea className="input font-mono text-xs" rows={4} value={curveText} onChange={(e) => setCurveText(e.target.value)} />
             </label>
-            {curveRes && "error" in curveRes && <p className="text-sm text-neg">{curveRes.error}</p>}
+            {curveRes && "error" in curveRes && <p className="text-sm text-negative">{curveRes.error}</p>}
             {curveRes && !("error" in curveRes) && (
               <div>
                 <Row k="ราคา clean จาก curve (spread 0)" v={fmtNum(curveRes.curvePrice, 4)} />
@@ -428,7 +428,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
                 </div>
               </div>
             )}
-            <p className="text-xs text-muted">ตัวอย่าง curve เป็นค่าสมมติ — ใส่ zero curve จริง (เช่น ThaiBMA) ณ วันเดียวกัน · YTM ใช้ yield เดียวทุกงวด ต่างจากการคิดลดด้วย curve</p>
+            <p className="text-xs text-text-muted">ตัวอย่าง curve เป็นค่าสมมติ — ใส่ zero curve จริง (เช่น ThaiBMA) ณ วันเดียวกัน · YTM ใช้ yield เดียวทุกงวด ต่างจากการคิดลดด้วย curve</p>
           </section>
         </div>
       )}
@@ -442,7 +442,7 @@ export function BondCalculator({ init }: { init: BondCalcInit }) {
           <div className="pb-2 text-sm">
             ราคาต่อ 100: <b className="tabular-nums">{fmtNum(discountBillPrice(100, billYield, billDays), 4)}</b>
           </div>
-          <div className="pb-2 text-xs text-muted">
+          <div className="pb-2 text-xs text-text-muted">
             Yield = (100/ราคา − 1) × 365/วัน · ตรวจย้อนกลับ {fmtPct(discountBillYield(100, discountBillPrice(100, billYield, billDays), billDays), 3)}
           </div>
         </div>
@@ -462,8 +462,8 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
 
 function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-border/60 py-1.5 text-sm">
-      <span className="text-muted">{k}</span>
+    <div className="flex justify-between gap-3 border-b border-border/60 py-2 text-sm">
+      <span className="text-text-muted">{k}</span>
       <span className={strong ? "font-semibold tabular-nums" : "tabular-nums"}>{v}</span>
     </div>
   );

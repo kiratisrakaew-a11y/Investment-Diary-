@@ -29,8 +29,8 @@ export function ActionForm({
         <button className="btn" disabled={pending}>
           {pending ? "กำลังบันทึก…" : submitLabel}
         </button>
-        {state?.error && <span className="text-sm text-neg">{state.error}</span>}
-        {state?.ok && state.message && <span className="text-sm text-pos">{state.message}</span>}
+        {state?.error && <span className="text-sm text-negative">{state.error}</span>}
+        {state?.ok && state.message && <span className="text-sm text-positive">{state.message}</span>}
       </div>
     </form>
   );

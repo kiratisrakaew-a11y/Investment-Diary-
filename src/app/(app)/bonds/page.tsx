@@ -54,22 +54,22 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                   <tr key={b.id}>
                     <td>
                       <span className="font-medium">{b.symbol}</span>
-                      <div className="text-xs text-muted">{b.name}</div>
+                      <div className="text-xs text-text-muted">{b.name}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {b.terms.issuerType && <Badge>{ISSUER_LABEL[b.terms.issuerType]}</Badge>}
                         {b.riskFreeEligibility.eligible ? (
-                          <Badge className="border-pos/40 text-pos" title="ใช้เป็นตัวแทนปลอดความเสี่ยงได้ (ไม่ได้ตั้ง Rf ให้อัตโนมัติ)">
+                          <Badge className="border-positive/40 text-positive" title="ใช้เป็นตัวแทนปลอดความเสี่ยงได้ (ไม่ได้ตั้ง Rf ให้อัตโนมัติ)">
                             ตัวแทน Rf ได้
                           </Badge>
                         ) : (
                           b.riskFreeEligibility.userFlag && (
-                            <Badge className="border-warn/40 text-warn" title={b.riskFreeEligibility.reasons.join(" · ")}>
+                            <Badge className="border-warning/40 text-warning" title={b.riskFreeEligibility.reasons.join(" · ")}>
                               ตัวแทน Rf: ไม่ผ่าน
                             </Badge>
                           )
                         )}
                         {b.flags.map((f) => (
-                          <Badge key={f.code} className="border-warn/40 text-warn" title={f.message}>
+                          <Badge key={f.code} className="border-warning/40 text-warning" title={f.message}>
                             {FLAG_LABEL[f.code]}
                           </Badge>
                         ))}
@@ -79,7 +79,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                     <td>{b.maturityDate ?? "—"}</td>
                     <td className="num">
                       {fmtNum(b.lastPrice)}
-                      <div className="text-xs text-muted">{b.lastPriceDate}</div>
+                      <div className="text-xs text-text-muted">{b.lastPriceDate}</div>
                     </td>
                     {b.analytics ? (
                       <>
@@ -88,13 +88,13 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                         <td className="num">{fmtNum(b.analytics.modifiedDuration)}</td>
                       </>
                     ) : (
-                      <td colSpan={3} className="text-xs text-muted">{b.missing}</td>
+                      <td colSpan={3} className="text-xs text-text-muted">{b.missing}</td>
                     )}
                     <td className="num">{fmtThb(b.marketValueThb)}</td>
                     <td>
                       {b.analytics && (
                         <Link
-                          className="text-xs text-accent"
+                          className="text-xs text-primary"
                           href={`/bonds?maturity=${b.maturityDate}&coupon=${b.couponRate}&price=${(b.analytics.cleanPrice).toFixed(4)}`}
                         >
                           วิเคราะห์ →
@@ -105,7 +105,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-2 text-xs text-text-muted">
               คำนวณ ณ วันนี้ด้วยคูปองปกติ (ไม่มี stub) และความถี่/day count ที่บันทึกไว้ในสินทรัพย์
               {bonds.some((b) => b.assumed.length > 0) &&
                 ` · ใช้ค่าสมมติสำหรับ ${bonds
@@ -128,7 +128,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                 <details key={b.id} className="rounded-md border border-border/60 p-3" open={c?.status === "ok"}>
                   <summary className="cursor-pointer text-sm">
                     <span className="font-medium">{b.symbol}</span>
-                    <span className="ml-2 text-muted">
+                    <span className="ml-2 text-text-muted">
                       {c ? (c.rating === "unrated" ? "unrated" : `${c.rating.rating}${c.rating.agency ? ` (${c.rating.agency}${c.rating.date ? ` ${c.rating.date}` : ""})` : ""}`) : "—"}
                       {a?.issuer ? ` · ผู้ออก ${a.issuer}` : ""}
                       {c?.status === "ok" && c.term ? ` · PV(EL) ${fmtNum(c.term.pvExpectedLoss, 3)} ต่อ 100` : c ? " · ยังไม่มีข้อมูล PD/LGD" : ""}
@@ -146,15 +146,15 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                           <Stat label="มูลค่าหลังหักความเสี่ยงเครดิต" value={fmtNum(c.term.creditAdjustedValue, 2)} sub="คาดหวัง (ไม่ใช่ราคาตลาด)" />
                         </div>
                       ) : (
-                        <p className="text-xs text-neg">{c.status === "invalid" ? c.issues.map((i) => i.message).join(" · ") : `ไม่มีข้อมูล: ${c.required.join(", ")}`}</p>
+                        <p className="text-xs text-negative">{c.status === "invalid" ? c.issues.map((i) => i.message).join(" · ") : `ไม่มีข้อมูล: ${c.required.join(", ")}`}</p>
                       )}
-                      <p className="text-xs text-muted">
+                      <p className="text-xs text-text-muted">
                         {"zSpread" in c.spread
                           ? `Z-spread ${fmtPct(c.spread.zSpread, 3)} · spread DV01 ${fmtNum(c.spread.spreadDv01, 4)} ต่อ 100 · spread duration ${fmtNum(c.spread.spreadDuration, 2)} — ${c.spread.basis}`
                           : c.spread.unavailable}
                       </p>
                       {c.status === "ok" && (
-                        <p className="text-xs text-muted">
+                        <p className="text-xs text-text-muted">
                           {c.oneYear?.basis} · ส่วนลด: {c.term?.discount} · PD: {c.provenance.pdType} ({c.provenance.pdSource}, {c.provenance.pdAsOf}) · LGD: {c.provenance.lgdSource} ({c.provenance.lgdAsOf})
                           {c.issues.length > 0 && ` · ⚠️ ${c.issues.map((i) => i.message).join(" · ")}`}
                         </p>
@@ -162,13 +162,13 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                       <CreditProfileForm symbol={b.symbol} issuer={a?.issuer ?? null} profile={(a?.credit as never) ?? null} today={today()} />
                     </div>
                   ) : (
-                    <p className="mt-2 text-xs text-muted">{b.missing}</p>
+                    <p className="mt-2 text-xs text-text-muted">{b.missing}</p>
                   )}
                 </details>
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-xs text-text-muted">
             EL = PD × LGD × EAD (เป็นตัววัดความเสี่ยง ไม่ใช่ ECL ทางบัญชี TFRS 9) · PV(EL) = Σ PD ส่วนเพิ่ม × LGD × EAD × DF ตามงวดจ่าย · ไม่นำ EL รายปีไปหักจาก YTM โดยตรง
           </p>
         </Section>

@@ -128,9 +128,9 @@ export function CreditProfileForm({ symbol, issuer, profile, today }: { symbol: 
         <button type="button" className="btn-ghost text-xs" disabled={pending} onClick={() => save(true)}>
           ล้างข้อมูลเครดิต
         </button>
-        {msg && <span className={msg.ok ? "text-pos" : "text-neg"}>{msg.text}</span>}
+        {msg && <span className={msg.ok ? "text-positive" : "text-negative"}>{msg.text}</span>}
       </div>
-      <p className="text-xs text-muted">ระบบไม่เดา PD / LGD / อันดับเครดิต — ถ้าไม่กรอก ผลจะเป็น &quot;ไม่มีข้อมูล&quot; ไม่ใช่ความเสี่ยงศูนย์ · ห้ามแปลง credit spread เป็น PD โดยตรง</p>
+      <p className="text-xs text-text-muted">ระบบไม่เดา PD / LGD / อันดับเครดิต — ถ้าไม่กรอก ผลจะเป็น &quot;ไม่มีข้อมูล&quot; ไม่ใช่ความเสี่ยงศูนย์ · ห้ามแปลง credit spread เป็น PD โดยตรง</p>
     </div>
   );
 }

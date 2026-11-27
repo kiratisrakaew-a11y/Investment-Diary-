@@ -82,7 +82,7 @@ export default async function OptimizerPage({
       {u && <BasisSummary priceBasis={u.priceBasis} benchmark={u.benchmark} />}
       {u && <WindowBanner info={u.windowInfo} />}
       {u && <CoverageTable rows={u.coverage} />}
-      {historyPolicy && <p className="text-xs text-muted">historyPolicy: {historyPolicy}</p>}
+      {historyPolicy && <p className="text-xs text-text-muted">historyPolicy: {historyPolicy}</p>}
     </div>
   );
   return (
@@ -94,8 +94,8 @@ export default async function OptimizerPage({
       {insufficient ? (
         <>
           {picker}
-          <section className="card space-y-2 border-l-4 border-l-neg" data-testid="window-insufficient">
-            <h2 className="text-base font-semibold text-neg">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
+          <section className="card space-y-2 border-l-4 border-l-negative" data-testid="window-insufficient">
+            <h2 className="text-base font-semibold text-negative">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
             <p className="text-sm">
               มีเพียง {fmtNum(u!.windowInfo!.obsPerAsset, 1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
               {u!.windowInfo!.limitedBy.length ? ` · ช่วงถูกจำกัดโดย ${u!.windowInfo!.limitedBy.map((l) => `${l.symbol} (เริ่ม ${l.firstDate})`).join(", ")}` : ""}
@@ -121,10 +121,10 @@ export default async function OptimizerPage({
       ) : (
         <>
           {u.covarianceWarnings.map((w) => (
-            <p key={w} className="text-xs text-warn">⚠️ {w}</p>
+            <p key={w} className="text-xs text-warning">⚠️ {w}</p>
           ))}
           {u.skipped.length > 0 && (
-            <p className="text-xs text-muted">ไม่รวม: {u.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}</p>
+            <p className="text-xs text-text-muted">ไม่รวม: {u.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}</p>
           )}
           <OptimizerTabs
             picker={picker}

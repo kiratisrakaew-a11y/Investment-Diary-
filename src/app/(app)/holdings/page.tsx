@@ -24,9 +24,9 @@ function PriceBadges({ p }: { p: Position }) {
   if (p.fxStatus === "tx_fallback") badges.push("FX ณ วันซื้อขาย");
   if (!badges.length) return null;
   return (
-    <div className="mt-0.5 flex flex-wrap justify-end gap-1">
+    <div className="mt-1 flex flex-wrap justify-end gap-1">
       {badges.map((b) => (
-        <span key={b} className="rounded-md bg-neg/10 px-1 text-xs text-neg">
+        <span key={b} className="rounded-md bg-negative/10 px-1 text-xs text-negative">
           {b}
         </span>
       ))}
@@ -47,14 +47,14 @@ function ChipGroup({ title, items }: { title?: string; items: Chip[] }) {
   if (!items.length) return null;
   return (
     <div className="mt-2">
-      {title && <div className="mb-1 text-xs font-medium text-muted">{title}</div>}
-      <ul className="flex flex-wrap gap-1.5">
+      {title && <div className="mb-1 text-xs font-medium text-text-muted">{title}</div>}
+      <ul className="flex flex-wrap gap-2">
         {items.map((a) => (
-          <li key={a.id} className="relative flex items-center gap-1 rounded-lg border border-border bg-panel-2/60 py-0.5 pr-0.5 pl-2 text-xs">
-            <Link href={`/holdings/${a.id}`} className="font-medium hover:text-accent">
+          <li key={a.id} className="relative flex items-center gap-1 rounded-lg border border-border bg-panel-2/60 py-1 pr-1 pl-2 text-xs">
+            <Link href={`/holdings/${a.id}`} className="font-medium hover:text-primary">
               {a.symbol}
             </Link>
-            {a.extra && <span className="text-xs text-muted">{a.extra}</span>}
+            {a.extra && <span className="text-xs text-text-muted">{a.extra}</span>}
             <AssetActionsMenu asset={{ id: a.id, symbol: a.symbol }} hidden={a.hidden} archived={a.archived} held={false} dependencyCount={a.deps} />
           </li>
         ))}
@@ -118,18 +118,18 @@ export default async function HoldingsPage() {
                 {open.map((p) => (
                   <tr key={p.assetId}>
                     <td>
-                      <Link href={`/holdings/${p.assetId}`} className="font-medium text-accent">{p.symbol}</Link>
-                      <div className="text-xs text-muted">{p.name}</div>
+                      <Link href={`/holdings/${p.assetId}`} className="font-medium text-primary">{p.symbol}</Link>
+                      <div className="text-xs text-text-muted">{p.name}</div>
                     </td>
                     <td className="text-xs">
-                      <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: ASSET_CLASS_COLOR[p.assetClass] }} />
+                      <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: ASSET_CLASS_COLOR[p.assetClass] }} />
                       {ASSET_CLASS_LABEL[p.assetClass]}
                     </td>
                     <td className="num">{fmtQty(p.quantity)}</td>
                     <td className="num">{fmtNum(p.avgCostThb)}</td>
                     <td className="num">
-                      {fmtNum(p.lastPrice)} <span className="text-xs text-muted">{p.currency}</span>
-                      <div className="text-xs text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
+                      {fmtNum(p.lastPrice)} <span className="text-xs text-text-muted">{p.currency}</span>
+                      <div className="text-xs text-text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
                       <PriceBadges p={p} />
                     </td>
                     <td className="num">{fmtThb(p.marketValueThb)}</td>
@@ -145,7 +145,7 @@ export default async function HoldingsPage() {
                   </tr>
                 ))}
                 <tr>
-                  <td colSpan={5} className="text-muted">เงินสดในพอร์ต</td>
+                  <td colSpan={5} className="text-text-muted">เงินสดในพอร์ต</td>
                   <td className="num">{fmtThb(summary.cashThb)}</td>
                   <td colSpan={2} />
                   <td className="num">{fmtPctRaw(summary.totalValueThb ? (summary.cashThb / summary.totalValueThb) * 100 : 0)}</td>
@@ -172,17 +172,17 @@ export default async function HoldingsPage() {
           <ChipGroup title="ยังไม่ได้ซื้อ / ติดตาม" items={never.filter(isVisible)} />
           {[...sold, ...never].some((x) => x.hidden && !x.archived) && (
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-muted">ซ่อนไว้ ({[...sold, ...never].filter((x) => x.hidden && !x.archived).length})</summary>
+              <summary className="cursor-pointer text-xs text-text-muted">ซ่อนไว้ ({[...sold, ...never].filter((x) => x.hidden && !x.archived).length})</summary>
               <ChipGroup items={[...sold, ...never].filter((x) => x.hidden && !x.archived)} />
             </details>
           )}
           {[...sold, ...never].some((x) => x.archived) && (
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-muted">เก็บถาวร ({[...sold, ...never].filter((x) => x.archived).length}) — ไม่ถูกเลือกในการจัดพอร์ตโดยค่าเริ่มต้น</summary>
+              <summary className="cursor-pointer text-xs text-text-muted">เก็บถาวร ({[...sold, ...never].filter((x) => x.archived).length}) — ไม่ถูกเลือกในการจัดพอร์ตโดยค่าเริ่มต้น</summary>
               <ChipGroup items={[...sold, ...never].filter((x) => x.archived)} />
             </details>
           )}
-          <p className="mt-3 text-xs text-muted">⋯ = ซ่อน / เก็บถาวร / ลบถาวร · การซ่อนมีผลแค่หน้านี้ ไม่กระทบผลตอบแทน ประวัติ valuation หรือการจัดพอร์ต · ลบถาวรได้เฉพาะสินทรัพย์ที่ไม่มีข้อมูลอ้างถึง</p>
+          <p className="mt-3 text-xs text-text-muted">⋯ = ซ่อน / เก็บถาวร / ลบถาวร · การซ่อนมีผลแค่หน้านี้ ไม่กระทบผลตอบแทน ประวัติ valuation หรือการจัดพอร์ต · ลบถาวรได้เฉพาะสินทรัพย์ที่ไม่มีข้อมูลอ้างถึง</p>
         </Section>
       )}
 
@@ -197,7 +197,7 @@ export default async function HoldingsPage() {
 
       <Section title="นำเข้าราคาจากไฟล์ (CSV / Excel)">
         <PriceImport />
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-text-muted">
           รองรับ 3 แบบ: (1) symbol, date, close[, adj close] (2) date แล้วคอลัมน์ละหุ้น เช่น date, PTT, BBL (3) ไฟล์ราคาหุ้นตัวเดียวจาก Yahoo / Investing / SETSMART (ใส่สัญลักษณ์) ·
           วันที่แบบ 2026-01-05, 05/01/2026 (วัน/เดือน), ปี พ.ศ. หรือวันที่ของ Excel · สูงสุด 50,000 แถว · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ import_prices ได้
         </p>
@@ -223,17 +223,17 @@ export default async function HoldingsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-6">
             <label className="flex items-center gap-2">
-              <input type="checkbox" name="dryRun" defaultChecked className="accent-[var(--accent)]" /> ทดลองก่อน (ไม่บันทึก)
+              <input type="checkbox" name="dryRun" defaultChecked className="accent-[var(--primary)]" /> ทดลองก่อน (ไม่บันทึก)
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" name="overwrite" className="accent-[var(--accent)]" /> เขียนทับราคาที่มีอยู่
+              <input type="checkbox" name="overwrite" className="accent-[var(--primary)]" /> เขียนทับราคาที่มีอยู่
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" name="adjusted" className="accent-[var(--accent)]" /> เก็บราคาปรับปันผล (adjusted) แยกด้วย
+              <input type="checkbox" name="adjusted" className="accent-[var(--primary)]" /> เก็บราคาปรับปันผล (adjusted) แยกด้วย
             </label>
           </div>
         </ActionForm>
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-text-muted">
           ดึงจาก Yahoo (หุ้น/ทอง/ดัชนี/USDTHB) และ ก.ล.ต. (NAV กองทุน ≤ {400} วัน) · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีในรายการจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ sync_historical_prices ได้เหมือนกัน
         </p>
       </Section>
@@ -252,7 +252,7 @@ function ValuationCell({ v, price, symbol, cls }: { v?: { average: number | null
     );
   }
   if (cls === "thai_stock" || cls === "us_stock")
-    return <Link href={`/valuation/new?symbol=${symbol}`} className="text-xs text-accent">ประเมิน →</Link>;
-  if (cls === "bond") return <Link href="/bonds" className="text-xs text-accent">YTM →</Link>;
-  return <span className="text-muted">—</span>;
+    return <Link href={`/valuation/new?symbol=${symbol}`} className="text-xs text-primary">ประเมิน →</Link>;
+  if (cls === "bond") return <Link href="/bonds" className="text-xs text-primary">YTM →</Link>;
+  return <span className="text-text-muted">—</span>;
 }

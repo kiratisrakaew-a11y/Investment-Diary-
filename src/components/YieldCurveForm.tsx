@@ -42,9 +42,9 @@ export function YieldCurveForm({ initial, today }: { initial: { points: { years:
       <div className="flex items-center gap-2">
         <button type="button" className="btn" onClick={() => send(false)}>บันทึก yield curve</button>
         <button type="button" className="btn-ghost text-xs" onClick={() => send(true)}>ล้าง</button>
-        {msg && <span className={`text-sm ${msg.ok ? "text-pos" : "text-neg"}`}>{msg.text}</span>}
+        {msg && <span className={`text-sm ${msg.ok ? "text-positive" : "text-negative"}`}>{msg.text}</span>}
       </div>
-      <p className="text-xs text-muted">ใช้คำนวณ Z-spread, spread DV01 และ spread duration ของพันธบัตรในพอร์ต · ไม่มี curve = ค่าเหล่านี้ไม่แสดง (ไม่เดา)</p>
+      <p className="text-xs text-text-muted">ใช้คำนวณ Z-spread, spread DV01 และ spread duration ของพันธบัตรในพอร์ต · ไม่มี curve = ค่าเหล่านี้ไม่แสดง (ไม่เดา)</p>
     </div>
   );
 }

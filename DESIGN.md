@@ -54,3 +54,9 @@ One library: Phosphor (`@phosphor-icons/react/ssr`; works in server + client com
 - `IconChip`: 36/40px circle, category colour at 12% behind a duotone icon of that colour. Categories (`cat-*`): หุ้น `ChartLineUp` blue · กองทุน `Stack` purple · ตราสารหนี้ `Certificate` teal · Valuation `Calculator` orange · Notes `NotePencil` amber · Metrics `Gauge` pink · Event `CalendarStar` red-orange.
 - Status: `CheckCircle` / `Warning` / `XCircle` (fill) via `Badge status` / `StatusIcon` — always with text, never colour alone.
 - Icon without text → `IconButton` (required `aria-label` + `title` tooltip). Decorative icons are `aria-hidden`.
+
+## Page layout & migration status (Phase 4)
+Standard page: title + one primary button → KPI row (3–4 `KpiCard`) → main chart → detail `DataTable` → deep details in `Tabs` / `Collapsible`. Empty / error states use `EmptyState` / `ErrorState`; `(app)/error.tsx` is the shared error boundary.
+Migrated: Dashboard, Asset detail (incl. metrics panel), Valuation (index + stock), Notes (journal). Other pages (analytics, optimizer, backtest, bonds, dividends, factors, advisor, transactions, holdings list, settings, data-quality) already use the tokens and shared helpers (Phase 1–3.5 sweeps) but keep their original layouts.
+Sweeps applied repo-wide: legacy colour classes → tokens (`text-muted`→`text-text-muted`, `pos/neg/warn/accent`→`positive/negative/warning/primary`), off-scale spacing (0.5/1.5/2.5/3.5/5/7/9/10/11) → scale, chart font sizes → 12px. Legacy CSS aliases remain in `globals.css` for CSS-level rules.
+Known limitation: a route-level loading skeleton (`loading.tsx` / `<Suspense>`) broke the URL update of the basis/benchmark picker, so pages stream without a skeleton; the picker shows its own "กำลังคำนวณใหม่…".

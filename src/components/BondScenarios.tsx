@@ -20,11 +20,11 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
         <h2 id="bond-scen-title" className="text-base font-semibold">
           Scenario ของพันธบัตร
         </h2>
-        <span className="text-xs text-muted">เก็บในหน้านี้เท่านั้น (ไม่บันทึก)</span>
+        <span className="text-xs text-text-muted">เก็บในหน้านี้เท่านั้น (ไม่บันทึก)</span>
       </div>
       {!rows ? (
         <div className="space-y-2 text-xs">
-          <p className="text-muted">เทียบหลายสถานการณ์ของ yield: ราคาวันนี้เมื่อ yield เปลี่ยนทันที และผลตอบแทนถึงวันขายตาม yield ตอนขายและอัตราลงทุนต่อของแต่ละ scenario</p>
+          <p className="text-text-muted">เทียบหลายสถานการณ์ของ yield: ราคาวันนี้เมื่อ yield เปลี่ยนทันที และผลตอบแทนถึงวันขายตาม yield ตอนขายและอัตราลงทุนต่อของแต่ละ scenario</p>
           <button type="button" className="btn-ghost text-xs" onClick={() => setRows(presetBondScenarios(ytm, reinvest))}>
             เพิ่ม Bear / Base / Bull (ตัวอย่าง 25 / 50 / 25)
           </button>
@@ -53,7 +53,7 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
                   const num = (label: string, value: string, on: (v: number | null) => void, placeholder?: string, w = "w-20") => (
                     <input
                       aria-label={`${label} ${s.name}`}
-                      className={clsx("input py-0.5 text-right", w)}
+                      className={clsx("input py-1 text-right", w)}
                       inputMode="decimal"
                       defaultValue={value}
                       placeholder={placeholder}
@@ -69,7 +69,7 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
                   return (
                     <tr key={s.id}>
                       <td>
-                        <input aria-label={`ชื่อ scenario ${i + 1}`} className="input w-24 py-0.5" value={s.name} onChange={(e) => set(i, { name: e.target.value })} />
+                        <input aria-label={`ชื่อ scenario ${i + 1}`} className="input w-24 py-1" value={s.name} onChange={(e) => set(i, { name: e.target.value })} />
                       </td>
                       <td className="text-right">{num("ความน่าจะเป็น", pctIn(s.probability), (v) => set(i, { probability: (v ?? 0) / 100 }))}</td>
                       <td className="text-right">{num("yield shift", String(s.shiftBp), (v) => set(i, { shiftBp: v ?? 0 }))}</td>
@@ -79,7 +79,7 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
                       <td className={clsx("text-right tabular-nums", h && !("error" in h) && signClass(h.totalReturn))}>{!horizonDate ? "—" : h && !("error" in h) ? fmtPct(h.totalReturn, 2) : <span title={h && "error" in h ? h.error : ""}>N/A</span>}</td>
                       <td className="text-right tabular-nums">{h && !("error" in h) ? fmtPct(h.annualizedReturn, 2) : "—"}</td>
                       <td>
-                        <button type="button" aria-label={`ลบ ${s.name}`} className="text-muted hover:text-neg" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+                        <button type="button" aria-label={`ลบ ${s.name}`} className="text-text-muted hover:text-negative" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                           ×
                         </button>
                       </td>
@@ -89,8 +89,8 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="text-muted">ถ่วงน้ำหนัก</td>
-                  <td className={clsx("text-right tabular-nums", res && Math.abs(res.summary.sumProbability - 1) > 1e-8 && "text-neg")}>{fmtPct(res?.summary.sumProbability ?? 0, 2)}</td>
+                  <td className="text-text-muted">ถ่วงน้ำหนัก</td>
+                  <td className={clsx("text-right tabular-nums", res && Math.abs(res.summary.sumProbability - 1) > 1e-8 && "text-negative")}>{fmtPct(res?.summary.sumProbability ?? 0, 2)}</td>
                   <td />
                   <td className="text-right tabular-nums font-medium">{res?.summary.probabilityWeightedValue != null ? fmtNum(res.summary.probabilityWeightedValue, 3) : "—"}</td>
                   <td />
@@ -102,7 +102,7 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
             </table>
           </div>
           {[...(res?.probErrors ?? []), ...(res?.summary.errors.filter((e) => !(res?.probErrors ?? []).includes(e)) ?? [])].map((e) => (
-            <p key={e} className="text-xs text-neg">
+            <p key={e} className="text-xs text-negative">
               • {e}
             </p>
           ))}
@@ -119,11 +119,11 @@ export function BondScenarios({ base, ytm, reinvest, horizonDate }: { base: Valu
             >
               + scenario
             </button>
-            <button type="button" className="text-xs text-muted underline" onClick={() => setRows(null)}>
+            <button type="button" className="text-xs text-text-muted underline" onClick={() => setRows(null)}>
               ล้าง scenario
             </button>
           </div>
-          <ul className="space-y-0.5 text-xs text-muted">
+          <ul className="space-y-1 text-xs text-text-muted">
             <li>• ราคาวันนี้ = ตีราคาใหม่เต็มรูปแบบที่ yield วันนี้ + shift (ไม่ใช้ค่าประมาณ duration/convexity) · ค่าถ่วงน้ำหนัก = Σ p × ราคา</li>
             <li>• ผลตอบแทนถึงวันขาย = ซื้อที่ราคาวันนี้ รับคูปองและนำไปลงทุนต่อ แล้วขายที่ yield ตอนขาย — ไม่ใช่ YTM และไม่รับประกัน{!horizonDate && " (ใส่วันที่ขายในส่วน horizon return ด้านบนเพื่อคำนวณ)"}</li>
             <li>• ความน่าจะเป็น 25/50/25 เป็นค่าตัวอย่างที่แก้ได้ ไม่ใช่การประมาณทางสถิติ · พันธบัตรที่ไถ่ถอนก่อนกำหนดได้อาจไม่เป็นเชิงเส้น</li>

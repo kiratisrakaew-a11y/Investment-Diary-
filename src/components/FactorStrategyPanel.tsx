@@ -53,7 +53,7 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
 
   const fw = s.familyWeights;
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <section className="card space-y-4">
         <CardTitle title="ตั้งค่ากลยุทธ์ปัจจัย" />
         {/* F7: momentum only — no benchmark here. */}
@@ -94,9 +94,9 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
           <button className="btn" onClick={run} disabled={pending || !symbols.length}>
             {pending ? "กำลังคำนวณ…" : "คัดกรองตามปัจจัย"}
           </button>
-          <span className="text-xs text-muted">จักรวาล: {symbols.join(", ") || "—"} · ค่าตั้งต้นเป็นตัวอย่างที่แก้ได้</span>
+          <span className="text-xs text-text-muted">จักรวาล: {symbols.join(", ") || "—"} · ค่าตั้งต้นเป็นตัวอย่างที่แก้ได้</span>
         </div>
-        {error && <p className="text-sm text-neg">{error}</p>}
+        {error && <p className="text-sm text-negative">{error}</p>}
       </section>
 
       {res && (
@@ -137,21 +137,21 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
                   {res.ranked.map((r, i) => (
                     <Fragment key={r.symbol}>
                       <tr className="cursor-pointer" onClick={() => setOpen(open === r.symbol ? null : r.symbol)}>
-                        <td className="text-muted">{i + 1}</td>
+                        <td className="text-text-muted">{i + 1}</td>
                         <td className="font-medium">
-                          {r.symbol} {res.selected.includes(r.symbol) && <span className="text-xs text-accent">● เลือก</span>}
+                          {r.symbol} {res.selected.includes(r.symbol) && <span className="text-xs text-primary">● เลือก</span>}
                         </td>
                         <td>
                           <div className="flex items-center gap-2">
                             <div className="h-2 w-20 rounded-full bg-panel-2">
-                              <div className="h-2 rounded-full bg-linear-to-r from-accent to-accent-2" style={{ width: `${r.score * 100}%` }} />
+                              <div className="h-2 rounded-full bg-primary" style={{ width: `${r.score * 100}%` }} />
                             </div>
                             <span className="tabular-nums">{fmtNum(r.score, 2)}</span>
                           </div>
                         </td>
                         {FACTOR_FAMILIES.map((f) => (
                           <td key={f} className="num">
-                            {r.families[f].score == null ? <span className="text-muted">—</span> : fmtNum(r.families[f].score!, 2)}
+                            {r.families[f].score == null ? <span className="text-text-muted">—</span> : fmtNum(r.families[f].score!, 2)}
                           </td>
                         ))}
                         <td className="num font-medium">{res.targetWeights[r.symbol] ? fmtPct(res.targetWeights[r.symbol], 1) : "—"}</td>
@@ -163,10 +163,10 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
                               {FACTOR_FAMILIES.flatMap((f) =>
                                 r.families[f].subs.map((sub) => (
                                   <div key={`${f}.${sub.key}`} className="flex justify-between gap-2 rounded-md px-2 py-1" title={sub.note}>
-                                    <span className="text-muted">{sub.label}</span>
+                                    <span className="text-text-muted">{sub.label}</span>
                                     <span className="tabular-nums">
                                       {sub.value == null ? sub.status : PCT_KEYS.has(sub.key) ? fmtPct(sub.value, 1) : fmtNum(sub.value, 2)}
-                                      {sub.rank != null && <span className="text-accent"> · {fmtNum(sub.rank * 100, 0)}</span>}
+                                      {sub.rank != null && <span className="text-primary"> · {fmtNum(sub.rank * 100, 0)}</span>}
                                     </span>
                                   </div>
                                 )),
@@ -180,14 +180,14 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
                 </tbody>
               </table>
             ) : (
-              <p className="text-sm text-muted">ไม่มีหุ้นที่มีข้อมูลพอ</p>
+              <p className="text-sm text-text-muted">ไม่มีหุ้นที่มีข้อมูลพอ</p>
             )}
             {res.standalone && (
-              <p className="mt-3 text-xs text-muted">
+              <p className="mt-3 text-xs text-text-muted">
                 เทียบปัจจัยเดี่ยว: {Object.entries(res.standalone).map(([k, v]) => `${k} → ${v.selected.join(", ") || "—"}`).join(" · ")}
               </p>
             )}
-            <ul className="mt-2 space-y-0.5 text-xs text-muted">
+            <ul className="mt-2 space-y-1 text-xs text-text-muted">
               {[...res.diagnostics, ...res.limitations].map((d) => (
                 <li key={d}>• {d}</li>
               ))}
@@ -204,7 +204,7 @@ export function FactorStrategyPanel({ symbols, initialBasis = "price_return" }: 
                       <td>
                         <Badge>{e.code}</Badge>
                       </td>
-                      <td className="text-xs whitespace-normal text-muted">{e.detail}</td>
+                      <td className="text-xs whitespace-normal text-text-muted">{e.detail}</td>
                     </tr>
                   ))}
                 </tbody>

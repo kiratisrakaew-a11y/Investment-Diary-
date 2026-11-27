@@ -90,7 +90,7 @@ export function RebalancePanel({
           ↺ ใช้น้ำหนักจาก {sourceLabel}
         </button>
       </div>
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         น้ำหนักเริ่มจากผล {sourceLabel} — แก้ได้ทุกช่อง (เป็น % ของ มูลค่าสินทรัพย์ + เงินสด + เงินเพิ่ม − เงินสำรอง) · ส่วนที่เหลือคงเป็นเงินสด · สินทรัพย์ที่ถือแต่ไม่อยู่ในตารางจะคงไว้ ·
         ใช้ต้นทุนจากหน้าตั้งค่า
       </p>
@@ -108,7 +108,7 @@ export function RebalancePanel({
               {suggested.map((s) => (
                 <tr key={s.symbol}>
                   <td className="font-medium">{s.symbol}</td>
-                  <td className="num text-muted">{fmtPct(s.weight, 1)}</td>
+                  <td className="num text-text-muted">{fmtPct(s.weight, 1)}</td>
                   <td className="num">
                     <PctCell
                       value={weights[s.symbol] ?? null}
@@ -123,13 +123,13 @@ export function RebalancePanel({
               <tr className="font-medium">
                 <td>รวม / เงินสด</td>
                 <td />
-                <td className={clsx("num", sum > 1 + 1e-9 && "text-neg")}>
+                <td className={clsx("num", sum > 1 + 1e-9 && "text-negative")}>
                   {fmtPct(sum, 1)} / {fmtPct(Math.max(0, 1 - sum), 1)}
                 </td>
               </tr>
             </tbody>
           </table>
-          {edited && <p className="mt-1 text-xs text-accent">แก้น้ำหนักเองแล้ว (ไม่ตาม {sourceLabel})</p>}
+          {edited && <p className="mt-1 text-xs text-primary">แก้น้ำหนักเองแล้ว (ไม่ตาม {sourceLabel})</p>}
         </div>
         <div className="space-y-3 lg:col-span-2">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -154,7 +154,7 @@ export function RebalancePanel({
           <button type="button" className="btn" onClick={run} disabled={pending || sum > 1 + 1e-9}>
             {pending ? "กำลังคำนวณ…" : "คำนวณคำสั่งซื้อขาย"}
           </button>
-          {error && <p className="text-sm text-neg">{error}</p>}
+          {error && <p className="text-sm text-negative">{error}</p>}
         </div>
       </div>
 
@@ -186,7 +186,7 @@ export function RebalancePanel({
                 {res.trades.map((t) => (
                   <tr key={t.symbol}>
                     <td className="font-medium">{t.symbol}</td>
-                    <td className={clsx(t.side === "buy" ? "text-pos" : t.side === "sell" ? "text-neg" : "text-muted")}>{t.side === "buy" ? "ซื้อ" : t.side === "sell" ? "ขาย" : "—"}</td>
+                    <td className={clsx(t.side === "buy" ? "text-positive" : t.side === "sell" ? "text-negative" : "text-text-muted")}>{t.side === "buy" ? "ซื้อ" : t.side === "sell" ? "ขาย" : "—"}</td>
                     <td className="num">{t.side === "hold" ? "—" : fmtNum(t.quantity, t.quantity % 1 ? 4 : 0)}</td>
                     <td className="num">{fmtNum(t.price)}</td>
                     <td className="num">{t.side === "hold" ? "—" : fmtThb(t.value)}</td>
@@ -194,7 +194,7 @@ export function RebalancePanel({
                     <td className="num">
                       {fmtPct(t.currentWeight, 1)} → {fmtPct(t.finalWeight, 1)} ({t.targetWeight != null ? fmtPct(t.targetWeight, 1) : "คงไว้"})
                     </td>
-                    <td className="text-xs text-muted">{t.note}</td>
+                    <td className="text-xs text-text-muted">{t.note}</td>
                   </tr>
                 ))}
               </tbody>
@@ -209,12 +209,12 @@ export function RebalancePanel({
             <KV k="ถ้าซื้อเศษหุ้นได้ (ไม่มี lot)" v={fmtPct(res.distance.continuousIdeal, 2)} />
           </div>
           {res.violations.map((v) => (
-            <p key={v} className="text-sm text-neg">✕ {v}</p>
+            <p key={v} className="text-sm text-negative">✕ {v}</p>
           ))}
           {res.warnings.map((w) => (
-            <p key={w} className="text-xs text-muted">⚠️ {w}</p>
+            <p key={w} className="text-xs text-text-muted">⚠️ {w}</p>
           ))}
-          <p className="text-xs font-medium text-neg">{res.disclaimer}</p>
+          <p className="text-xs font-medium text-negative">{res.disclaimer}</p>
         </div>
       )}
     </section>
@@ -223,8 +223,8 @@ export function RebalancePanel({
 
 function KV({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-border/60 py-1.5">
-      <span className="text-muted">{k}</span>
+    <div className="flex justify-between gap-3 border-b border-border/60 py-2">
+      <span className="text-text-muted">{k}</span>
       <span className="font-medium tabular-nums">{v}</span>
     </div>
   );

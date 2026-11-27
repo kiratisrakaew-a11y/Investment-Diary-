@@ -248,7 +248,7 @@ export function SotpEditor({
             นำเข้า JSON
             <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); e.target.value = ""; }} />
           </label>
-          {msg && <span className={clsx("text-sm", msg.ok ? "text-pos" : "text-neg")}>{msg.text}</span>}
+          {msg && <span className={clsx("text-sm", msg.ok ? "text-positive" : "text-negative")}>{msg.text}</span>}
         </div>
       </div>
 
@@ -308,15 +308,15 @@ export function SotpEditor({
           <div className="card space-y-2">
             <h2 className="text-base font-semibold">มูลค่าต่อหุ้น (SOTP)</h2>
             <div className="text-3xl font-semibold tabular-nums">{fmtNum(result.value)}</div>
-            <div className="text-sm text-muted">
+            <div className="text-sm text-text-muted">
               ราคา {fmtNum(a.currentPrice)} · Upside <span className={signClass(result.upside)}>{fmtPct(result.upside, 1)}</span>
             </div>
-            {result.error && <p className="text-sm text-neg">{result.error}</p>}
+            {result.error && <p className="text-sm text-negative">{result.error}</p>}
             {d?.errors.map((e, i) => (
-              <p key={i} className="text-sm text-neg">✕ {e.message}</p>
+              <p key={i} className="text-sm text-negative">✕ {e.message}</p>
             ))}
             {d?.warnings.map((w, i) => (
-              <p key={i} className="text-xs text-warn">⚠ {w}</p>
+              <p key={i} className="text-xs text-warning">⚠ {w}</p>
             ))}
           </div>
           {d && d.waterfall.length > 0 && <Waterfall steps={d.waterfall} unit={unit} />}
@@ -334,7 +334,7 @@ export function SotpEditor({
               <div className="border-t border-[var(--border)] pt-1">
                 <Row k="= มูลค่าส่วนของผู้ถือหุ้นบริษัทแม่" v={d.reconciliation.equityValue} bold />
               </div>
-              <p className="text-xs text-muted">ส่วนต่างการกระทบยอด: {fmtNum(d.reconciliation.difference, 6)}</p>
+              <p className="text-xs text-text-muted">ส่วนต่างการกระทบยอด: {fmtNum(d.reconciliation.difference, 6)}</p>
             </div>
           )}
           {d?.sensitivity && (
@@ -342,7 +342,7 @@ export function SotpEditor({
               <h3 className="font-semibold">Sensitivity (มูลค่าต่อหุ้น)</h3>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-muted">
+                  <tr className="text-text-muted">
                     <th className="text-left">ส่วนงาน</th>
                     <th className="text-right">−{d.sensitivity.step * 100}%</th>
                     <th className="text-right">+{d.sensitivity.step * 100}%</th>
@@ -377,7 +377,7 @@ export function SotpEditor({
 function Row({ k, v, bold }: { k: string; v: number; bold?: boolean }) {
   return (
     <div className={clsx("flex justify-between", bold && "font-semibold")}>
-      <span className="text-muted">{k}</span>
+      <span className="text-text-muted">{k}</span>
       <span className="tabular-nums">{fmtNum(v + 0)}</span>
     </div>
   );
@@ -465,7 +465,7 @@ function SegmentCard({
           </label>
           <label className="block sm:col-span-3">
             <span className="label">ที่มา (จำเป็น)</span>
-            <input className={clsx("input", !src.source && "border-neg")} value={src.source} onChange={(e) => setSrc({ source: e.target.value })} placeholder="เช่น รายงานประเมินราคาที่ดิน 2026 / ราคาธุรกรรม" />
+            <input className={clsx("input", !src.source && "border-negative")} value={src.source} onChange={(e) => setSrc({ source: e.target.value })} placeholder="เช่น รายงานประเมินราคาที่ดิน 2026 / ราคาธุรกรรม" />
           </label>
         </div>
       )}
@@ -473,18 +473,18 @@ function SegmentCard({
 
       {row && (
         <div className="rounded-md bg-[var(--muted-bg,transparent)] text-xs">
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
             <span>{row.basis === "enterprise" ? "EV" : "Equity"} {fmtNum(row.value)}</span>
             {row.equity100 != null && <span>Equity 100% {fmtNum(row.equity100)}</span>}
             <span>หักหนี้ที่ {row.debtAt === "parent" ? "บริษัทแม่" : "ส่วนงาน"}</span>
-            <span className="font-semibold text-[var(--fg)]">นับเข้า SOTP {fmtNum(row.attributable)}</span>
+            <span className="font-semibold text-text">นับเข้า SOTP {fmtNum(row.attributable)}</span>
             {row.shareOfGross != null && <span>{fmtPct(row.shareOfGross, 1)} ของรวม</span>}
           </div>
           {row.errors.map((e, i) => (
-            <p key={i} className="text-neg">✕ {e}</p>
+            <p key={i} className="text-negative">✕ {e}</p>
           ))}
           {row.warnings.map((w, i) => (
-            <p key={i} className="text-warn">⚠ {w}</p>
+            <p key={i} className="text-warning">⚠ {w}</p>
           ))}
         </div>
       )}
@@ -519,7 +519,7 @@ function ModelFields({ src, defaults, unit, onChange }: { src: Extract<Source, {
           />
         ))}
       </div>
-      <p className="text-xs text-muted">คำนวณด้วยเครื่องยนต์เดียวกับหน้าประเมินมูลค่าปกติ · ใส่ตัวเลขเป็นยอดรวมของส่วนงานในหน่วย {unit || "เดียวกัน"}</p>
+      <p className="text-xs text-text-muted">คำนวณด้วยเครื่องยนต์เดียวกับหน้าประเมินมูลค่าปกติ · ใส่ตัวเลขเป็นยอดรวมของส่วนงานในหน่วย {unit || "เดียวกัน"}</p>
     </div>
   );
 }
@@ -527,7 +527,7 @@ function ModelFields({ src, defaults, unit, onChange }: { src: Extract<Source, {
 function LineItems({ title, items, onChange }: { title: string; items: { name: string; value: number }[]; onChange: (v: { name: string; value: number }[]) => void }) {
   return (
     <div className="space-y-2">
-      <div className="text-sm text-muted">{title}</div>
+      <div className="text-sm text-text-muted">{title}</div>
       {items.map((it, i) => (
         <div key={i} className="flex gap-2">
           <input className="input" value={it.name} onChange={(e) => onChange(items.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
@@ -561,7 +561,7 @@ function Waterfall({ steps, unit }: { steps: SotpResult["waterfall"]; unit: stri
             <span className={clsx("truncate", s.kind === "total" && "font-semibold")} title={s.label}>{s.label}</span>
             <div className="relative h-4 rounded-md bg-[var(--border)]/30">
               <div
-                className={clsx("absolute h-4 rounded-md", s.kind === "total" ? "bg-[var(--accent)]" : s.amount >= 0 ? "bg-emerald-500/70" : "bg-rose-500/70")}
+                className={clsx("absolute h-4 rounded-md", s.kind === "total" ? "bg-[var(--primary)]" : s.amount >= 0 ? "bg-emerald-500/70" : "bg-rose-500/70")}
                 style={{ left: pct(lo), width: `calc(${pct(hi)} - ${pct(lo)})` }}
               />
             </div>

@@ -162,7 +162,7 @@ export function FinancialStatementsPanel({
           <h2 className="text-base font-semibold">
             {open ? "▾" : "▸"} งบการเงินย้อนหลัง {sorted.length ? `(${sorted[0].fiscalYear}–${sorted[sorted.length - 1].fiscalYear})` : ""}
           </h2>
-          <p className="text-xs text-muted">อัปโหลดงบ (PDF / Excel / CSV) แยกไฟล์ได้ — AI อ่านและกรอกตัวเลขให้ หน่วย: ล้าน (ต่อหุ้นเป็นบาท)</p>
+          <p className="text-xs text-text-muted">อัปโหลดงบ (PDF / Excel / CSV) แยกไฟล์ได้ — AI อ่านและกรอกตัวเลขให้ หน่วย: ล้าน (ต่อหุ้นเป็นบาท)</p>
         </button>
         <div className="flex flex-wrap gap-2">
           {sorted.length > 0 && (
@@ -191,7 +191,7 @@ export function FinancialStatementsPanel({
             }}
             className={clsx(
               "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed p-6 text-center text-sm",
-              drag ? "border-accent bg-accent/5" : "border-border",
+              drag ? "border-primary bg-primary/5" : "border-border",
             )}
           >
             <input
@@ -205,7 +205,7 @@ export function FinancialStatementsPanel({
               }}
             />
             <span className="font-medium">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</span>
-            <span className="text-xs text-muted">
+            <span className="text-xs text-text-muted">
               PDF, .xlsx, .csv · ไม่เกิน 4.5MB ต่อไฟล์ · เลือกหลายไฟล์ได้ เช่น งบปี 2020–2024 แยกไฟล์ละปี · ระบบไม่เก็บไฟล์ต้นฉบับ
             </span>
           </label>
@@ -218,8 +218,8 @@ export function FinancialStatementsPanel({
                     {q.status === "done" ? "✅" : q.status === "error" ? "⚠️" : q.status === "reading" ? "⏳" : "•"}
                   </span>
                   <span className="font-medium">{q.name}</span>
-                  <span className="text-xs text-muted">{fmtNum(q.size / 1024 / 1024, 2)}MB</span>
-                  <span className={clsx("text-xs", q.status === "error" ? "text-neg" : "text-muted")}>
+                  <span className="text-xs text-text-muted">{fmtNum(q.size / 1024 / 1024, 2)}MB</span>
+                  <span className={clsx("text-xs", q.status === "error" ? "text-negative" : "text-text-muted")}>
                     {q.status === "reading" ? "AI กำลังอ่าน… (อาจใช้เวลา 30–90 วินาที)" : q.status === "waiting" ? "รอคิว" : q.message}
                   </span>
                 </li>
@@ -236,7 +236,7 @@ export function FinancialStatementsPanel({
                 <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> แสดงทุกปี ({sorted.length})
               </label>
             )}
-            {cagr != null && <span className="text-muted">CAGR รายได้ {visible.length} ปีล่าสุด: <b>{fmtPct(cagr, 1)}</b></span>}
+            {cagr != null && <span className="text-text-muted">CAGR รายได้ {visible.length} ปีล่าสุด: <b>{fmtPct(cagr, 1)}</b></span>}
           </div>
 
           {visible.length > 0 && (
@@ -249,7 +249,7 @@ export function FinancialStatementsPanel({
                       <th key={y.fiscalYear} className="num min-w-28">
                         <div className="flex items-center justify-end gap-1">
                           {y.fiscalYear}
-                          <button type="button" className="text-muted hover:text-neg" title="ลบปีนี้" onClick={() => removeYear(y.fiscalYear)}>
+                          <button type="button" className="text-text-muted hover:text-negative" title="ลบปีนี้" onClick={() => removeYear(y.fiscalYear)}>
                             ×
                           </button>
                         </div>
@@ -263,21 +263,21 @@ export function FinancialStatementsPanel({
                     <GroupRows key={g.title} title={g.title} items={g.items} years={visible} span={visible.length + 1} onEdit={editCell} />
                   ))}
                   <tr>
-                    <td colSpan={visible.length + 1} className="pt-4 text-xs font-semibold text-muted">อัตราส่วนที่คำนวณได้</td>
+                    <td colSpan={visible.length + 1} className="pt-4 text-xs font-semibold text-text-muted">อัตราส่วนที่คำนวณได้</td>
                   </tr>
                   {RATIO_ROWS.map(([label, key]) => (
                     <tr key={key}>
-                      <td className="text-muted">{label}</td>
+                      <td className="text-text-muted">{label}</td>
                       {visible.map((y) => (
-                        <td key={y.fiscalYear} className="num text-muted">
+                        <td key={y.fiscalYear} className="num text-text-muted">
                           {fmtPct(ratioOf(y.fiscalYear)?.[key] as number | null, 1)}
                         </td>
                       ))}
                     </tr>
                   ))}
                   <tr>
-                    <td className="text-muted">เฉลี่ย EBIT margin / Capex %</td>
-                    <td colSpan={visible.length} className="text-right text-muted">
+                    <td className="text-text-muted">เฉลี่ย EBIT margin / Capex %</td>
+                    <td colSpan={visible.length} className="text-right text-text-muted">
                       {fmtPct(avg(visible.map((y) => ratioOf(y.fiscalYear)?.ebitMargin)), 1)} / {fmtPct(avg(visible.map((y) => ratioOf(y.fiscalYear)?.capexPct)), 1)}
                     </td>
                   </tr>
@@ -289,7 +289,7 @@ export function FinancialStatementsPanel({
           {applied && (
             <div className="rounded-lg bg-bg p-3 text-xs">
               <div className="mb-1 font-semibold">เติมสมมติฐานแล้ว — ตรวจและปรับได้ในแบบฟอร์มด้านล่าง</div>
-              <ul className="list-disc space-y-0.5 pl-5">
+              <ul className="list-disc space-y-1 pl-6">
                 {applied.map((s) => (
                   <li key={s}>{s}</li>
                 ))}
@@ -298,7 +298,7 @@ export function FinancialStatementsPanel({
           )}
 
           {data.uploads.some((u) => u.status === "done" && u.notes) && (
-            <details className="text-xs text-muted">
+            <details className="text-xs text-text-muted">
               <summary className="cursor-pointer">บันทึกจาก AI เกี่ยวกับแหล่งที่มาของตัวเลข</summary>
               <ul className="mt-2 space-y-1">
                 {data.uploads
@@ -333,7 +333,7 @@ function GroupRows({
   return (
     <>
       <tr>
-        <td colSpan={span} className="pt-3 text-xs font-semibold text-muted">{title}</td>
+        <td colSpan={span} className="pt-3 text-xs font-semibold text-text-muted">{title}</td>
       </tr>
       {items.map((k) => (
         <tr key={k}>
@@ -359,7 +359,7 @@ function Cell({ value, onCommit, perShare }: { value: number | null; onCommit: (
   }, [value]);
   return (
     <input
-      className="w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-border focus:border-accent focus:outline-none"
+      className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-right tabular-nums hover:border-border focus:border-primary focus:outline-none"
       inputMode="decimal"
       value={focus ? text : value == null ? "" : fmtNum(value, perShare ? 2 : 0)}
       placeholder="—"

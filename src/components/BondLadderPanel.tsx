@@ -63,9 +63,9 @@ export function BondLadderPanel() {
         <button className="btn" onClick={run} disabled={pending || !budget || !rungs}>
           {pending ? "กำลังจัด…" : "จัดขั้นบันไดพันธบัตร"}
         </button>
-        <span className="text-xs text-muted">ใช้พันธบัตรในแอปที่มีอัตราคูปอง วันครบกำหนด มูลค่าที่ตราไว้ และราคาล่าสุด · เป็นข้อเสนอเท่านั้น</span>
+        <span className="text-xs text-text-muted">ใช้พันธบัตรในแอปที่มีอัตราคูปอง วันครบกำหนด มูลค่าที่ตราไว้ และราคาล่าสุด · เป็นข้อเสนอเท่านั้น</span>
       </div>
-      {error && <p className="text-sm text-neg">{error}</p>}
+      {error && <p className="text-sm text-negative">{error}</p>}
 
       {plan && (
         <div className="space-y-4">
@@ -78,7 +78,7 @@ export function BondLadderPanel() {
               ["DV01 (บาท/1bp)", fmtNum(plan.totals.dv01, 0)],
             ].map(([k, v]) => (
               <div key={k} className="rounded-xl border border-border bg-panel-2/60 p-3">
-                <div className="text-xs text-muted uppercase">{k}</div>
+                <div className="text-xs text-text-muted uppercase">{k}</div>
                 <div className="text-lg font-semibold tabular-nums">{v}</div>
               </div>
             ))}
@@ -88,7 +88,7 @@ export function BondLadderPanel() {
               title="กระแสเงินสดรายปี (ดอกเบี้ย vs เงินต้น)"
               explain={{ data: compact({ ปี: plan.cashflowsByYear, yield: plan.portfolioYield, duration: plan.weightedModifiedDuration, ลงทุนต่อ: plan.reinvestment, ขั้นว่าง: plan.gaps }), hint: "บันไดพันธบัตร = แบ่งเงินลงทุนให้ครบกำหนดทยอยทุกปี; เงินต้นที่คืนแต่ละปีต้องลงทุนต่อ (ความเสี่ยงดอกเบี้ยตอนลงทุนต่อ)" }}
             />
-            {plan.cashflowsByYear.length ? <LadderCashflowChart data={plan.cashflowsByYear} /> : <p className="text-sm text-muted">ไม่มีพันธบัตรที่ใช้ได้</p>}
+            {plan.cashflowsByYear.length ? <LadderCashflowChart data={plan.cashflowsByYear} /> : <p className="text-sm text-text-muted">ไม่มีพันธบัตรที่ใช้ได้</p>}
           </div>
           <div className="overflow-x-auto">
             <table className="table">
@@ -124,14 +124,14 @@ export function BondLadderPanel() {
                           <td className="num">{fmtNum(h.modifiedDuration, 2)}</td>
                           <td>
                             <Badge>{h.rating ?? "ไม่มีอันดับ"}</Badge>
-                            {h.oneYearPd != null && <span className="ml-1 text-xs text-muted">PD {fmtPct(h.oneYearPd, 2)}</span>}
+                            {h.oneYearPd != null && <span className="ml-1 text-xs text-text-muted">PD {fmtPct(h.oneYearPd, 2)}</span>}
                           </td>
                         </tr>
                       ))
                   ) : (
                     <tr key={`gap${r.rung}`}>
                       <td>ปีที่ {r.rung}</td>
-                      <td colSpan={8} className="text-xs text-warn">
+                      <td colSpan={8} className="text-xs text-warning">
                         ไม่มีพันธบัตรที่ครบกำหนดในขั้นนี้ — เงินส่วนนี้คงเป็นเงินสด
                       </td>
                     </tr>
@@ -141,12 +141,12 @@ export function BondLadderPanel() {
             </table>
           </div>
           {plan.reinvestment && (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               สถานการณ์ลงทุนต่อ (สมมติฐาน): {plan.reinvestment.map((r) => `${r.year}: ได้คืน ${fmtThb(r.toReinvest)} → รายได้ปีถัดไป ~${fmtThb(r.incomeNextYear)}`).join(" · ")}
             </p>
           )}
           {(plan.excluded.length > 0 || plan.missingTerms.length > 0) && (
-            <ul className="space-y-0.5 text-xs text-muted">
+            <ul className="space-y-1 text-xs text-text-muted">
               {plan.excluded.map((e) => (
                 <li key={e.symbol}>
                   ✕ {e.symbol}: {e.detail}
@@ -159,7 +159,7 @@ export function BondLadderPanel() {
               ))}
             </ul>
           )}
-          <ul className="space-y-0.5 text-xs text-muted">
+          <ul className="space-y-1 text-xs text-text-muted">
             {[...plan.warnings, ...plan.methodology, plan.note].map((m) => (
               <li key={m}>• {m}</li>
             ))}

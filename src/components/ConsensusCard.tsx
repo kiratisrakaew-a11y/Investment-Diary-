@@ -57,7 +57,7 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
           <h2 id="consensus-title" className="text-base font-semibold">
             ราคาเป้าหมายนักวิเคราะห์ (Consensus)
           </h2>
-          <p className="text-xs text-muted">ความเห็นของนักวิเคราะห์ ไม่ใช่การประเมินของคุณ — แสดงแยก ไม่นำไปเฉลี่ยกับ valuation ในแอป</p>
+          <p className="text-xs text-text-muted">ความเห็นของนักวิเคราะห์ ไม่ใช่การประเมินของคุณ — แสดงแยก ไม่นำไปเฉลี่ยกับ valuation ในแอป</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-ghost text-xs" onClick={refresh} disabled={pending}>
@@ -69,56 +69,56 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
         </div>
       </div>
       {msg && (
-        <p role="status" className={clsx("text-xs", msg.ok ? "text-pos" : "text-warn")}>
+        <p role="status" className={clsx("text-xs", msg.ok ? "text-positive" : "text-warning")}>
           {msg.text}
         </p>
       )}
 
       {latest && view ? (
         <>
-          <dl className="flex flex-wrap gap-x-10 gap-y-3">
+          <dl className="flex flex-wrap gap-x-12 gap-y-3">
             <div>
-              <dt className="text-xs text-muted">เป้าหมาย{view.targetBasis === "mean" ? "เฉลี่ย" : "มัธยฐาน"}</dt>
+              <dt className="text-xs text-text-muted">เป้าหมาย{view.targetBasis === "mean" ? "เฉลี่ย" : "มัธยฐาน"}</dt>
               <dd className="text-2xl font-semibold tabular-nums">
-                {fmtNum(view.target)} {latest.currency && <span className="text-xs font-normal text-muted">{latest.currency}</span>}
+                {fmtNum(view.target)} {latest.currency && <span className="text-xs font-normal text-text-muted">{latest.currency}</span>}
               </dd>
-              {latest.targetMean != null && latest.targetMedian != null && <dd className="text-xs text-muted">มัธยฐาน {fmtNum(latest.targetMedian)}</dd>}
+              {latest.targetMean != null && latest.targetMedian != null && <dd className="text-xs text-text-muted">มัธยฐาน {fmtNum(latest.targetMedian)}</dd>}
             </div>
             <div>
-              <dt className="text-xs text-muted">ช่วงเป้าหมาย</dt>
+              <dt className="text-xs text-text-muted">ช่วงเป้าหมาย</dt>
               <dd className="text-2xl font-semibold tabular-nums">{latest.targetLow != null && latest.targetHigh != null ? `${fmtNum(latest.targetLow)} – ${fmtNum(latest.targetHigh)}` : "—"}</dd>
-              <dd className="text-xs text-muted">
+              <dd className="text-xs text-text-muted">
                 {latest.analysts != null ? `${latest.analysts} นักวิเคราะห์` : "ไม่ระบุจำนวนนักวิเคราะห์"}
                 {recLabel(latest.recommendationKey) && ` · คำแนะนำ: ${recLabel(latest.recommendationKey)}`}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted">Upside จากราคาล่าสุด</dt>
+              <dt className="text-xs text-text-muted">Upside จากราคาล่าสุด</dt>
               <dd className={clsx("text-2xl font-semibold tabular-nums", signClass(view.upside))}>{fmtPct(view.upside, 1)}</dd>
-              <dd className="text-xs text-muted">{price != null ? `เทียบ ${fmtNum(price)}${priceDate ? ` ณ ${priceDate}` : ""}` : "ไม่มีราคาในระบบ"}</dd>
+              <dd className="text-xs text-text-muted">{price != null ? `เทียบ ${fmtNum(price)}${priceDate ? ` ณ ${priceDate}` : ""}` : "ไม่มีราคาในระบบ"}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted">ที่มา</dt>
+              <dt className="text-xs text-text-muted">ที่มา</dt>
               <dd className="text-sm font-medium">{CONSENSUS_SOURCE_LABEL[latest.source] ?? latest.source}</dd>
-              <dd className="text-xs text-muted">
+              <dd className="text-xs text-text-muted">
                 ณ {latest.asOf} · {view.ageDays === 0 ? "วันนี้" : `${view.ageDays} วันก่อน`}
                 {latest.sourceNote && latest.source !== "yahoo" ? ` · ${latest.sourceNote}` : ""}
               </dd>
             </div>
           </dl>
           {view.warnings.map((w) => (
-            <p key={w} className="text-xs text-warn">
+            <p key={w} className="text-xs text-warning">
               ⚠ {w}
             </p>
           ))}
         </>
       ) : (
-        <p className="text-sm text-muted">ยังไม่มีข้อมูล consensus ของ {symbol} — กด “ดึงจาก Yahoo” หรือ “กรอกเอง” จากบทวิเคราะห์ที่อ้างอิงได้</p>
+        <p className="text-sm text-text-muted">ยังไม่มีข้อมูล consensus ของ {symbol} — กด “ดึงจาก Yahoo” หรือ “กรอกเอง” จากบทวิเคราะห์ที่อ้างอิงได้</p>
       )}
 
       {history.length > 0 && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-muted">ประวัติ ({history.length})</summary>
+          <summary className="cursor-pointer text-text-muted">ประวัติ ({history.length})</summary>
           <div className="mt-2 overflow-x-auto">
             <table className="table min-w-[560px] text-xs">
               <thead>
@@ -138,14 +138,14 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
                     <td>{h.asOf}</td>
                     <td title={h.note ?? undefined}>
                       {CONSENSUS_SOURCE_LABEL[h.source] ?? h.source}
-                      {h.sourceNote && h.source !== "yahoo" && <span className="text-muted"> · {h.sourceNote}</span>}
+                      {h.sourceNote && h.source !== "yahoo" && <span className="text-text-muted"> · {h.sourceNote}</span>}
                     </td>
                     <td className="num">{fmtNum(h.targetMean)}</td>
                     <td className="num">{fmtNum(h.targetMedian)}</td>
                     <td className="num">{h.targetLow != null && h.targetHigh != null ? `${fmtNum(h.targetLow)} – ${fmtNum(h.targetHigh)}` : "—"}</td>
                     <td className="num">{h.analysts ?? "—"}</td>
                     <td className="text-right">
-                      <button type="button" className="text-neg hover:underline" onClick={() => remove(h.id)} disabled={pending}>
+                      <button type="button" className="text-negative hover:underline" onClick={() => remove(h.id)} disabled={pending}>
                         ลบ
                       </button>
                     </td>
@@ -156,7 +156,7 @@ export function ConsensusCard({ symbol, latest, view, history, price, priceDate,
           </div>
         </details>
       )}
-      <p className="text-xs text-muted">Yahoo Finance เป็นแหล่งข้อมูลไม่เป็นทางการ หุ้นไทยหลายตัวอาจไม่มีข้อมูลหรือไม่ทันสมัย · ถ้า Yahoo ไม่มีข้อมูล ระบบจะไม่ลบของเดิม และยังแสดงชุดล่าสุดที่เคยพบ</p>
+      <p className="text-xs text-text-muted">Yahoo Finance เป็นแหล่งข้อมูลไม่เป็นทางการ หุ้นไทยหลายตัวอาจไม่มีข้อมูลหรือไม่ทันสมัย · ถ้า Yahoo ไม่มีข้อมูล ระบบจะไม่ลบของเดิม และยังแสดงชุดล่าสุดที่เคยพบ</p>
 
       <Modal open={open} onClose={() => setOpen(false)} title={`กรอก consensus ของ ${symbol}`}>
         <ConsensusForm
@@ -233,9 +233,9 @@ function ConsensusForm({ symbol, today, currency, onDone }: { symbol: string; to
         </select>
       </label>
       <div className="col-span-2">{field("note", "หมายเหตุ", { maxLength: 500 })}</div>
-      <p className="col-span-2 text-xs text-muted">ต้องมีเป้าหมายเฉลี่ยหรือมัธยฐานอย่างน้อยหนึ่งค่า · กรอกเฉพาะตัวเลขที่มีในรายงาน ช่องที่ไม่รู้ให้เว้นว่าง · วันที่เดียวกันจะแทนที่รายการเดิม</p>
+      <p className="col-span-2 text-xs text-text-muted">ต้องมีเป้าหมายเฉลี่ยหรือมัธยฐานอย่างน้อยหนึ่งค่า · กรอกเฉพาะตัวเลขที่มีในรายงาน ช่องที่ไม่รู้ให้เว้นว่าง · วันที่เดียวกันจะแทนที่รายการเดิม</p>
       {error && (
-        <p role="alert" className="col-span-2 text-xs text-neg">
+        <p role="alert" className="col-span-2 text-xs text-negative">
           {error}
         </p>
       )}

@@ -5,7 +5,10 @@ import { listTransactions } from "@/server/services/transactions";
 import { NoteCard } from "@/components/NoteCard";
 import { NoteForm } from "@/components/NoteForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
-import { Empty, PageHeader } from "@/components/ui";
+import { EmptyState, KpiCard, PageHeader } from "@/components/ui";
+import { OpenDetailsLink } from "@/components/OpenDetailsLink";
+import { EmptyIcon, IconChip, AppIcon } from "@/components/icons";
+import { LinkSimple, Notebook } from "@phosphor-icons/react/ssr";
 import { deleteNoteAction } from "../actions";
 import { TX_TYPE_LABEL, fmtNum, fmtQty } from "@/lib/format";
 
@@ -31,12 +34,23 @@ export default async function JournalPage({ searchParams }: { searchParams: SP }
     groups.set(k, [...(groups.get(k) ?? []), n]);
   }
 
-  return (
-    <>
-      <PageHeader title="บันทึกการลงทุน" subtitle="Timeline ของไอเดีย, thesis, การทบทวน และบทเรียน" />
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const countType = (t: string) => notes.filter((n) => n.type === t).length;
+  const filtered = Object.values(sp).some(Boolean);
 
-      <details className="card">
-        <summary className="cursor-pointer font-medium">+ เขียนบันทึกใหม่</summary>
+  return (
+    <div className="space-y-6">
+      <PageHeader title="บันทึกการลงทุน" subtitle="Timeline ของไอเดีย, thesis, การทบทวน และบทเรียน" action={<OpenDetailsLink targetId="compose">+ เขียนบันทึกใหม่</OpenDetailsLink>} />
+
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label={filtered ? "บันทึกตามตัวกรอง" : "บันทึกทั้งหมด"} value={String(notes.length)} icon={<IconChip category="notes" icon={Notebook} label="บันทึก" />} />
+        <KpiCard label="เดือนนี้" value={String(notes.filter((n) => n.date.startsWith(thisMonth)).length)} note="จำนวนบันทึกที่เขียนในเดือนปัจจุบัน" />
+        <KpiCard label="Thesis" value={String(countType("thesis"))} note="เหตุผลที่ลงทุน" />
+        <KpiCard label="บทเรียน" value={String(countType("lesson"))} note="สิ่งที่ได้เรียนรู้จากการลงทุน" />
+      </div>
+
+      <details id="compose" className="card">
+        <summary className="cursor-pointer font-medium">เขียนบันทึกใหม่</summary>
         <div className="mt-4">
           <NoteForm />
         </div>
@@ -73,16 +87,23 @@ export default async function JournalPage({ searchParams }: { searchParams: SP }
         </select>
         <button className="btn-ghost">กรอง</button>
         {Object.values(sp).some(Boolean) && (
-          <Link href="/journal" className="self-center text-xs text-muted">ล้าง</Link>
+          <Link href="/journal" className="self-center text-xs text-text-muted">ล้างตัวกรอง</Link>
         )}
       </form>
 
-      {notes.length === 0 && <Empty>ไม่พบบันทึก</Empty>}
+      {notes.length === 0 && (
+        <EmptyState
+          icon={<EmptyIcon icon={Notebook} />}
+          title={filtered ? "ไม่พบบันทึกที่ตรงกับตัวกรอง" : "ยังไม่มีบันทึก"}
+          description={filtered ? "ลองล้างตัวกรองหรือค้นด้วยคำอื่น" : "จดไอเดีย thesis หรือบทเรียนแรกของคุณ"}
+          action={filtered ? <Link href="/journal" className="btn-ghost">ล้างตัวกรอง</Link> : <OpenDetailsLink targetId="compose">+ เขียนบันทึกใหม่</OpenDetailsLink>}
+        />
+      )}
 
       <div className="space-y-8">
         {[...groups].map(([month, items]) => (
           <section key={month}>
-            <h2 className="mb-3 text-sm font-semibold text-muted">
+            <h2 className="mb-3 text-sm font-semibold text-text-muted">
               {new Date(`${month}-01`).toLocaleDateString("th-TH", { month: "long", year: "numeric" })}
             </h2>
             <ol className="relative space-y-4 border-l border-border pl-6">
@@ -91,24 +112,24 @@ export default async function JournalPage({ searchParams }: { searchParams: SP }
                 const syms = n.assetIds.map((id) => symbolById.get(id)).filter((s): s is string => !!s);
                 return (
                   <li key={n.id} className="card relative">
-                    <span className="absolute top-5 -left-[31px] h-3 w-3 rounded-full border-2 border-panel bg-accent" />
+                    <span className="absolute top-5 -left-[31px] h-3 w-3 rounded-full border-2 border-panel-solid bg-primary" />
                     <NoteCard
                       note={n}
                       symbols={syms}
                       footer={
                         <>
                           {linked.length > 0 && (
-                            <ul className="mt-3 space-y-1 rounded-lg bg-bg p-2 text-xs">
+                            <ul className="mt-3 space-y-1 rounded-md bg-bg p-2 text-xs">
                               {linked.map((t) => (
                                 <li key={t.tx.id}>
-                                  🔗 {t.tx.date} {TX_TYPE_LABEL[t.tx.type]} {t.symbol} {t.tx.quantity ? `${fmtQty(t.tx.quantity)} @ ` : ""}
+                                  <AppIcon icon={LinkSimple} className="mr-1 inline" /> {t.tx.date} {TX_TYPE_LABEL[t.tx.type]} {t.symbol} {t.tx.quantity ? `${fmtQty(t.tx.quantity)} @ ` : ""}
                                   {fmtNum(t.tx.price)} {t.currency}
                                 </li>
                               ))}
                             </ul>
                           )}
                           <details className="mt-3">
-                            <summary className="cursor-pointer text-xs text-muted">แก้ไข</summary>
+                            <summary className="cursor-pointer text-xs text-text-muted">แก้ไข</summary>
                             <div className="mt-3">
                               <NoteForm note={n} symbols={syms} />
                             </div>
@@ -126,6 +147,6 @@ export default async function JournalPage({ searchParams }: { searchParams: SP }
           </section>
         ))}
       </div>
-    </>
+    </div>
   );
 }

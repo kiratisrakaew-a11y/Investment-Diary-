@@ -48,7 +48,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
               role="tab"
               aria-selected={tab === key}
               onClick={() => setTab(key)}
-              className={clsx("rounded-lg px-3 py-1 whitespace-nowrap", tab === key ? "bg-accent text-accent-ink" : "text-muted hover:bg-panel-2 hover:text-text")}
+              className={clsx("rounded-lg px-3 py-1 whitespace-nowrap", tab === key ? "bg-primary text-primary-ink" : "text-text-muted hover:bg-panel-2 hover:text-text")}
             >
               {label}
             </button>
@@ -78,29 +78,29 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
           return (
             <div key={v.id} className={clsx(!v.isLatestForMethod && !snap && "opacity-70")}>
               <button type="button" onClick={() => setOpen(isOpen ? null : v.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-3 text-left text-sm">
-                <span className="w-4 text-muted">{isOpen ? "▾" : "▸"}</span>
-                <span className="w-24 tabular-nums text-muted">{v.date}</span>
-                <Badge className="border-accent/40 text-accent">{METHOD_LABEL[v.method] ?? v.method}</Badge>
+                <span className="w-4 text-text-muted">{isOpen ? "▾" : "▸"}</span>
+                <span className="w-24 tabular-nums text-text-muted">{v.date}</span>
+                <Badge className="border-primary/40 text-primary">{METHOD_LABEL[v.method] ?? v.method}</Badge>
                 <span className="min-w-32 flex-1 truncate">
-                  {v.title || <span className="text-muted">ไม่มีชื่อ scenario</span>}
+                  {v.title || <span className="text-text-muted">ไม่มีชื่อ scenario</span>}
                   {snap ? (
                     <Badge className="ml-2 border-info/40 text-info" title="ไม่นับเป็น valuation ล่าสุดของวิธีนี้ (ไม่อยู่ในค่าเฉลี่ย/มัธยฐาน)">
                       ภาพ {snap.horizon} ปี จาก {snap.sourceYears} ปี
                     </Badge>
                   ) : (
-                    !v.isLatestForMethod && <span className="ml-2 text-xs text-muted">(ฉบับเก่า)</span>
+                    !v.isLatestForMethod && <span className="ml-2 text-xs text-text-muted">(ฉบับเก่า)</span>
                   )}
                   {v.source !== "web" && <Badge className="ml-2">via {v.source}</Badge>}
                   {oldVersion &&
                     (changed ? (
-                      <Badge className="ml-2 border-neg/40 text-neg">สูตรเวอร์ชันก่อน · ค่าเปลี่ยน</Badge>
+                      <Badge className="ml-2 border-negative/40 text-negative">สูตรเวอร์ชันก่อน · ค่าเปลี่ยน</Badge>
                     ) : (
                       <Badge className="ml-2" title="คำนวณใหม่ด้วยสูตรปัจจุบันได้ค่าเท่าเดิม">
                         สูตรเวอร์ชันก่อน · ค่าเท่าเดิม
                       </Badge>
                     ))}
                   {tsFlags.length > 0 && (
-                    <Badge className="ml-2 border-warn/40 text-warn" title={tsFlags.join("\n")}>
+                    <Badge className="ml-2 border-warning/40 text-warning" title={tsFlags.join("\n")}>
                       วันที่ข้อมูลไม่ตรง
                     </Badge>
                   )}
@@ -108,12 +108,12 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                 <span className="text-right">
                   <span className="font-semibold tabular-nums" title="มูลค่ากรณีฐาน">{fmtNum(v.intrinsicValue)}</span>
                   {v.scenario && (
-                    <span className={clsx("block text-xs tabular-nums", v.scenario.qualityStatus === "preliminary" ? "text-warn" : "text-muted")}>
+                    <span className={clsx("block text-xs tabular-nums", v.scenario.qualityStatus === "preliminary" ? "text-warning" : "text-text-muted")}>
                       ถ่วงน้ำหนัก {v.scenario.scenarios.length} scenario: {v.scenario.probabilityWeightedValue != null ? fmtNum(v.scenario.probabilityWeightedValue) : "—"}
                       {v.scenario.qualityStatus === "preliminary" && " (เบื้องต้น)"}
                     </span>
                   )}
-                  <span className="block text-xs text-muted">
+                  <span className="block text-xs text-text-muted">
                     ราคาวันประเมิน {fmtNum(v.priceAtValuation)} ({fmtPct(upThen, 1)}) · ตอนนี้ <span className={signClass(upNow)}>{fmtPct(upNow, 1)}</span>
                   </span>
                 </span>
@@ -125,16 +125,16 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                     <ConfirmButton onConfirm={deleteValuationAction.bind(null, v.id)} label="ลบ valuation นี้" />
                   </div>
                   {tsFlags.map((f) => (
-                    <p key={f} className="text-xs text-warn">⚠️ {f}</p>
+                    <p key={f} className="text-xs text-warning">⚠️ {f}</p>
                   ))}
                   {changed && (
-                      <p className="rounded-lg bg-bg p-3 text-xs text-neg">
+                      <p className="rounded-lg bg-bg p-3 text-xs text-negative">
                         ค่าที่บันทึกไว้ {fmtNum(v.intrinsicValue)} คำนวณด้วยสูตรเวอร์ชันก่อน — สูตรปัจจุบันได้ {fmtNum(explanation?.value)} (เช่น การคิดลด terminal value แบบ mid-year หรือการตรวจ r &gt; g) กด “แก้ไขสมมติฐาน” แล้วบันทึกเพื่ออัปเดต
                       </p>
                     )}
-                  <p className="text-xs text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
+                  <p className="text-xs text-text-muted">สูตรเวอร์ชัน {v.modelVersion ?? "ก่อน 2026.10-pr5 (ไม่ได้บันทึก)"} · ปัจจุบัน {MODEL_VERSION}</p>
                   {v.note && <p className="rounded-lg bg-bg p-3 text-xs whitespace-pre-wrap">📝 {v.note}</p>}
-                  {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
+                  {explanation ? <CalculationDetail e={explanation} compact /> : <p className="text-xs text-text-muted">ไม่สามารถแสดงวิธีคำนวณของ valuation นี้</p>}
                 </div>
               )}
             </div>

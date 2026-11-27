@@ -5,12 +5,12 @@ import { EmptyIcon, StatusIcon } from "./icons";
 
 export type Tone = "orange" | "blue" | "green" | "yellow" | "purple" | "red";
 const TONE_VAR: Record<Tone, string> = {
-  orange: "var(--accent)",
+  orange: "var(--primary)",
   blue: "var(--info)",
-  green: "var(--pos)",
-  yellow: "var(--warn)",
+  green: "var(--positive)",
+  yellow: "var(--warning)",
   purple: "var(--series-5)",
-  red: "var(--neg)",
+  red: "var(--negative)",
 };
 
 /** Circular gauge; `value` 0..1 fills the ring, null draws a plain ring (no implied progress). */
@@ -58,7 +58,7 @@ export function Stat({
       style={color ? { backgroundImage: `radial-gradient(circle at 0% 0%, color-mix(in srgb, ${TONE_VAR[color]} 30%, transparent), transparent 70%)` } : undefined}
     >
       {color && <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${TONE_VAR[color]}, transparent)` }} />}
-      <div className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</div>
+      <div className="text-xs font-semibold tracking-wide text-text-muted uppercase">{label}</div>
       <div className="mt-2 flex items-center gap-3">
         {color && (
           <Ring value={ring} color={color} className="hidden sm:grid">
@@ -67,7 +67,7 @@ export function Stat({
         )}
         <div className="min-w-0">
           <div className={clsx("text-xl leading-tight font-semibold break-words tabular-nums sm:text-xl", tone)}>{value}</div>
-          {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
+          {sub && <div className="mt-1 text-xs text-text-muted">{sub}</div>}
         </div>
       </div>
     </div>
@@ -95,7 +95,7 @@ export function Section({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-xs text-text-muted">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-2">
           {explain && <ExplainButton topic={title} data={explain.data} hint={explain.hint} />}
@@ -109,10 +109,10 @@ export function Section({
 
 export function PageHeader({ title, subtitle, action, explain }: { title: string; subtitle?: string; action?: React.ReactNode; explain?: ExplainSpec & { topic?: string } }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel px-5 py-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel px-6 py-4">
       <div className="min-w-0">
         <h1 className="text-xl leading-tight font-semibold tracking-wide">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-xs text-text-muted">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {explain && <ExplainButton topic={explain.topic ?? title} data={explain.data} hint={explain.hint} label="อธิบายหน้านี้" />}
@@ -137,7 +137,7 @@ const BADGE_STYLE: Record<BadgeStatus, { cls: string; label: string }> = {
 export function Badge({ children, className, title, status = "neutral" }: { children: React.ReactNode; className?: string; title?: string; status?: BadgeStatus }) {
   const st = BADGE_STYLE[status];
   return (
-    <span title={title} className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", st.cls, className)}>
+    <span title={title} className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium", st.cls, className)}>
       {status !== "neutral" && <StatusIcon status={status} />}
       {st.label && <span className="sr-only">{st.label}: </span>}
       {children}
@@ -261,5 +261,5 @@ export function Collapsible({ title, children, defaultOpen, className, meta }: {
 
 /** Legacy empty box (kept for existing pages; new code uses EmptyState). */
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">{children}</div>;
 }

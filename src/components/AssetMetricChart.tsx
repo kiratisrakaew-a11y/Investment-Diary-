@@ -48,15 +48,15 @@ export interface ChartMetric extends MetricSeries {
 }
 
 const axis = {
-  stroke: "var(--muted)",
-  fontSize: 11,
+  stroke: "var(--text-muted)",
+  fontSize: 12,
   tickLine: false,
   axisLine: false,
 } as const;
 const STATUS_RING: Partial<Record<MetricStatus, string>> = {
-  GREEN: "var(--pos)",
-  YELLOW: "var(--warn)",
-  RED: "var(--neg)",
+  GREEN: "var(--positive)",
+  YELLOW: "var(--warning)",
+  RED: "var(--negative)",
 };
 const dateTick = (t: number) => new Date(t).toISOString().slice(0, 7);
 const ts = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -131,10 +131,10 @@ function Tip({
         </span>
       </div>
       {row.value == null && row.reason && (
-        <div className="mt-0.5 text-muted">{row.reason}</div>
+        <div className="mt-1 text-text-muted">{row.reason}</div>
       )}
       {st && (
-        <div className="mt-0.5 text-muted">
+        <div className="mt-1 text-text-muted">
           สถานะตามเกณฑ์ ณ วันนั้น: {STATUS_LABEL[st]}
         </div>
       )}
@@ -162,17 +162,17 @@ function bands(
       const g = n(v.greenBound)!;
       const y = n(v.yellowBound)!;
       zones.push(
-        [yMin, g, "var(--pos)"],
-        [g, y, "var(--warn)"],
-        [y, yMax, "var(--neg)"],
+        [yMin, g, "var(--positive)"],
+        [g, y, "var(--warning)"],
+        [y, yMax, "var(--negative)"],
       );
     } else if (v.ruleType === "higher_is_better") {
       const g = n(v.greenBound)!;
       const y = n(v.yellowBound)!;
       zones.push(
-        [yMin, y, "var(--neg)"],
-        [y, g, "var(--warn)"],
-        [g, yMax, "var(--pos)"],
+        [yMin, y, "var(--negative)"],
+        [y, g, "var(--warning)"],
+        [g, yMax, "var(--positive)"],
       );
     } else {
       const [a, b, c, d] = [
@@ -182,11 +182,11 @@ function bands(
         n(v.yellowMax)!,
       ];
       zones.push(
-        [yMin, a, "var(--neg)"],
-        [a, b, "var(--warn)"],
-        [b, c, "var(--pos)"],
-        [c, d, "var(--warn)"],
-        [d, yMax, "var(--neg)"],
+        [yMin, a, "var(--negative)"],
+        [a, b, "var(--warning)"],
+        [b, c, "var(--positive)"],
+        [c, d, "var(--warning)"],
+        [d, yMax, "var(--negative)"],
       );
     }
     zones.forEach(([lo, hi, color], k) => {
@@ -212,12 +212,12 @@ function bands(
         <ReferenceLine
           key={`start-${v.effectiveFrom}`}
           x={ts(v.effectiveFrom)}
-          stroke="var(--muted)"
+          stroke="var(--text-muted)"
           strokeDasharray="2 3"
           label={{
             value: "เกณฑ์ใหม่",
-            fontSize: 10,
-            fill: "var(--muted)",
+            fontSize: 12,
+            fill: "var(--text-muted)",
             position: "insideTopLeft",
           }}
         />,
@@ -273,25 +273,25 @@ function MetricChartCard({
     >
       <figcaption className="mb-1 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium">
+          <div className="flex items-center gap-2 text-xs font-medium">
             <span
               className="inline-block h-2 w-2 shrink-0 rounded-full"
               style={{ background: m.color }}
               aria-hidden
             />
             <span className="truncate">{m.name}</span>
-            <span className="shrink-0 font-normal text-muted">({m.unit})</span>
+            <span className="shrink-0 font-normal text-text-muted">({m.unit})</span>
           </div>
-          <div className="mt-0.5 text-sm font-semibold tabular-nums">
+          <div className="mt-1 text-sm font-semibold tabular-nums">
             {m.latest ? (
               <>
                 {fmt(m.latest.value, m.decimals)}{" "}
-                <span className="text-xs font-normal text-muted">
+                <span className="text-xs font-normal text-text-muted">
                   {m.unit} · ณ {m.latest.date}
                 </span>
               </>
             ) : (
-              <span className="text-xs font-normal text-muted">
+              <span className="text-xs font-normal text-text-muted">
                 ยังไม่มีค่า
               </span>
             )}
@@ -300,12 +300,12 @@ function MetricChartCard({
         <StatusBadge status={m.status} title={m.statusExplanation} />
       </figcaption>
       {chart.empty ? (
-        <p className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted">
+        <p className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-text-muted">
           {chart.empty}
         </p>
       ) : (
         <>
-          <div className="text-xs text-muted">
+          <div className="text-xs text-text-muted">
             {UNIT_LABEL[mode](m.unit)}
             {mode === "indexed" && chart.baseDate && (
               <>
@@ -339,7 +339,7 @@ function MetricChartCard({
               {chart.reference != null && (
                 <ReferenceLine
                   y={chart.reference}
-                  stroke="var(--muted)"
+                  stroke="var(--text-muted)"
                   strokeDasharray="3 3"
                 />
               )}
@@ -368,7 +368,7 @@ function MetricChartCard({
           </ResponsiveContainer>
         </>
       )}
-      <div className="mt-1 space-y-0.5 text-xs text-muted">
+      <div className="mt-1 space-y-1 text-xs text-text-muted">
         {!chart.empty && (
           <div>
             {showBands
@@ -380,7 +380,7 @@ function MetricChartCard({
           </div>
         )}
         {chart.notes.map((n) => (
-          <div key={n} className="text-warn">
+          <div key={n} className="text-warning">
             ⚠ {n}
           </div>
         ))}

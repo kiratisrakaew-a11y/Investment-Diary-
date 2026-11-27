@@ -73,12 +73,12 @@ export function EditAssetForm({ asset, hasHistory }: { asset: Basics; hasHistory
         </label>
         <input id="ea-provider" name="providerSymbol" className="input" maxLength={60} value={v.providerSymbol} onChange={set("providerSymbol")} placeholder="AP.BK" />
       </div>
-      <p className="text-xs text-muted sm:col-span-3">
+      <p className="text-xs text-text-muted sm:col-span-3">
         แก้ symbol แล้วรายการซื้อขาย ราคา ตัวชี้วัด และบันทึกยังผูกอยู่ครบ (อ้างด้วย id) — valuation งบการเงิน และปันผลจะเปลี่ยนตาม symbol ใหม่ด้วย ระบบแปลงเป็นตัวพิมพ์ใหญ่ให้
       </p>
       {hasHistory && typeChanged && (
-        <label className="flex items-start gap-2 text-xs text-warn sm:col-span-3">
-          <input type="checkbox" name="confirmChange" className="mt-0.5" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
+        <label className="flex items-start gap-2 text-xs text-warning sm:col-span-3">
+          <input type="checkbox" name="confirmChange" className="mt-1" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
           <span>ยืนยันเปลี่ยนประเภท/สกุลเงิน — มีรายการซื้อขายหรือราคาแล้ว ค่าเดิมจะไม่ถูกแปลงให้</span>
         </label>
       )}
@@ -87,12 +87,12 @@ export function EditAssetForm({ asset, hasHistory }: { asset: Basics; hasHistory
           {pending ? "กำลังบันทึก…" : "บันทึก"}
         </button>
         {state?.error && (
-          <span role="alert" className="text-sm text-neg">
+          <span role="alert" className="text-sm text-negative">
             {state.error}
           </span>
         )}
         {state?.ok && state.message && (
-          <span role="status" className="text-sm text-pos">
+          <span role="status" className="text-sm text-positive">
             {state.message}
           </span>
         )}

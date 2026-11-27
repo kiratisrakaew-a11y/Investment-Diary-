@@ -71,12 +71,12 @@ export function SplitForm({ symbols, today }: { symbols: string[]; today: string
           <span className="label">หุ้นใหม่</span>
           <input className="input" inputMode="decimal" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
-        <div className="flex items-end text-xs text-muted">
+        <div className="flex items-end text-xs text-text-muted">
           {Number.isFinite(ratio) && ratio > 0 ? (ratio > 1 ? `แตกพาร์: หุ้น ×${+fmtNum(ratio, 4)}` : ratio < 1 ? `รวมพาร์: หุ้น ×${+fmtNum(ratio, 4)}` : "1:1 ไม่มีผล") : ""}
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={adjust} onChange={(e) => setAdjust(e.target.checked)} className="accent-[var(--accent)]" /> ปรับราคาย้อนหลังที่ยังเป็นราคาเดิมให้ด้วย (ตรวจก่อน ไม่ปรับซ้ำ)
+        <input type="checkbox" checked={adjust} onChange={(e) => setAdjust(e.target.checked)} className="accent-[var(--primary)]" /> ปรับราคาย้อนหลังที่ยังเป็นราคาเดิมให้ด้วย (ตรวจก่อน ไม่ปรับซ้ำ)
       </label>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-ghost" disabled={pending || !symbol} onClick={() => send(true)}>
@@ -86,14 +86,14 @@ export function SplitForm({ symbols, today }: { symbols: string[]; today: string
           บันทึกแตกพาร์
         </button>
       </div>
-      {error && <p className="text-sm text-neg">{error}</p>}
+      {error && <p className="text-sm text-negative">{error}</p>}
       {res && (
         <div className="space-y-1 text-sm">
-          <p className={res.dryRun ? "text-muted" : "text-pos"}>
+          <p className={res.dryRun ? "text-text-muted" : "text-positive"}>
             {res.dryRun ? "ตรวจแล้ว (ยังไม่บันทึก)" : `บันทึกแล้ว (รายการ #${res.transactionId})`} · {res.symbol} {res.label} วันที่ {res.date} · จำนวนหุ้น ×{+fmtNum(res.ratio, 4)} ต้นทุนรวมเท่าเดิม ไม่กระทบเงินสด
           </p>
           {res.prices && (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               ราคาย้อนหลัง: {res.prices.message}
               {res.prices.before && res.prices.after && ` (ก่อน ${res.prices.before.date} = ${res.prices.before.close}, หลัง ${res.prices.after.date} = ${res.prices.after.close})`}
               {!res.dryRun && ` · ปรับแล้ว ${res.prices.rowsAdjusted} วัน`}

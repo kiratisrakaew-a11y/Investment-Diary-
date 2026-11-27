@@ -64,7 +64,7 @@ export function ExplainButton({ topic, data, hint, label = "อธิบาย",
         onClick={() => run()}
         title="ให้ AI อธิบายความหมายของตัวเลขในส่วนนี้แบบเข้าใจง่าย"
         className={clsx(
-          "inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent hover:bg-accent/20",
+          "inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20",
           className,
         )}
       >
@@ -94,23 +94,23 @@ function ExplainDrawer({
 
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal aria-label={`คำอธิบาย: ${topic}`}>
-      <button type="button" aria-label="ปิด" className="absolute inset-0 bg-[rgb(10_14_22/0.45)]" onClick={onClose} />
+      <button type="button" aria-label="ปิด" className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-border bg-panel-solid/85 shadow-2xl backdrop-blur-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-border px-6 py-4">
           <div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-accent uppercase">
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-primary uppercase">
               <Sparkle /> AI อธิบายแบบเข้าใจง่าย
             </div>
-            <h2 className="mt-0.5 font-semibold">{topic}</h2>
+            <h2 className="mt-1 font-semibold">{topic}</h2>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-muted hover:bg-panel-2 hover:text-text" aria-label="ปิด">
+          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-text-muted hover:bg-panel-2 hover:text-text" aria-label="ปิด">
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 text-sm leading-relaxed">
+        <div className="flex-1 overflow-y-auto px-6 py-4 text-sm leading-relaxed">
           {state.loading && (
             <div className="space-y-3" aria-live="polite">
-              <p className="text-muted">กำลังให้ AI อ่านตัวเลขและเรียบเรียงคำอธิบาย…</p>
+              <p className="text-text-muted">กำลังให้ AI อ่านตัวเลขและเรียบเรียงคำอธิบาย…</p>
               {[90, 75, 85, 60, 80].map((w, i) => (
                 <div key={i} className="h-3 animate-pulse rounded-md bg-panel-2" style={{ width: `${w}%` }} />
               ))}
@@ -118,7 +118,7 @@ function ExplainDrawer({
           )}
           {state.error && (
             <div className="space-y-3">
-              <p className="rounded-lg border border-neg/40 bg-neg/10 p-3 text-neg">อธิบายไม่สำเร็จ: {state.error}</p>
+              <p className="rounded-lg border border-negative/40 bg-negative/10 p-3 text-negative">อธิบายไม่สำเร็จ: {state.error}</p>
               <button type="button" className="btn-ghost" onClick={onRetry}>
                 ลองอีกครั้ง
               </button>
@@ -130,7 +130,7 @@ function ExplainDrawer({
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-3 text-xs text-muted">
+        <div className="flex items-center justify-between gap-2 border-t border-border px-6 py-3 text-xs text-text-muted">
           <span>อธิบายจากตัวเลขบนหน้าจอเท่านั้น · ไม่ใช่คำแนะนำการลงทุน</span>
           <span className="flex shrink-0 gap-2">
             {state.text && (
@@ -138,7 +138,7 @@ function ExplainDrawer({
                 อธิบายใหม่
               </button>
             )}
-            <Link href="/advisor" className="text-accent hover:underline">
+            <Link href="/advisor" className="text-primary hover:underline">
               ถามต่อ →
             </Link>
           </span>

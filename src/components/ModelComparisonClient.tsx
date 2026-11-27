@@ -57,7 +57,7 @@ const colorOf = (m: ComparisonModel) =>
 
 function ModelName({ model }: { model: ComparisonModel }) {
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium">
+    <span className="inline-flex items-center gap-2 whitespace-nowrap font-medium">
       <span
         className="inline-block h-2 w-2 shrink-0 rounded-full"
         style={{ background: colorOf(model) }}
@@ -205,7 +205,7 @@ export function ModelComparisonClient({
       "low",
     ),
   };
-  const hi = (on: boolean) => clsx("num", on && "font-semibold text-pos");
+  const hi = (on: boolean) => clsx("num", on && "font-semibold text-positive");
   const ret = (o: RealisedStats | null) =>
     o
       ? `${fmtPct(o.annualReturn, 1)}${o.annualised === "extrapolated" ? "*" : ""}`
@@ -290,7 +290,7 @@ export function ModelComparisonClient({
             onChange={setUseCosts}
           />
           {infeasible && (
-            <p className="text-xs text-warn">
+            <p className="text-xs text-warning">
               น้ำหนักสูงสุด {fmtPct(maxW, 0)} × {included.size} ตัว ไม่ถึง 100%
               — โมเดลที่ใช้ optimizer จะหาคำตอบไม่ได้
             </p>
@@ -303,14 +303,14 @@ export function ModelComparisonClient({
             {pending ? "กำลังเปรียบเทียบ…" : "เปรียบเทียบ 6 โมเดล"}
           </button>
           {included.size < 2 && (
-            <p className="text-xs text-muted">เลือกอย่างน้อย 2 สินทรัพย์</p>
+            <p className="text-xs text-text-muted">เลือกอย่างน้อย 2 สินทรัพย์</p>
           )}
         </section>
 
         <section className="card lg:col-span-2">
           <h2 className="mb-1 text-base font-semibold">
             ชุดสินทรัพย์{" "}
-            <span className="text-xs font-normal text-muted">
+            <span className="text-xs font-normal text-text-muted">
               — ทุกโมเดลใช้ชุดเดียวกัน ({included.size} ตัว)
             </span>
           </h2>
@@ -326,8 +326,8 @@ export function ModelComparisonClient({
                   className={clsx(
                     "rounded-full border px-3 py-1 text-xs",
                     on
-                      ? "border-accent/60 bg-panel-2 font-medium text-text"
-                      : "border-border text-muted",
+                      ? "border-primary/60 bg-panel-2 font-medium text-text"
+                      : "border-border text-text-muted",
                   )}
                   onClick={() => {
                     const s = new Set(included);
@@ -341,12 +341,12 @@ export function ModelComparisonClient({
               );
             })}
           </div>
-          <p className="mt-3 text-xs text-muted">
+          <p className="mt-3 text-xs text-text-muted">
             Equal Weight · Min Variance · Max Sharpe · Risk Parity · Max
             Diversification · Min CVaR — ใช้ปฏิทินราคา ขอบเขตน้ำหนัก ต้นทุน
             และตัวประมาณ μ / Σ เดียวกัน ต่างกันที่วิธีเลือกน้ำหนักเท่านั้น
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs text-text-muted">
             ใช้เฉพาะวันที่ทุกตัวมีราคาพร้อมกัน —
             ตัวที่ประวัติราคาสั้นจะทำให้ช่วงเปรียบเทียบสั้นลงทั้งชุด
           </p>
@@ -354,7 +354,7 @@ export function ModelComparisonClient({
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-neg">
+        <p role="alert" className="text-sm text-negative">
           {error}
         </p>
       )}
@@ -363,7 +363,7 @@ export function ModelComparisonClient({
         <>
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
           <WindowBanner info={res.windowInfo} />
-          <p className="text-xs text-muted" data-testid="universe-used">
+          <p className="text-xs text-text-muted" data-testid="universe-used">
             ชุดสินทรัพย์ที่ใช้: {res.symbols.length} ตัว — {res.symbols.join(", ")}
           </p>
 
@@ -371,7 +371,7 @@ export function ModelComparisonClient({
             <div
               role="group"
               aria-label="วิธีทดสอบ Out-of-Sample"
-              className="inline-flex rounded-lg border border-border p-0.5 text-xs"
+              className="inline-flex rounded-lg border border-border p-1 text-xs"
             >
               {(
                 [
@@ -385,10 +385,10 @@ export function ModelComparisonClient({
                   aria-pressed={mode === k}
                   disabled={!res[k]}
                   className={clsx(
-                    "rounded-md px-2.5 py-1 disabled:opacity-40",
+                    "rounded-md px-3 py-1 disabled:opacity-40",
                     mode === k
                       ? "bg-panel-2 font-medium text-text"
-                      : "text-muted",
+                      : "text-text-muted",
                   )}
                   onClick={() => setMode(k)}
                 >
@@ -396,7 +396,7 @@ export function ModelComparisonClient({
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               {mode === "split" && res.split
                 ? `ฝึก ${res.split.train.from} → ${res.split.train.to} (${res.split.train.observations} วัน) · ทดสอบ ${res.split.test.from} → ${res.split.test.to} (${res.split.test.observations} วัน)`
                 : res.walkForward
@@ -405,12 +405,12 @@ export function ModelComparisonClient({
             </p>
           </div>
           {res.warnings.map((w) => (
-            <p key={w} className="text-xs text-warn">
+            <p key={w} className="text-xs text-warning">
               ⚠ {w}
             </p>
           ))}
           {res.excluded.length > 0 && (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               ไม่รวม:{" "}
               {res.excluded.map((e) => `${e.symbol} (${e.reason})`).join(", ")}
             </p>
@@ -469,7 +469,7 @@ export function ModelComparisonClient({
                                 {w > 0.0005 ? (
                                   fmtPct(w, 1)
                                 ) : (
-                                  <span className="text-muted">—</span>
+                                  <span className="text-text-muted">—</span>
                                 )}
                               </td>
                             );
@@ -477,7 +477,7 @@ export function ModelComparisonClient({
                         ) : (
                           <td
                             colSpan={res.symbols.length}
-                            className="text-xs text-neg"
+                            className="text-xs text-negative"
                           >
                             {
                               view.results.find((m) => m.model === r.model)
@@ -489,7 +489,7 @@ export function ModelComparisonClient({
                     ))}
                   </tbody>
                 </table>
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 text-xs text-text-muted">
                   ความเข้มของช่อง = สัดส่วนน้ำหนัก (ดูการกระจุกตัว) · “–” =
                   ไม่ถือ
                 </p>
@@ -642,7 +642,7 @@ export function ModelComparisonClient({
                                   "num border-l border-border",
                                   m.gap?.sharpe != null &&
                                     m.gap.sharpe < 0 &&
-                                    "text-neg",
+                                    "text-negative",
                                 )}
                               >
                                 {m.gap?.sharpe != null
@@ -656,7 +656,7 @@ export function ModelComparisonClient({
                           ) : (
                             <td
                               colSpan={13}
-                              className="border-l border-border text-neg"
+                              className="border-l border-border text-negative"
                             >
                               {m.error}
                             </td>
@@ -715,7 +715,7 @@ export function ModelComparisonClient({
                                 </td>
                               </>
                             ) : (
-                              <td colSpan={8} className="text-neg">
+                              <td colSpan={8} className="text-negative">
                                 {m.error}
                               </td>
                             )}
@@ -725,7 +725,7 @@ export function ModelComparisonClient({
                     </table>
                   )
                 )}
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 text-xs text-text-muted">
                   ตัวหนาสีเขียว = ดีที่สุดในคอลัมน์ Out-of-Sample (ผลตอบแทนและ
                   Sharpe สูงสุด · σ และ Max DD ต่ำสุด) · Rf{" "}
                   {fmtPct(res.riskFreeRate, 2)}
@@ -739,7 +739,7 @@ export function ModelComparisonClient({
                     m.notes.map((n) => `${MODEL_LABEL[m.model]}: ${n}`),
                   )
                   .map((n) => (
-                    <p key={n} className="mt-1 text-xs text-warn">
+                    <p key={n} className="mt-1 text-xs text-warning">
                       ⚠ {n}
                     </p>
                   ))}
@@ -750,7 +750,7 @@ export function ModelComparisonClient({
                   <section className="card min-w-0">
                     <h2 className="mb-2 text-base font-semibold">
                       มูลค่าพอร์ตนอกช่วงฝึก{" "}
-                      <span className="text-xs font-normal text-muted">
+                      <span className="text-xs font-normal text-text-muted">
                         (ฐาน 100 ณ วันเริ่มทดสอบ)
                       </span>
                     </h2>
@@ -763,7 +763,7 @@ export function ModelComparisonClient({
                   <section className="card min-w-0">
                     <h2 className="mb-2 text-base font-semibold">
                       Drawdown นอกช่วงฝึก{" "}
-                      <span className="text-xs font-normal text-muted">
+                      <span className="text-xs font-normal text-text-muted">
                         (ลดลงจากจุดสูงสุดก่อนหน้า)
                       </span>
                     </h2>
@@ -779,11 +779,11 @@ export function ModelComparisonClient({
             </>
           )}
 
-          <section className="card space-y-1 text-xs text-muted">
+          <section className="card space-y-1 text-xs text-text-muted">
             <h2 className="text-base font-semibold text-text">
               วิธีคำนวณและข้อจำกัด
             </h2>
-            <ul className="list-disc space-y-0.5 pl-4">
+            <ul className="list-disc space-y-1 pl-4">
               {[...res.methodology, ...res.limitations].map((t) => (
                 <li key={t}>{t}</li>
               ))}

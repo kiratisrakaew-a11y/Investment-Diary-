@@ -43,7 +43,7 @@ export default async function SettingsPage() {
   const prov = marketInputProvenance(settings);
   const tag = (p: { illustrative: boolean; label: string }) => (
     <span
-      className={`ml-1 rounded-md px-1 text-xs ${p.illustrative ? "bg-neg/10 text-neg" : "bg-pos/10 text-pos"}`}
+      className={`ml-1 rounded-md px-1 text-xs ${p.illustrative ? "bg-negative/10 text-negative" : "bg-positive/10 text-positive"}`}
     >
       {p.illustrative ? "ค่าตัวอย่าง" : "มีแหล่งที่มา"}
     </span>
@@ -121,7 +121,7 @@ export default async function SettingsPage() {
                   defaultValue={settings.erpAsOf ?? ""}
                 />
               </div>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-text-muted">
                 แหล่งที่มาและวันที่จะถูกบันทึกลงใน valuation ใหม่ทุกครั้ง ·
                 เว้นว่าง = ค่าตัวอย่าง · เปลี่ยนตัวเลข Rf หรือ ERP ต้องกรอกแหล่งที่มาและวันที่ด้วย
               </p>
@@ -214,7 +214,7 @@ export default async function SettingsPage() {
                 <input name="minObsPerAsset" type="number" min={3} step={1} className="input" defaultValue={settings.minObsPerAsset} />
               </label>
             </div>
-            <p className="-mt-2 text-xs text-muted">
+            <p className="-mt-2 text-xs text-text-muted">
               ใช้กับจัดพอร์ต, MPT ของพอร์ต, เปรียบเทียบโมเดล, backtest, stress test และข้อเสนอปรับพอร์ต (เปลี่ยนรายหน้าได้) · ความถี่: รายวัน หรือรายสัปดาห์อัตโนมัติเมื่อสินทรัพย์ปิดราคาต่างเวลา
             </p>
             <div>
@@ -230,7 +230,7 @@ export default async function SettingsPage() {
                 defaultValue={settings.muCapPct ?? ""}
                 placeholder="เช่น 10"
               />
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-text-muted">
                 ใช้กับ μ ที่อิงผลตอบแทนในอดีต (historical / blend / shrinkage) — ผลลัพธ์แสดงค่าก่อนและหลังปรับ
               </p>
             </div>
@@ -294,7 +294,7 @@ export default async function SettingsPage() {
                 defaultValue={settings.dividendPaymentLagDays ?? ""}
                 placeholder="ว่าง = ไม่นับปันผลที่ไม่มีวันจ่าย"
               />
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-text-muted">
                 เป็นสมมติฐาน ไม่ใช่ข้อมูลทางการ (Yahoo ให้แค่วัน XD) —
                 ถ้าบันทึกวันจ่ายจริงไว้ ระบบใช้วันจริงเสมอ
               </p>
@@ -303,14 +303,14 @@ export default async function SettingsPage() {
         </Section>
 
         <Section title="ทะเบียนดัชนีอ้างอิง">
-          <p className="mb-2 text-xs text-muted">
+          <p className="mb-2 text-xs text-text-muted">
             ชนิดของดัชนีบอกว่ารวมปันผลหรือไม่ — ใช้จับคู่กับชนิดราคา
             (ราคาปิดคู่ดัชนีราคา · ราคาปรับปันผลคู่ดัชนีผลตอบแทนรวม)
           </p>
           {benchmarks.length ? (
             <table className="w-full text-xs" data-testid="benchmark-registry">
               <thead>
-                <tr className="text-left text-muted">
+                <tr className="text-left text-text-muted">
                   <th className="py-1">ดัชนี</th>
                   <th>ช่วงข้อมูล</th>
                   <th className="text-right">วัน</th>
@@ -323,7 +323,7 @@ export default async function SettingsPage() {
                     <td className="py-1 font-medium">
                       {b.symbol}
                       {b.label ? (
-                        <span className="ml-1 text-muted">{b.label}</span>
+                        <span className="ml-1 text-text-muted">{b.label}</span>
                       ) : null}
                     </td>
                     <td>{b.from ? `${b.from} → ${b.to}` : "ยังไม่มีข้อมูล"}</td>
@@ -337,7 +337,7 @@ export default async function SettingsPage() {
                         <input type="hidden" name="symbol" value={b.symbol} />
                         <select
                           name="kind"
-                          className="input py-0.5 text-xs"
+                          className="input py-1 text-xs"
                           defaultValue={b.kind}
                         >
                           <option value="price_index">
@@ -354,7 +354,7 @@ export default async function SettingsPage() {
               </tbody>
             </table>
           ) : (
-            <p className="text-xs text-muted">ยังไม่มีดัชนีในระบบ</p>
+            <p className="text-xs text-text-muted">ยังไม่มีดัชนีในระบบ</p>
           )}
         </Section>
 
@@ -365,7 +365,7 @@ export default async function SettingsPage() {
               ที่บันทึกจะเก็บเวอร์ชันนี้ไว้ ถ้าสูตรเปลี่ยน
               ระบบจะบอกว่าค่าไหนคำนวณด้วยสูตรเก่า
             </p>
-            <ul className="list-disc space-y-1 pl-5 text-xs text-muted">
+            <ul className="list-disc space-y-1 pl-6 text-xs text-text-muted">
               <li>
                 ผลตอบแทน: TWR ({settings.twrFlowTiming}), XIRR ACT/365, ต่ำกว่า
                 1 ปีแสดงแบบสะสม · Sharpe จากผลตอบแทนส่วนเกินรายงวด × √N
@@ -452,7 +452,7 @@ export default async function SettingsPage() {
                   ["thai_stock", "us_stock", "fund", "bond", "gold"] as const
                 ).map((c) => (
                   <div key={c}>
-                    <label className="text-xs text-muted">
+                    <label className="text-xs text-text-muted">
                       {ASSET_CLASS_LABEL[c]}
                     </label>
                     <input
@@ -467,7 +467,7 @@ export default async function SettingsPage() {
                 ))}
               </div>
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               ค่าเริ่มต้นเป็น 0 — ใส่ตามโบรกเกอร์ของคุณ ·
               ใช้คำนวณข้อเสนอเท่านั้น ไม่บันทึกรายการซื้อขายให้
             </p>
@@ -519,7 +519,7 @@ export default async function SettingsPage() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-text-muted">
               ใช้แสดงป้าย “วันที่ข้อมูลไม่ตรง” ในหน้า valuation, หน้าแก้ไข
               และหน้าคุณภาพข้อมูล — เป็นแค่การเตือน ไม่เปลี่ยนตัวเลข ·
               ค่าเริ่มต้น 180 / 7 / 548 วัน เป็นจุดตั้งต้น ไม่ใช่มาตรฐาน ·
@@ -554,7 +554,7 @@ export default async function SettingsPage() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted">รวมกันต้องเท่ากับ 100%</p>
+            <p className="text-xs text-text-muted">รวมกันต้องเท่ากับ 100%</p>
           </ActionForm>
         </Section>
       </div>
@@ -574,7 +574,7 @@ export default async function SettingsPage() {
             label="Claude Code"
             text={`claude mcp add --transport http investment-diary ${origin}/api/mcp --header "Authorization: Bearer YOUR_API_KEY"`}
           />
-          <p className="text-xs text-muted">
+          <p className="text-xs text-text-muted">
             เครื่องมือ: add_note, search_notes, record_transaction,
             list_transactions, add_asset, list_assets, update_price,
             get_portfolio_summary, get_allocation, get_performance_metrics,
@@ -584,7 +584,7 @@ export default async function SettingsPage() {
             stress_test_portfolio, backtest_portfolio, sync_historical_prices,
             import_prices
           </p>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-text-muted">
             ชนิดราคาและดัชนี: เครื่องมือที่คำนวณผลตอบแทนรับ <code>returnBasis</code>{" "}
             (price_return = ราคาปิด, total_return = ราคาปรับปันผล) และ{" "}
             <code>benchmark</code> (default / auto / สัญลักษณ์ดัชนี) — ถ้าไม่ส่งจะใช้ค่าเริ่มต้นด้านบน
@@ -596,7 +596,7 @@ export default async function SettingsPage() {
 
       <Section title="เชื่อมต่อ ChatGPT (Custom GPT Actions)">
         <div className="space-y-3 text-sm">
-          <ol className="list-decimal space-y-1 pl-5">
+          <ol className="list-decimal space-y-1 pl-6">
             <li>ChatGPT → Explore GPTs → Create → Configure</li>
             <li>
               Actions → Create new action → Import from URL: วาง OpenAPI URL

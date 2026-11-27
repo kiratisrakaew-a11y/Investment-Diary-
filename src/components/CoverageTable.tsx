@@ -6,14 +6,14 @@ export function CoverageTable({
 }) {
   if (!rows?.length) return null;
   const label = { ok: "ใช้ได้", limits_window: "ทำให้ช่วงสั้นลง", dropped: "ไม่ได้ใช้" } as const;
-  const tone = { ok: "text-pos", limits_window: "text-warn", dropped: "text-neg" } as const;
+  const tone = { ok: "text-positive", limits_window: "text-warning", dropped: "text-negative" } as const;
   return (
     <details className="text-xs" data-testid="coverage-panel" open={rows.some((r) => r.status !== "ok")}>
-      <summary className="cursor-pointer text-muted">ข้อมูลรายสินทรัพย์ในช่วงนี้ ({rows.length} ตัว)</summary>
+      <summary className="cursor-pointer text-text-muted">ข้อมูลรายสินทรัพย์ในช่วงนี้ ({rows.length} ตัว)</summary>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-muted">
+            <tr className="text-left text-text-muted">
               <th className="py-1">สินทรัพย์</th>
               <th>ราคาวันแรก</th>
               <th className="text-right">งวดในช่วง</th>
@@ -28,7 +28,7 @@ export function CoverageTable({
                 <td className="text-right tabular-nums">{r.observations}</td>
                 <td className={tone[r.status]} title={r.reason}>
                   {label[r.status]}
-                  {r.reason && r.status === "dropped" ? <span className="block text-muted">{r.reason}</span> : null}
+                  {r.reason && r.status === "dropped" ? <span className="block text-text-muted">{r.reason}</span> : null}
                 </td>
               </tr>
             ))}

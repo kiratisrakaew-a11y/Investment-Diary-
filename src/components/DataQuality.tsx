@@ -25,7 +25,7 @@ export function DataQualityPanel({ issues = [], warnings = [], reconciliation }:
   const warns = issues.filter((i) => i.severity !== "error");
   if (!errors.length && !warns.length && !warnings.length && (!reconciliation || reconciliation.navMatches)) return null;
   return (
-    <details className="card border-l-4 border-l-neg" open={errors.length > 0}>
+    <details className="card border-l-4 border-l-negative" open={errors.length > 0}>
       <summary className="cursor-pointer text-sm font-medium">
         ⚠️ คุณภาพข้อมูล: {errors.length > 0 && `${errors.length} ข้อผิดพลาด · `}
         {warns.length + warnings.length} คำเตือน
@@ -33,10 +33,10 @@ export function DataQualityPanel({ issues = [], warnings = [], reconciliation }:
       </summary>
       <ul className="mt-2 space-y-1 text-xs">
         {reconciliation && !reconciliation.navMatches && (
-          <li className="text-neg">NAV ไม่ตรงกับ เงินสด + Σ(จำนวน × ราคา × FX) — โปรดตรวจสอบรายการ</li>
+          <li className="text-negative">NAV ไม่ตรงกับ เงินสด + Σ(จำนวน × ราคา × FX) — โปรดตรวจสอบรายการ</li>
         )}
         {errors.map((i, k) => (
-          <li key={`e${k}`} className="text-neg">
+          <li key={`e${k}`} className="text-negative">
             {i.date} · {i.message}
           </li>
         ))}
@@ -49,11 +49,11 @@ export function DataQualityPanel({ issues = [], warnings = [], reconciliation }:
           <li key={`m${k}`}>{w}</li>
         ))}
       </ul>
-      <a href="/data-quality" className="mt-2 inline-block text-xs text-accent">
+      <a href="/data-quality" className="mt-2 inline-block text-xs text-primary">
         รายงานคุณภาพข้อมูลทั้งหมด →
       </a>
       {reconciliation && reconciliation.inferredContributionsThb > 0 && (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-text-muted">
           รายการเก่าที่ซื้อโดยไม่มีเงินสดพอ ระบบไม่ได้แก้ข้อมูล แต่ถือส่วนที่ขาดเป็น “เงินฝากอนุมาน” ในการคำนวณผลตอบแทน — บันทึกรายการฝากเงินจริงเพื่อให้ตัวเลขแม่นยำ
         </p>
       )}

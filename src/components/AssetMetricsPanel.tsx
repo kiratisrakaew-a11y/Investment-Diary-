@@ -19,6 +19,9 @@ import {
 } from "@/app/(app)/holdings/metric-actions";
 import { AssetMetricChart, type ChartMetric } from "./AssetMetricChart";
 import { StatusBadge } from "./AssetMetricStatus";
+import { Collapsible, EmptyState } from "./ui";
+import { EmptyIcon } from "./icons";
+import { Gauge } from "@phosphor-icons/react/ssr";
 
 export { StatusBadge };
 import {
@@ -149,7 +152,7 @@ export function AssetMetricsPanel({
         <div
           role="group"
           aria-label="ช่วงเวลา"
-          className="ml-auto flex rounded-lg border border-border p-0.5 text-xs"
+          className="ml-auto flex rounded-lg border border-border p-1 text-xs"
         >
           {(["1Y", "3Y", "5Y", "All"] as const).map((r) => (
             <button
@@ -157,8 +160,8 @@ export function AssetMetricsPanel({
               type="button"
               aria-pressed={range === r}
               className={clsx(
-                "rounded-md px-2 py-0.5",
-                range === r ? "bg-panel-2 font-medium text-text" : "text-muted",
+                "rounded-md px-2 py-1",
+                range === r ? "bg-panel-2 font-medium text-text" : "text-text-muted",
               )}
               onClick={() => setRange(r)}
             >
@@ -169,7 +172,7 @@ export function AssetMetricsPanel({
         <div
           role="group"
           aria-label="โหมดกราฟ"
-          className="flex rounded-lg border border-border p-0.5 text-xs"
+          className="flex rounded-lg border border-border p-1 text-xs"
         >
           {(["actual", "indexed", "change"] as const).map((k) => (
             <button
@@ -178,8 +181,8 @@ export function AssetMetricsPanel({
               aria-pressed={mode === k}
               title={MODE_HELP[k]}
               className={clsx(
-                "rounded-md px-2 py-0.5",
-                mode === k ? "bg-panel-2 font-medium text-text" : "text-muted",
+                "rounded-md px-2 py-1",
+                mode === k ? "bg-panel-2 font-medium text-text" : "text-text-muted",
               )}
               onClick={() => setMode(k)}
             >
@@ -193,21 +196,22 @@ export function AssetMetricsPanel({
         </div>
       </div>
       {msg && (
-        <p role="status" className="text-xs text-muted">
+        <p role="status" className="text-xs text-text-muted">
           {msg}
         </p>
       )}
 
       {!metrics.length ? (
-        <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          ยังไม่มีตัวชี้วัดของสินทรัพย์นี้ — กด “+ เพิ่ม Metric”
-          เพื่อเริ่มติดตาม เช่น NPL Ratio, Coverage Ratio หรือกำไรรายไตรมาส
-          {archived.length > 0 && (
-            <div className="mt-1 text-xs">
-              มีตัวชี้วัดที่เก็บถาวร {archived.length} รายการด้านล่าง
-            </div>
-          )}
-        </div>
+        <EmptyState
+          icon={<EmptyIcon icon={Gauge} />}
+          title="ยังไม่มีตัวชี้วัดของสินทรัพย์นี้"
+          description={`กด “+ เพิ่ม Metric” เพื่อเริ่มติดตาม เช่น NPL Ratio, Coverage Ratio หรือกำไรรายไตรมาส${archived.length > 0 ? ` · มีตัวชี้วัดที่เก็บถาวร ${archived.length} รายการด้านล่าง` : ""}`}
+          action={
+            <button type="button" className="btn" onClick={() => setDialog({ kind: "metric" })}>
+              + เพิ่ม Metric
+            </button>
+          }
+        />
       ) : (
         <>
           {/* summary */}
@@ -217,11 +221,11 @@ export function AssetMetricsPanel({
               return (
                 <li
                   key={m.id}
-                  className="min-w-0 rounded-xl border border-border bg-panel/60 p-3"
+                  className="min-w-0 rounded-xl border border-border bg-surface p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 truncate text-xs font-medium">
+                      <div className="flex items-center gap-2 truncate text-xs font-medium">
                         <span
                           className="inline-block h-2 w-2 shrink-0 rounded-full"
                           style={{ background: colorOf(m, i) }}
@@ -229,9 +233,9 @@ export function AssetMetricsPanel({
                         />
                         {m.name}
                       </div>
-                      <div className="mt-0.5 text-xl font-semibold tabular-nums leading-tight">
+                      <div className="mt-1 text-2xl font-semibold tabular-nums leading-tight">
                         {m.latest ? fmt(m.latest.value, m.decimals) : "—"}{" "}
-                        <span className="text-xs font-normal text-muted">
+                        <span className="text-xs font-normal text-text-muted">
                           {m.unit}
                         </span>
                       </div>
@@ -241,7 +245,7 @@ export function AssetMetricsPanel({
                       title={m.statusExplanation}
                     />
                   </div>
-                  <div className="mt-1 text-xs text-muted">
+                  <div className="mt-1 text-xs text-text-muted">
                     {m.latest ? `ณ ${m.latest.observedOn}` : "ยังไม่มีค่า"}
                     {ch.delta != null && (
                       <span
@@ -259,7 +263,7 @@ export function AssetMetricsPanel({
                     )}
                     {m.freshness.stale && (
                       <span
-                        className="ml-2 text-warn"
+                        className="ml-2 text-warning"
                         title={`ความถี่${FREQ_LABEL[m.frequency]} — ค่าล่าสุดเก่า ${m.freshness.ageDays} วัน (เกิน ${m.freshness.limitDays})`}
                       >
                         · ข้อมูลเก่า
@@ -267,7 +271,7 @@ export function AssetMetricsPanel({
                     )}
                   </div>
                   <div
-                    className="mt-1 truncate text-xs text-muted"
+                    className="mt-1 truncate text-xs text-text-muted"
                     title={
                       m.currentThreshold
                         ? describeRule(
@@ -281,17 +285,17 @@ export function AssetMetricsPanel({
                       ? `${RULE_LABEL[m.currentThreshold.ruleType]} · ${describeRule(m.currentThreshold as unknown as ThresholdLite, m.unit)}`
                       : "ยังไม่ตั้งเกณฑ์สี"}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-xs"
+                      className="btn-ghost px-2 py-1 text-xs"
                       onClick={() => setDialog({ kind: "obs", metricId: m.id })}
                     >
                       + ค่า
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-xs"
+                      className="btn-ghost px-2 py-1 text-xs"
                       onClick={() =>
                         setDialog({ kind: "threshold", metricId: m.id })
                       }
@@ -300,7 +304,7 @@ export function AssetMetricsPanel({
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-xs"
+                      className="btn-ghost px-2 py-1 text-xs"
                       onClick={() =>
                         setDialog({ kind: "metric", metricId: m.id })
                       }
@@ -309,7 +313,7 @@ export function AssetMetricsPanel({
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-0.5 text-xs text-neg"
+                      className="btn-ghost px-2 py-1 text-xs text-negative"
                       onClick={() =>
                         setDialog({ kind: "delete", metricId: m.id })
                       }
@@ -324,7 +328,7 @@ export function AssetMetricsPanel({
 
           {/* chart */}
           <div className="min-w-0 rounded-xl border border-border p-3">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
               <span className="font-medium text-text">{MODE_LABEL[mode]}</span>
               <span>· {MODE_HELP[mode]}</span>
               <label className="ml-auto inline-flex items-center gap-1">
@@ -345,7 +349,7 @@ export function AssetMetricsPanel({
                 connect={connect}
               />
             ) : (
-              <p className="py-6 text-center text-xs text-muted">
+              <p className="py-6 text-center text-xs text-text-muted">
                 ไม่มีตัวชี้วัดที่เลือกให้แสดงในกราฟ — ติ๊ก “กราฟ”
                 ในตารางด้านล่าง
               </p>
@@ -353,6 +357,7 @@ export function AssetMetricsPanel({
           </div>
 
           {/* management */}
+          <Collapsible title="จัดการตัวชี้วัด" meta={`${metrics.length} ตัว`} defaultOpen>
           <div className="overflow-x-auto">
             <table className="table min-w-[720px] text-xs">
               <thead>
@@ -390,7 +395,7 @@ export function AssetMetricsPanel({
                     <td>
                       {m.latest?.observedOn ?? "—"}
                       {m.freshness.stale && (
-                        <span className="ml-1 text-warn">(เก่า)</span>
+                        <span className="ml-1 text-warning">(เก่า)</span>
                       )}
                     </td>
                     <td>
@@ -406,7 +411,7 @@ export function AssetMetricsPanel({
                     <td className="whitespace-nowrap text-right">
                       <button
                         type="button"
-                        className="text-accent hover:underline"
+                        className="text-primary hover:underline"
                         onClick={() =>
                           setDialog({ kind: "metric", metricId: m.id })
                         }
@@ -415,7 +420,7 @@ export function AssetMetricsPanel({
                       </button>
                       <button
                         type="button"
-                        className="ml-2 text-muted hover:underline"
+                        className="ml-2 text-text-muted hover:underline"
                         disabled={pending}
                         onClick={() =>
                           toggle(
@@ -429,7 +434,7 @@ export function AssetMetricsPanel({
                       </button>
                       <button
                         type="button"
-                        className="ml-2 text-neg hover:underline"
+                        className="ml-2 text-negative hover:underline"
                         onClick={() =>
                           setDialog({ kind: "delete", metricId: m.id })
                         }
@@ -443,13 +448,16 @@ export function AssetMetricsPanel({
             </table>
           </div>
 
+          </Collapsible>
+
           {/* history */}
+          <Collapsible title="ประวัติค่าที่บันทึก" meta={`${history.length} รายการ`}>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-medium">ประวัติค่าที่บันทึก</span>
               <select
                 aria-label="กรองตามตัวชี้วัด"
-                className="input w-auto py-0.5 text-xs"
+                className="input w-auto py-1 text-xs"
                 value={histFilter}
                 onChange={(e) => {
                   setHistFilter(
@@ -465,7 +473,7 @@ export function AssetMetricsPanel({
                   </option>
                 ))}
               </select>
-              <span className="text-muted">
+              <span className="text-text-muted">
                 {history.length} รายการ · วันที่ = วันของข้อมูล
                 ไม่ใช่วันที่บันทึก
               </span>
@@ -490,7 +498,7 @@ export function AssetMetricsPanel({
                         <td className="whitespace-nowrap">
                           {o.observedOn}
                           {o.publishedOn && (
-                            <span className="block text-xs text-muted">
+                            <span className="block text-xs text-text-muted">
                               เผยแพร่ {o.publishedOn}
                             </span>
                           )}
@@ -498,7 +506,7 @@ export function AssetMetricsPanel({
                         <td>{m.name}</td>
                         <td className="text-right tabular-nums">
                           {fmt(o.value, m.decimals)}{" "}
-                          <span className="text-muted">{m.unit}</span>
+                          <span className="text-text-muted">{m.unit}</span>
                         </td>
                         <td>
                           <StatusBadge
@@ -512,13 +520,13 @@ export function AssetMetricsPanel({
                         >
                           {o.source ?? "—"}
                           {o.note && (
-                            <span className="text-muted"> · {o.note}</span>
+                            <span className="text-text-muted"> · {o.note}</span>
                           )}
                         </td>
                         <td className="whitespace-nowrap text-right">
                           <button
                             type="button"
-                            className="text-accent hover:underline"
+                            className="text-primary hover:underline"
                             onClick={() =>
                               setDialog({
                                 kind: "obs",
@@ -531,7 +539,7 @@ export function AssetMetricsPanel({
                           </button>
                           <button
                             type="button"
-                            className="ml-2 text-neg hover:underline"
+                            className="ml-2 text-negative hover:underline"
                             disabled={pending}
                             onClick={() => {
                               if (
@@ -566,18 +574,18 @@ export function AssetMetricsPanel({
               <div className="flex items-center gap-2 text-xs">
                 <button
                   type="button"
-                  className="btn-ghost px-2 py-0.5 text-xs"
+                  className="btn-ghost px-2 py-1 text-xs"
                   disabled={page === 0}
                   onClick={() => setPage(page - 1)}
                 >
                   ก่อนหน้า
                 </button>
-                <span className="text-muted">
+                <span className="text-text-muted">
                   หน้า {page + 1} / {pages}
                 </span>
                 <button
                   type="button"
-                  className="btn-ghost px-2 py-0.5 text-xs"
+                  className="btn-ghost px-2 py-1 text-xs"
                   disabled={page >= pages - 1}
                   onClick={() => setPage(page + 1)}
                 >
@@ -586,12 +594,13 @@ export function AssetMetricsPanel({
               </div>
             )}
           </div>
+          </Collapsible>
         </>
       )}
 
       {archived.length > 0 && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-muted">
+          <summary className="cursor-pointer text-text-muted">
             ตัวชี้วัดที่เก็บถาวร ({archived.length})
           </summary>
           <ul className="mt-2 space-y-1">
@@ -601,12 +610,12 @@ export function AssetMetricsPanel({
                 className="flex flex-wrap items-center gap-2 rounded-md border border-border px-2 py-1"
               >
                 <span className="font-medium">{m.name}</span>
-                <span className="text-muted">
+                <span className="text-text-muted">
                   {m.unit} · {m.observationCount} ค่า
                 </span>
                 <button
                   type="button"
-                  className="ml-auto text-accent hover:underline"
+                  className="ml-auto text-primary hover:underline"
                   disabled={pending}
                   onClick={() =>
                     toggle(m, { isActive: true }, `นำ ${m.name} กลับมาแล้ว`)
@@ -616,7 +625,7 @@ export function AssetMetricsPanel({
                 </button>
                 <button
                   type="button"
-                  className="text-neg hover:underline"
+                  className="text-negative hover:underline"
                   onClick={() => setDialog({ kind: "delete", metricId: m.id })}
                 >
                   ลบถาวร…

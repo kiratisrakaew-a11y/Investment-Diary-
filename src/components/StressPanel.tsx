@@ -113,7 +113,7 @@ export function StressPanel({
           รันชุดสถานการณ์ตัวอย่าง
         </button>
       </div>
-      {error && <p className="text-sm text-neg">{error}</p>}
+      {error && <p className="text-sm text-negative">{error}</p>}
       {res && (
         <div className="space-y-3">
           <BasisSummary priceBasis={res.priceBasis} benchmark={res.benchmark} />
@@ -160,33 +160,33 @@ export function StressPanel({
                 <span key={p.symbol} className="rounded-md border border-border/60 px-2 py-1">
                   {p.symbol} <span className={signClass(p.pnl.total)}>{fmtPct(p.returnPct, 1)}</span>
                   {p.boundedAtFullLoss && (
-                    <span className="text-warn" title="สถานะซื้อที่จ่ายเต็มขาดทุนได้ไม่เกินมูลค่าที่ถือ — ค่าเส้นตรงเกินช่วงที่ใช้ได้">
+                    <span className="text-warning" title="สถานะซื้อที่จ่ายเต็มขาดทุนได้ไม่เกินมูลค่าที่ถือ — ค่าเส้นตรงเกินช่วงที่ใช้ได้">
                       {" "}
                       (เส้นตรง {fmtPct(p.linearReturn, 1)} → จำกัดที่ −100%)
                     </span>
                   )}
-                  <span className="text-muted"> (β {fmtNum(p.assumptions.beta, 2)}{p.assumptions.modifiedDuration != null ? ` · D ${fmtNum(p.assumptions.modifiedDuration, 2)}` : ""})</span>
+                  <span className="text-text-muted"> (β {fmtNum(p.assumptions.beta, 2)}{p.assumptions.modifiedDuration != null ? ` · D ${fmtNum(p.assumptions.modifiedDuration, 2)}` : ""})</span>
                 </span>
               ))}
             </div>
           )}
           {res.history && (
             <p className="text-sm">
-              ย้อนหลังด้วยน้ำหนักปัจจุบัน: วันที่แย่ที่สุด {res.history.worstDay.date} <span className="text-neg">{fmtPct(res.history.worstDay.return, 2)}</span>
+              ย้อนหลังด้วยน้ำหนักปัจจุบัน: วันที่แย่ที่สุด {res.history.worstDay.date} <span className="text-negative">{fmtPct(res.history.worstDay.return, 2)}</span>
               {res.history.worst21d && (
                 <>
-                  {" "}· 21 วันทำการแย่ที่สุด {res.history.worst21d.from} → {res.history.worst21d.to} <span className="text-neg">{fmtPct(res.history.worst21d.return, 1)}</span>
+                  {" "}· 21 วันทำการแย่ที่สุด {res.history.worst21d.from} → {res.history.worst21d.to} <span className="text-negative">{fmtPct(res.history.worst21d.return, 1)}</span>
                 </>
               )}{" "}
-              <span className="text-xs text-muted">(ครอบคลุม {fmtPct(res.history.coverage, 0)} ของ NAV)</span>
+              <span className="text-xs text-text-muted">(ครอบคลุม {fmtPct(res.history.coverage, 0)} ของ NAV)</span>
             </p>
           )}
-          <ul className="list-disc pl-5 text-xs text-muted">
+          <ul className="list-disc pl-6 text-xs text-text-muted">
             {Object.values(res.assumptions).map((a) => (
               <li key={a}>{a}</li>
             ))}
             {[...new Set(res.results.flatMap((r) => r.warnings))].map((w) => (
-              <li key={w} className="text-neg">{w}</li>
+              <li key={w} className="text-negative">{w}</li>
             ))}
           </ul>
         </div>

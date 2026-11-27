@@ -81,7 +81,7 @@ export function WindowPicker({
   return (
     <div className={`flex flex-wrap items-end gap-3 text-sm ${className ?? ""}`} data-testid="window-picker">
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-muted">ช่วงข้อมูล</span>
+        <span className="text-xs text-text-muted">ช่วงข้อมูล</span>
         <select className="input py-1" name="windowPreset" value={draft.preset} disabled={pending} onChange={(e) => set({ ...draft, preset: e.target.value as WindowPreset })}>
           {PRESETS.map((p) => (
             <option key={p.value} value={p.value}>
@@ -92,19 +92,19 @@ export function WindowPicker({
       </label>
       {draft.preset === "custom" && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted">เริ่ม</span>
+          <span className="text-xs text-text-muted">เริ่ม</span>
           <input type="date" className="input py-1" name="windowStart" value={draft.startDate ?? ""} onChange={(e) => set({ ...draft, startDate: e.target.value || undefined })} />
         </label>
       )}
       {advanced && (
         <>
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-muted">ณ วันที่ (ว่าง = ล่าสุด)</span>
+            <span className="text-xs text-text-muted">ณ วันที่ (ว่าง = ล่าสุด)</span>
             <input type="date" className="input py-1" name="windowEnd" value={draft.endDate ?? ""} onChange={(e) => set({ ...draft, endDate: e.target.value || undefined })} />
           </label>
           {showMu && (
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-muted">ช่วงสำหรับผลตอบแทนคาดหวัง</span>
+              <span className="text-xs text-text-muted">ช่วงสำหรับผลตอบแทนคาดหวัง</span>
               <select className="input py-1" name="muPreset" value={draft.muPreset ?? ""} onChange={(e) => set({ ...draft, muPreset: (e.target.value || undefined) as WindowPreset | undefined })}>
                 <option value="">เหมือนช่วงข้อมูล</option>
                 {PRESETS.filter((p) => p.value !== "custom").map((p) => (
@@ -120,7 +120,7 @@ export function WindowPicker({
       <button type="button" className="btn-ghost py-1 text-xs" onClick={() => setAdvanced((a) => !a)}>
         {advanced ? "ซ่อนตัวเลือกขั้นสูง" : "ขั้นสูง"}
       </button>
-      {pending && <span className="text-xs text-muted">กำลังคำนวณใหม่…</span>}
+      {pending && <span className="text-xs text-text-muted">กำลังคำนวณใหม่…</span>}
     </div>
   );
 }
@@ -143,10 +143,10 @@ export function WindowBanner({
   const reqYears = info.requested.startDate ? (Date.parse(info.requested.endDate) - Date.parse(info.requested.startDate)) / (365.25 * 86_400_000) : null;
   const e = info.effective;
   const unit = e?.frequency === "weekly" ? "สัปดาห์" : e?.frequency === "monthly" ? "เดือน" : "วัน";
-  const tone = info.quality === "ok" ? "bg-pos/10 text-pos" : info.quality === "thin" ? "bg-warn/10 text-warn" : "bg-neg/10 text-neg";
+  const tone = info.quality === "ok" ? "bg-positive/10 text-positive" : info.quality === "thin" ? "bg-warning/10 text-warning" : "bg-negative/10 text-negative";
   return (
-    <p className="flex flex-wrap items-center gap-2 text-xs text-muted" data-testid="window-banner">
-      <span className={`rounded-md px-1.5 py-0.5 font-medium ${tone}`}>{info.quality}</span>
+    <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted" data-testid="window-banner">
+      <span className={`rounded-md px-2 py-1 font-medium ${tone}`}>{info.quality}</span>
       <span>
         ขอ {info.requested.preset === "max" ? "ทั้งหมด" : reqYears != null ? `${fmtNum(reqYears, 1)} ปี` : info.requested.preset}
         {e ? ` · ใช้จริง ${fmtNum(e.years, 1)} ปี (${e.observations} ${unit}, ${e.startDate} → ${e.endDate})` : " · ใช้ไม่ได้"}

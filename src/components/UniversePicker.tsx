@@ -50,15 +50,15 @@ export function UniversePicker({
 
   return (
     <details className="text-sm" open data-testid="universe-picker">
-      <summary className="cursor-pointer text-xs text-muted">
+      <summary className="cursor-pointer text-xs text-text-muted">
         สินทรัพย์ที่ใช้คำนวณ: <b className="text-text">{draft.length}</b> / {catalog.length} ตัว
         {pending && <span className="ml-2">กำลังคำนวณใหม่…</span>}
       </summary>
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
-        <button type="button" className="btn-ghost py-0.5" onClick={() => apply(catalog.map((c) => c.symbol))}>
+        <button type="button" className="btn-ghost py-1" onClick={() => apply(catalog.map((c) => c.symbol))}>
           เลือกทั้งหมด
         </button>
-        <button type="button" className="btn-ghost py-0.5" onClick={() => apply([])}>
+        <button type="button" className="btn-ghost py-1" onClick={() => apply([])}>
           ล้าง
         </button>
       </div>
@@ -68,11 +68,11 @@ export function UniversePicker({
           return (
             <li key={c.symbol} className={on ? "" : "opacity-50"}>
               <label className="flex items-start gap-2">
-                <input type="checkbox" className="mt-0.5 accent-[var(--accent)]" checked={on} onChange={() => toggle(c.symbol)} data-symbol={c.symbol} />
+                <input type="checkbox" className="mt-1 accent-[var(--primary)]" checked={on} onChange={() => toggle(c.symbol)} data-symbol={c.symbol} />
                 <span>
-                  <span className="font-medium">{c.symbol}</span> <span className="text-xs text-muted">{c.assetClassLabel}</span>
-                  {c.held && <span className="ml-1 text-xs text-accent">ถืออยู่</span>}
-                  {on && reason.has(c.symbol) && <span className="block text-xs text-warn">ไม่ได้ใช้: {reason.get(c.symbol)}</span>}
+                  <span className="font-medium">{c.symbol}</span> <span className="text-xs text-text-muted">{c.assetClassLabel}</span>
+                  {c.held && <span className="ml-1 text-xs text-primary">ถืออยู่</span>}
+                  {on && reason.has(c.symbol) && <span className="block text-xs text-warning">ไม่ได้ใช้: {reason.get(c.symbol)}</span>}
                 </span>
               </label>
             </li>

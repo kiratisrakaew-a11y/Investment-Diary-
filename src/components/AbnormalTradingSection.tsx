@@ -46,8 +46,8 @@ import { formatNumber } from "@/lib/format";
 
 const SYNC = "asset-price";
 const axis = {
-  stroke: "var(--muted)",
-  fontSize: 11,
+  stroke: "var(--text-muted)",
+  fontSize: 12,
   tickLine: false,
   axisLine: false,
 } as const;
@@ -169,7 +169,7 @@ export function AssetPriceWithAbnormal({
           prices.length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
               {isThaiStock && (
-                <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+                <label className="inline-flex items-center gap-2 text-xs text-text-muted">
                   <input
                     type="checkbox"
                     checked={markersOn === "on"}
@@ -184,7 +184,7 @@ export function AssetPriceWithAbnormal({
               <div
                 role="group"
                 aria-label="ช่วงเวลา"
-                className="inline-flex rounded-lg border border-border p-0.5 text-xs"
+                className="inline-flex rounded-lg border border-border p-1 text-xs"
               >
                 {RANGES.map((r) => (
                   <button
@@ -192,10 +192,10 @@ export function AssetPriceWithAbnormal({
                     type="button"
                     aria-pressed={range === r.key}
                     className={clsx(
-                      "rounded-md px-2 py-0.5",
+                      "rounded-md px-2 py-1",
                       range === r.key
                         ? "bg-panel-2 font-medium text-text"
-                        : "text-muted",
+                        : "text-text-muted",
                     )}
                     onClick={() => setRange(r.key)}
                   >
@@ -225,8 +225,8 @@ export function AssetPriceWithAbnormal({
           <Empty>ยังไม่มีประวัติราคา</Empty>
         )}
         {isThaiStock && marks.length > 0 && (
-          <p className="mt-2 text-xs text-muted">
-            <span style={{ color: "var(--accent)" }}>┆</span> event ·{" "}
+          <p className="mt-2 text-xs text-text-muted">
+            <span style={{ color: "var(--primary)" }}>┆</span> event ·{" "}
             <span style={{ color: LEVEL_COLOR["ผิดปกติ"] }}>●</span> ผิดปกติ ·{" "}
             <span style={{ color: LEVEL_COLOR["น่าสังเกต"] }}>●</span> น่าสังเกต
           </p>
@@ -262,10 +262,10 @@ function Badge({
   children: React.ReactNode;
 }) {
   const color =
-    LEVEL_COLOR[level as keyof typeof LEVEL_COLOR] ?? "var(--muted)";
+    LEVEL_COLOR[level as keyof typeof LEVEL_COLOR] ?? "var(--text-muted)";
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium"
+      className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium"
       style={{
         borderColor: color,
         color: level === "ปกติ" ? "var(--text)" : color,
@@ -273,7 +273,7 @@ function Badge({
     >
       <span
         className="inline-block h-2 w-2 rounded-full"
-        style={{ background: level === "ปกติ" ? "var(--pos)" : color }}
+        style={{ background: level === "ปกติ" ? "var(--positive)" : color }}
         aria-hidden
       />
       {children}
@@ -311,7 +311,7 @@ function RowTooltip({
           {r.z == null ? "—" : formatNumber(r.z, 2)}
         </span>
         {r.volume != null && (
-          <span className="text-muted">
+          <span className="text-text-muted">
             {" "}
             · {formatNumber(r.volume, 0)} หุ้น
           </span>
@@ -373,17 +373,17 @@ function AbnormalTradingSection({
         className="space-y-4"
       >
         {state.kind === "loading" && (
-          <p className="text-sm text-muted" role="status">
+          <p className="text-sm text-text-muted" role="status">
             กำลังคำนวณ…
           </p>
         )}
         {state.kind === "error" && (
           <div
-            className="rounded-xl border border-neg/40 p-3 text-sm"
+            className="rounded-xl border border-negative/40 p-3 text-sm"
             role="alert"
           >
-            <p className="font-medium text-neg">โหลดข้อมูลไม่สำเร็จ</p>
-            <p className="mt-1 text-muted">{state.message}</p>
+            <p className="font-medium text-negative">โหลดข้อมูลไม่สำเร็จ</p>
+            <p className="mt-1 text-text-muted">{state.message}</p>
             <button type="button" className="btn-ghost mt-2" onClick={reload}>
               ลองอีกครั้ง
             </button>
@@ -401,7 +401,7 @@ function AbnormalTradingSection({
         {state.kind === "insufficient" && (
           <div className="rounded-xl border border-border p-3 text-sm">
             <p className="font-medium">ข้อมูลยังไม่พอสำหรับวิเคราะห์</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted">
+            <ul className="mt-1 list-disc space-y-1 pl-6 text-text-muted">
               {state.reasons.map((r) => (
                 <li key={r}>{r}</li>
               ))}
@@ -417,13 +417,13 @@ function AbnormalTradingSection({
             {state.limits.map((l) => (
               <p
                 key={l}
-                className="rounded-lg border border-warn/40 px-3 py-2 text-xs text-warn"
+                className="rounded-lg border border-warning/40 px-3 py-2 text-xs text-warning"
               >
                 {l}
               </p>
             ))}
             <div>
-              <div className="mb-1 flex justify-between text-xs text-muted">
+              <div className="mb-1 flex justify-between text-xs text-text-muted">
                 <span>
                   Abnormal return (แท่ง, %) · CAR 5 วัน (เส้น, %) · แถบ ±2σ(ε)
                 </span>
@@ -454,7 +454,7 @@ function AbnormalTradingSection({
                   <ReferenceLine y={0} stroke="var(--border)" />
                   <Line
                     dataKey="bandPct"
-                    stroke="var(--muted)"
+                    stroke="var(--text-muted)"
                     strokeDasharray="2 3"
                     strokeWidth={1}
                     dot={false}
@@ -463,7 +463,7 @@ function AbnormalTradingSection({
                   />
                   <Line
                     dataKey="negBandPct"
-                    stroke="var(--muted)"
+                    stroke="var(--text-muted)"
                     strokeDasharray="2 3"
                     strokeWidth={1}
                     dot={false}
@@ -495,7 +495,7 @@ function AbnormalTradingSection({
               </ResponsiveContainer>
             </div>
             <div>
-              <div className="mb-1 text-xs text-muted">
+              <div className="mb-1 text-xs text-text-muted">
                 Volume z-score (
                 {data.stock.volumeBasis === "turnover"
                   ? "log turnover"
@@ -528,12 +528,12 @@ function AbnormalTradingSection({
                   <Tooltip content={<RowTooltip />} />
                   <ReferenceLine
                     y={data.thresholds.notable}
-                    stroke="var(--warn)"
+                    stroke="var(--warning)"
                     strokeDasharray="3 3"
                   />
                   <ReferenceLine
                     y={data.thresholds.abnormal}
-                    stroke="var(--neg)"
+                    stroke="var(--negative)"
                     strokeDasharray="3 3"
                   />
                   <ReferenceLine y={0} stroke="var(--border)" />
@@ -569,7 +569,7 @@ function AbnormalTradingSection({
             <SettingsPanel data={data} onApply={onThresholds} basisChoice={basisChoice} onBasis={onBasis} />
           </>
         )}
-        <p className="text-xs text-muted">
+        <p className="text-xs text-text-muted">
           <strong>{DISCLAIMER}</strong> —
           ราคาและปริมาณผิดปกติเกิดได้จากหลายสาเหตุ ที่ |t| &gt; 2
           คาดว่าจะมีวันถูก flag โดยบังเอิญราว 5% ของวัน · รายละเอียด
@@ -596,9 +596,9 @@ function StatusLine({
       <Badge level={b.worst}>
         {b.worst === "ปกติ" ? "ไม่พบความผิดปกติ" : b.worst}
       </Badge>
-      <span className="text-muted">{b.text}</span>
+      <span className="text-text-muted">{b.text}</span>
       {b.latestDate && (
-        <span className="text-muted">
+        <span className="text-text-muted">
           · ล่าสุด {b.latestDate}:{" "}
           <span
             style={{
@@ -612,7 +612,7 @@ function StatusLine({
           </span>
         </span>
       )}
-      <span className="text-muted">· เทียบ {data.stock.benchmark.label}</span>
+      <span className="text-text-muted">· เทียบ {data.stock.benchmark.label}</span>
     </div>
   );
 }
@@ -631,7 +631,7 @@ function FlagTable({
   const { rows, hidden } = flagRows(data, domain);
   if (!data.stock.flagged.length)
     return (
-      <p className="text-sm text-muted" data-testid="no-flags">
+      <p className="text-sm text-text-muted" data-testid="no-flags">
         ไม่พบวันที่ผิดปกติตามเกณฑ์ ({data.criteria["น่าสังเกต"]})
       </p>
     );
@@ -680,7 +680,7 @@ function FlagTable({
                 <td className="num">{fmtT(f.z)}</td>
                 <td className="num">{fmtPct(f.car5)}</td>
                 <td className="num">{fmtT(f.tCAR5)}</td>
-                <td className="min-w-48 text-muted">
+                <td className="min-w-48 text-text-muted">
                   {f.preEventLabel && (
                     <div className="font-medium text-text">
                       {f.preEventLabel}
@@ -811,7 +811,7 @@ function EventStudyPanel({
       <div className="mt-3 space-y-3 text-xs">
         <div className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1">
-            <span className="text-muted">Event ที่บันทึกไว้</span>
+            <span className="text-text-muted">Event ที่บันทึกไว้</span>
             <select
               className="input w-auto"
               value={data.events.some((e) => e.eventDate === date) ? date : ""}
@@ -830,7 +830,7 @@ function EventStudyPanel({
             </select>
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">หรือวันที่ข่าว</span>
+            <span className="text-text-muted">หรือวันที่ข่าว</span>
             <input
               className="input w-auto"
               type="date"
@@ -839,7 +839,7 @@ function EventStudyPanel({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">Model</span>
+            <span className="text-text-muted">Model</span>
             <select
               className="input w-auto"
               value={model}
@@ -860,13 +860,13 @@ function EventStudyPanel({
           </button>
         </div>
         {res && !res.ok && (
-          <p className="text-warn" role="alert">
+          <p className="text-warning" role="alert">
             คำนวณไม่ได้: {res.reason}
           </p>
         )}
         {res?.ok && res.fit && (
           <div className="space-y-2" data-testid="event-study-result">
-            <p className="text-muted">
+            <p className="text-text-muted">
               {res.modelLabel} · {res.benchmark.label} · วัน 0 = {res.day0} ·
               estimation {res.estimation?.from} → {res.estimation?.to} (n ={" "}
               {res.fit.n}) · α {formatNumber(res.fit.alpha, 5)} · β{" "}
@@ -898,7 +898,7 @@ function EventStudyPanel({
                       style={{
                         color:
                           c.t != null && Math.abs(c.t) > 2
-                            ? "var(--warn)"
+                            ? "var(--warning)"
                             : undefined,
                       }}
                     >
@@ -934,7 +934,7 @@ function EventStudyPanel({
                         style={{
                           color:
                             d.t != null && Math.abs(d.t) > 2
-                              ? "var(--warn)"
+                              ? "var(--warning)"
                               : undefined,
                         }}
                       >
@@ -950,7 +950,7 @@ function EventStudyPanel({
           </div>
         )}
         {res && (res.warnings.length > 0 || (res.volume && !res.volume.ok)) && (
-          <ul className="list-disc pl-5 text-muted">
+          <ul className="list-disc pl-6 text-text-muted">
             {res.volume && !res.volume.ok && (
               <li>Volume: {res.volume.reason}</li>
             )}
@@ -966,7 +966,7 @@ function EventStudyPanel({
             void record(new FormData(e.currentTarget));
           }}
         >
-          <span className="w-full text-muted">
+          <span className="w-full text-text-muted">
             บันทึก event (วันที่ข่าวออกจริง — ไม่เดาวันที่)
           </span>
           <input
@@ -1005,7 +1005,7 @@ function EventStudyPanel({
           <button type="submit" className="btn-ghost">
             บันทึก
           </button>
-          {msg && <span className="w-full text-muted">{msg}</span>}
+          {msg && <span className="w-full text-text-muted">{msg}</span>}
         </form>
       </div>
     </details>
@@ -1035,13 +1035,13 @@ function SettingsPanel({
       <summary className="cursor-pointer text-sm font-medium">
         ตั้งค่า / คุณภาพข้อมูล{" "}
         {notes.length > 0 && (
-          <span className="text-warn">({notes.length} คำเตือน)</span>
+          <span className="text-warning">({notes.length} คำเตือน)</span>
         )}
       </summary>
       <div className="mt-3 space-y-3 text-xs">
         <div className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1">
-            <span className="text-muted">เกณฑ์ น่าสังเกต (|t|, z)</span>
+            <span className="text-text-muted">เกณฑ์ น่าสังเกต (|t|, z)</span>
             <input
               className="input w-24"
               type="number"
@@ -1052,7 +1052,7 @@ function SettingsPanel({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">เกณฑ์ ผิดปกติ</span>
+            <span className="text-text-muted">เกณฑ์ ผิดปกติ</span>
             <input
               className="input w-24"
               type="number"
@@ -1071,14 +1071,14 @@ function SettingsPanel({
             ใช้เกณฑ์นี้
           </button>
           {!valid && (
-            <span className="text-warn">
+            <span className="text-warning">
               ต้องเป็นบวก และ ผิดปกติ ≥ น่าสังเกต
             </span>
           )}
         </div>
         <div className="flex flex-wrap items-end gap-2" data-testid="abnormal-basis">
           <label className="grid gap-1">
-            <span className="text-muted">ชนิดราคา</span>
+            <span className="text-text-muted">ชนิดราคา</span>
             <select
               className="input"
               name="abnormalBasis"
@@ -1091,7 +1091,7 @@ function SettingsPanel({
             </select>
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">ดัชนีอ้างอิง</span>
+            <span className="text-text-muted">ดัชนีอ้างอิง</span>
             <select
               className="input"
               name="abnormalBench"
@@ -1107,28 +1107,28 @@ function SettingsPanel({
             </select>
           </label>
         </div>
-        {data.stock.benchmark.warning && <p className="text-warn">{data.stock.benchmark.warning}</p>}
+        {data.stock.benchmark.warning && <p className="text-warning">{data.stock.benchmark.warning}</p>}
         <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]">
-          <dt className="text-muted">Model</dt>
+          <dt className="text-text-muted">Model</dt>
           <dd>
             {data.modelLabel} · estimation [{data.estimationWindow.join(", ")}]
             วันซื้อขาย
           </dd>
-          <dt className="text-muted">Benchmark</dt>
+          <dt className="text-text-muted">Benchmark</dt>
           <dd>{data.stock.benchmark.label}</dd>
-          <dt className="text-muted">Volume</dt>
+          <dt className="text-text-muted">Volume</dt>
           <dd>
             {data.stock.volumeBasis === "turnover"
               ? "turnover (volume ÷ จำนวนหุ้น)"
               : "raw volume (ยังไม่มีจำนวนหุ้น)"}
           </dd>
-          <dt className="text-muted">ครอบคลุม</dt>
+          <dt className="text-text-muted">ครอบคลุม</dt>
           <dd>
             {data.stock.coverage.days} วัน · คำนวณ AR ได้{" "}
             {data.stock.coverage.withAR} วัน · volume z{" "}
             {data.stock.coverage.withVolumeZ} วัน
           </dd>
-          <dt className="text-muted">จำนวนหุ้น</dt>
+          <dt className="text-text-muted">จำนวนหุ้น</dt>
           <dd>
             {data.sharesOutstanding.length
               ? data.sharesOutstanding
@@ -1139,7 +1139,7 @@ function SettingsPanel({
                   .join(" · ")
               : "ยังไม่ได้บันทึก — ใช้ set_shares_outstanding พร้อมแหล่งที่มา"}
           </dd>
-          <dt className="text-muted">เกณฑ์</dt>
+          <dt className="text-text-muted">เกณฑ์</dt>
           <dd>
             ผิดปกติ: {data.criteria["ผิดปกติ"]} · น่าสังเกต:{" "}
             {data.criteria["น่าสังเกต"]} · {data.criteria.preEvent}
@@ -1147,7 +1147,7 @@ function SettingsPanel({
         </dl>
         {notes.length > 0 && (
           <ul
-            className="list-disc space-y-0.5 pl-5 text-warn"
+            className="list-disc space-y-1 pl-6 text-warning"
             data-testid="quality-notes"
           >
             {notes.map((w) => (
@@ -1156,7 +1156,7 @@ function SettingsPanel({
           </ul>
         )}
         {data.stock.volumeOnly.length > 0 && (
-          <p className="text-muted">
+          <p className="text-text-muted">
             Volume สูงในวันที่ไม่มีข้อมูลตลาด (ไม่นับเป็น flag):{" "}
             {data.stock.volumeOnly
               .slice(0, 10)

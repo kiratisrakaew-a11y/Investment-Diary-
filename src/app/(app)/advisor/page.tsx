@@ -10,7 +10,7 @@ export default async function AdvisorPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader title="AI ที่ปรึกษาการลงทุน" subtitle="ขับเคลื่อนด้วย Claude — วิเคราะห์จากข้อมูลพอร์ตจริงและเครื่องมือคำนวณทางการเงินของแอป" />
       {!configured && (
-        <p className="rounded-lg border border-neg/40 p-3 text-sm text-neg">
+        <p className="rounded-lg border border-negative/40 p-3 text-sm text-negative">
           ยังไม่ได้ตั้งค่า <code>ANTHROPIC_API_KEY</code> — สร้างคีย์ที่ console.anthropic.com แล้วใส่ใน Vercel → Environment Variables
         </p>
       )}

@@ -40,10 +40,10 @@ export function AreaGradient({ id, color, via, top = 0.55 }: { id: string; color
 
 const gid = (raw: string, name: string) => `${name}-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
-const axis = { stroke: "var(--muted)", fontSize: 11, tickLine: false, axisLine: false } as const;
+const axis = { stroke: "var(--text-muted)", fontSize: 12, tickLine: false, axisLine: false } as const;
 const tooltipStyle = {
-  contentStyle: { background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text)" },
-  labelStyle: { color: "var(--muted)" },
+  contentStyle: { background: "var(--panel-solid)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, color: "var(--text)" },
+  labelStyle: { color: "var(--text-muted)" },
 };
 const compactThb = (v: number) => (Math.abs(v) >= 1e6 ? `${fmtNum(v / 1e6, 1)}M` : Math.abs(v) >= 1e3 ? `${fmtNum(v / 1e3, 0)}k` : `${v}`);
 const pct = (v: number) => `${fmtPct(v, 0)}`;
@@ -82,7 +82,7 @@ export function GrowthChart({ data, benchmark }: { data: { date: string; portfol
       <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <AreaGradient id={gp} color="var(--series-1)" via="var(--series-6)" top={0.75} />
-          <AreaGradient id={gb} color="var(--series-2)" via="var(--accent-2)" top={0.5} />
+          <AreaGradient id={gb} color="var(--series-2)" via="var(--primary)" top={0.5} />
         </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
@@ -161,7 +161,7 @@ export function FrontierChart({
     <ResponsiveContainer width="100%" height={360}>
       <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
         <CartesianGrid stroke="var(--grid)" />
-        <XAxis type="number" dataKey="volatility" name="ความเสี่ยง (σ)" {...axis} tickFormatter={pct} domain={[0, maxVol]} label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 11, fill: "var(--muted)" }} />
+        <XAxis type="number" dataKey="volatility" name="ความเสี่ยง (σ)" {...axis} tickFormatter={pct} domain={[0, maxVol]} label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 12, fill: "var(--text-muted)" }} />
         <YAxis type="number" dataKey="expectedReturn" name="ผลตอบแทนคาดหวัง" {...axis} tickFormatter={pct} width={48} domain={["auto", "auto"]} />
         <Tooltip
           {...tooltipStyle}
@@ -170,7 +170,7 @@ export function FrontierChart({
           labelFormatter={() => ""}
         />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-        <Scatter name="พอร์ตสุ่ม" data={cloud} fill="var(--muted)" fillOpacity={0.18} shape="circle" legendType="circle" isAnimationActive={false} />
+        <Scatter name="พอร์ตสุ่ม" data={cloud} fill="var(--text-muted)" fillOpacity={0.18} shape="circle" legendType="circle" isAnimationActive={false} />
         <Line name="Efficient frontier" data={frontier} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
         {cml && <Line name="Capital Market Line" data={cmlLine} dataKey="expectedReturn" stroke="var(--series-3)" strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />}
         <Scatter name="สินทรัพย์รายตัว" data={assets} fill="var(--series-4)" stroke="var(--panel-solid)" strokeWidth={2} isAnimationActive={false} />
@@ -213,7 +213,7 @@ function BulletTip({
   const f = (v: number) => `${fmtPct(v, 1)}`;
   return (
     <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px" }}>
-      {payload?.[0]?.name && <div style={{ color: "var(--muted)" }}>{payload[0].name}</div>}
+      {payload?.[0]?.name && <div style={{ color: "var(--text-muted)" }}>{payload[0].name}</div>}
       <div>
         σ {f(p.volatility)} · E[R] {f(p.expectedReturn)}
       </div>
@@ -228,17 +228,17 @@ function AssetTipBox({ p, rf }: { p: Pt2 & { symbol: string; detail?: AssetPoint
   const sharpe = p.volatility > 0 ? (p.expectedReturn - rf) / p.volatility : null;
   const row = (k: string, v: string) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <span style={{ color: "var(--muted)" }}>{k}</span>
+      <span style={{ color: "var(--text-muted)" }}>{k}</span>
       <span style={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{v}</span>
     </div>
   );
   return (
-    <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px", width: 250, boxShadow: "0 4px 16px rgba(0,0,0,.25)" }} data-testid="bullet-asset-tip">
+    <div style={{ ...tooltipStyle.contentStyle, padding: "8px 10px", width: 250, boxShadow: "var(--shadow)" }} data-testid="bullet-asset-tip">
       <div style={{ fontWeight: 600 }}>
-        {p.symbol} {d && <span style={{ fontWeight: 400, color: "var(--muted)" }}>{d.name}</span>}
+        {p.symbol} {d && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>{d.name}</span>}
       </div>
       {d && (
-        <div style={{ color: "var(--muted)", marginBottom: 4 }}>
+        <div style={{ color: "var(--text-muted)", marginBottom: 4 }}>
           {d.assetClass} · {d.sector ?? "ยังไม่ระบุหมวด"}
         </div>
       )}
@@ -317,14 +317,14 @@ export function BulletChart({
     <ResponsiveContainer width="100%" height={420}>
       <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
         <CartesianGrid stroke="var(--grid)" />
-        <XAxis type="number" dataKey="volatility" {...axis} tickFormatter={pct} domain={[0, maxVol]} allowDataOverflow label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 11, fill: "var(--muted)" }} />
+        <XAxis type="number" dataKey="volatility" {...axis} tickFormatter={pct} domain={[0, maxVol]} allowDataOverflow label={{ value: "ความเสี่ยง σ (ต่อปี)", position: "insideBottom", offset: -8, fontSize: 12, fill: "var(--text-muted)" }} />
         <YAxis type="number" dataKey="expectedReturn" {...axis} tickFormatter={pct} width={48} domain={["auto", "auto"]} allowDataOverflow />
         <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<BulletTip hideFor={hoverAsset} />} />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
         {unconstrained.length > 0 && (
           <>
-            <Line name="Frontier ขายชอร์ตได้ (สูตรปิด — ลงทุนจริงไม่ได้ถ้าห้าม short)" data={arm(unconstrained, true, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-            <Line name="ส่วนไม่มีประสิทธิภาพ (ขายชอร์ตได้)" data={arm(unconstrained, false, uncGmv)} dataKey="expectedReturn" stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} legendType="none" />
+            <Line name="Frontier ขายชอร์ตได้ (สูตรปิด — ลงทุนจริงไม่ได้ถ้าห้าม short)" data={arm(unconstrained, true, uncGmv)} dataKey="expectedReturn" stroke="var(--text-muted)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line name="ส่วนไม่มีประสิทธิภาพ (ขายชอร์ตได้)" data={arm(unconstrained, false, uncGmv)} dataKey="expectedReturn" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} legendType="none" />
           </>
         )}
         <Line name="Efficient frontier ตามข้อจำกัด (ลงทุนได้จริง)" data={arm(constrained, true, gmv)} dataKey="expectedReturn" stroke="var(--series-1)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
@@ -372,13 +372,13 @@ export function DrawdownChart({ data }: { data: { date: string; drawdown: number
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
           {/* The fill hangs just below the zero line, so the strong end of the gradient sits at the top. */}
-          <AreaGradient id={g} color="var(--neg)" via="var(--series-5)" top={0.75} />
+          <AreaGradient id={g} color="var(--negative)" via="var(--series-5)" top={0.75} />
         </defs>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
         <XAxis dataKey="date" {...axis} minTickGap={48} />
         <YAxis {...axis} tickFormatter={pct} width={44} />
         <Tooltip {...tooltipStyle} formatter={(v) => [fmtPct(Number(v), 2), "Drawdown"]} />
-        <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--neg)" fill={`url(#${g})`} strokeWidth={1.5} isAnimationActive={false} />
+        <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke="var(--negative)" fill={`url(#${g})`} strokeWidth={1.5} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -399,7 +399,7 @@ export function WeightsChart({ data, symbols }: { data: Record<string, number | 
         {symbols.map((s, i) => (
           <Area key={s} type="stepAfter" dataKey={s} stackId="w" stroke={SERIES[i % SERIES.length]} fill={SERIES[i % SERIES.length]} fillOpacity={0.65} isAnimationActive={false} />
         ))}
-        <Area type="stepAfter" dataKey="เงินสด" stackId="w" stroke="var(--muted)" fill="var(--muted)" fillOpacity={0.25} isAnimationActive={false} />
+        <Area type="stepAfter" dataKey="เงินสด" stackId="w" stroke="var(--text-muted)" fill="var(--text-muted)" fillOpacity={0.25} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -419,7 +419,7 @@ export function ModelLinesChart({ data, series, benchmark, percent = false, heig
         <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => (percent ? pct(Number(v)) : fmtNum(Number(v), 0))} />
         <Tooltip {...tooltipStyle} formatter={(v, n) => [f(Number(v)), n]} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        {benchmark && <Line type="linear" dataKey="benchmark" name={benchmark} stroke="var(--muted)" strokeDasharray="4 3" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
+        {benchmark && <Line type="linear" dataKey="benchmark" name={benchmark} stroke="var(--text-muted)" strokeDasharray="4 3" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
         {series.map((m, i) => (
           <Line key={m.key} type="linear" dataKey={m.key} name={m.name} stroke={SERIES[i % SERIES.length]} strokeWidth={2} dot={false} isAnimationActive={false} />
         ))}
@@ -429,8 +429,8 @@ export function ModelLinesChart({ data, series, benchmark, percent = false, heig
 }
 
 const INCOME_SERIES = [
-  { key: "received", name: "ได้รับแล้ว (บัญชี)", color: "var(--pos)" },
-  { key: "missing_confirmation", name: "ถึงกำหนดแต่ยังไม่บันทึก", color: "var(--warn)" },
+  { key: "received", name: "ได้รับแล้ว (บัญชี)", color: "var(--positive)" },
+  { key: "missing_confirmation", name: "ถึงกำหนดแต่ยังไม่บันทึก", color: "var(--warning)" },
   { key: "announced", name: "ประกาศแล้ว", color: "var(--info)" },
   { key: "estimated", name: "ประมาณการ", color: "var(--series-5)" },
 ] as const;
@@ -507,7 +507,7 @@ export function RiWaterfallChart({ steps }: { steps: { label: string; delta: num
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="var(--grid)" vertical={false} />
-        <XAxis dataKey="label" {...axis} interval={0} fontSize={10} />
+        <XAxis dataKey="label" {...axis} interval={0} fontSize={12} />
         <YAxis {...axis} width={44} tickFormatter={(v) => fmtNum(Number(v), 0)} />
         <Tooltip {...tooltipStyle} cursor={{ fill: "var(--panel-2)" }} formatter={(_v, _n, p) => [fmtNum((p.payload as { delta: number }).delta, 2), "ต่อหุ้น"]} />
         <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />

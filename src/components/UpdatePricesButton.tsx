@@ -8,8 +8,8 @@ export function UpdatePricesButton() {
   return (
     <form action={action} className="flex items-center gap-2">
       <button className="btn-ghost" disabled={pending}>{pending ? "กำลังดึงราคา…" : "↻ ดึงราคาล่าสุด"}</button>
-      {state?.error && <span className="max-w-md text-xs text-neg">{state.error}</span>}
-      {state?.ok && <span className="text-xs text-pos">{state.message}</span>}
+      {state?.error && <span className="max-w-md text-xs text-negative">{state.error}</span>}
+      {state?.ok && <span className="text-xs text-positive">{state.message}</span>}
     </form>
   );
 }
