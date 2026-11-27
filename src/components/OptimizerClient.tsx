@@ -17,6 +17,7 @@ import { NumField, SelectField, Toggle } from "./fields";
 import { ASSET_CLASS_LABEL, fmtPct, fmtRatio, fmtThb, signClass, fmtNum } from "@/lib/format";
 import { CardTitle } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
+import { WarnMark, InfoMark } from "./icons";
 
 type ReturnMethod = "historical" | "capm" | "blend" | "shrinkage" | "black_litterman";
 const METHOD_LABEL: Record<ReturnMethod, string> = {
@@ -345,7 +346,7 @@ export function OptimizerClient({
             </div>
             {rfInfo?.warnings.map((w) => (
               <div key={w} className="text-warning">
-                ⚠️ {w}
+                <WarnMark />{w}
               </div>
             ))}
             <div>
@@ -550,7 +551,7 @@ export function OptimizerClient({
                 </>
               )}
               {result?.built?.warnings.map((n) => (
-                <p key={n} className="pt-2 text-xs text-text-muted">ℹ️ {n}</p>
+                <p key={n} className="pt-2 text-xs text-text-muted"><InfoMark />{n}</p>
               ))}
               {result?.exposure && (
                 <div className="pt-3 text-xs">
@@ -561,7 +562,7 @@ export function OptimizerClient({
                 </div>
               )}
               {r.warnings.map((n) => (
-                <p key={n} className="pt-2 text-xs text-negative">⚠️ {n}</p>
+                <p key={n} className="pt-2 text-xs text-negative"><WarnMark />{n}</p>
               ))}
               <div className="pt-3">
                 <button className="btn" onClick={applyTargets} disabled={applying || !r || hasShortOrLeverage(r)}>
@@ -652,7 +653,7 @@ export function OptimizerClient({
                 </div>
               )}
               <p className="mt-2 text-xs text-text-muted">
-                ⚠️ MPT อ่อนไหวต่อผลตอบแทนคาดหวังมาก ควรใช้ข้อจำกัดน้ำหนัก ทดลองหลายสมมติฐาน และปรับพอร์ตทีละน้อย — เป็นเครื่องมือประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
+                <WarnMark />MPT อ่อนไหวต่อผลตอบแทนคาดหวังมาก ควรใช้ข้อจำกัดน้ำหนัก ทดลองหลายสมมติฐาน และปรับพอร์ตทีละน้อย — เป็นเครื่องมือประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
               </p>
             </section>
           </div>
@@ -872,7 +873,7 @@ function BlPanel({
         </button>
       </div>
       {bl && !bl.ok && bl.errors.map((e) => <p key={e} className="text-sm text-negative">{e}</p>)}
-      {bl?.ok && bl.warnings.map((w) => <p key={w} className="text-xs text-text-muted">ℹ️ {w}</p>)}
+      {bl?.ok && bl.warnings.map((w) => <p key={w} className="text-xs text-text-muted"><InfoMark />{w}</p>)}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { KpiCard } from "./ui";
 import { useState } from "react";
 import { WindowBanner, WindowPicker, windowRequestOf, type WindowValue } from "./WindowPicker";
 import { BasisBenchmarkPicker, BasisSummary, type BasisBenchmarkValue, type PickerBenchmark } from "./BasisBenchmarkPicker";
@@ -669,7 +670,7 @@ export function BacktestClient({
               )}
             </section>
           )}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
             <Stat
               k={
                 m.annualizationApplicable
@@ -815,14 +816,7 @@ export function BacktestClient({
 }
 
 function Stat({ k, v, tone }: { k: string; v: string; tone?: string }) {
-  return (
-    <div className="card">
-      <div className="text-xs text-text-muted">{k}</div>
-      <div className={clsx("mt-1 text-lg font-semibold tabular-nums", tone)}>
-        {v}
-      </div>
-    </div>
-  );
+  return <KpiCard label={k} value={v} valueClassName={tone} />;
 }
 
 function KV({ k, v }: { k: string; v: string }) {

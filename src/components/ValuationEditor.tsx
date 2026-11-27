@@ -27,12 +27,13 @@ import { FinancialStatementsPanel, type StatementsData } from "./FinancialStatem
 import type { HistoryAssumptions } from "@/lib/financials";
 import { explainValuation, type Explanation } from "@/lib/valuation-explain";
 import { CalculationDetail, CalculationDrawer } from "./CalculationDetail";
-import { fmtNum, fmtPct, signClass } from "@/lib/format";
+import { fmtNum, fmtPct, formatChange, signClass } from "@/lib/format";
 import { exportValuationFile, parseValuationImport, statementsAsOfAt, timestampFlags, type InputProvenance, type TimestampPolicy } from "@/lib/governance";
 import { CardTitle } from "./ExplainButton";
 import { ScenarioWorkbench } from "./ScenarioWorkbench";
 import type { ScenarioSet } from "@/lib/valuation-scenario-schema";
 import { compact } from "@/lib/explain-data";
+import { WarnMark } from "./icons";
 
 type Method = "dcf_fcff" | "dcf_fcfe" | "ddm" | "residual_income" | "multiples";
 type Ddm = Extract<ValuationInput, { method: "ddm" }>["assumptions"];
@@ -621,8 +622,8 @@ export function ValuationEditor({
               <>
                 <div className="text-xs text-text-muted">มูลค่าที่เหมาะสมต่อหุ้น</div>
                 <div className="text-3xl font-semibold tabular-nums">{fmtNum(result.value)}</div>
-                <div className={clsx("mt-1 text-sm font-medium", signClass(result.upside))}>
-                  {result.upside != null && `${result.upside >= 0 ? "Upside" : "Downside"} ${fmtPct(Math.abs(result.upside), 1)} จากราคา ${fmtNum(result.price)}`}
+                <div className={clsx("mt-1 text-sm font-medium", formatChange(result.upside).className)}>
+                  {result.upside != null && `${formatChange(result.upside).text} ${result.upside >= 0 ? "Upside" : "Downside"} จากราคา ${fmtNum(result.price)}`}
                 </div>
                 {result.upside != null && result.upside > 0 && (
                   <div className="text-xs text-text-muted">Margin of safety {fmtPct(1 - (result.price ?? 0) / result.value, 1)}</div>
@@ -630,12 +631,12 @@ export function ValuationEditor({
                 <KeyDrivers a={method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA} show={method !== "multiples"} />
                 {method !== "multiples" &&
                   editorTimestampFlags(method === "ddm" ? ddm : method === "residual_income" ? ri : dcfA, defaults, statements?.years.map((y) => y.fiscalYear) ?? []).map((f) => (
-                    <p key={f} className="mt-1 text-xs text-warning">⚠️ {f}</p>
+                    <p key={f} className="mt-1 text-xs text-warning"><WarnMark />{f}</p>
                   ))}
                 {activeExplanation && activeExplanation.warnings.length > 0 && method !== "dcf_fcff" && method !== "dcf_fcfe" && (
                   <div className="mt-3 space-y-1">
                     {activeExplanation.warnings.slice(0, 4).map((w) => (
-                      <p key={w} className="text-xs text-negative">⚠️ {w}</p>
+                      <p key={w} className="text-xs text-negative"><WarnMark />{w}</p>
                     ))}
                   </div>
                 )}
@@ -779,7 +780,7 @@ function Details({ method, details }: { method: Method; details: Record<string, 
             />
           )}
           {(d.warnings as string[]).map((w) => (
-            <p key={w} className="mt-2 text-xs text-negative">⚠️ {w}</p>
+            <p key={w} className="mt-2 text-xs text-negative"><WarnMark />{w}</p>
           ))}
         </>
       )}
@@ -805,7 +806,7 @@ function Details({ method, details }: { method: Method; details: Record<string, 
           <KV k="P/BV ตลาด" v={fmtNum(n("marketPBV"))} />
           <KV k="g ที่สอดคล้อง = ROE × (1 − payout)" v={fmtPct(n("sustainableGrowth"))} />
           {((d.warnings as string[] | undefined) ?? []).map((w) => (
-            <p key={w} className="mt-2 text-xs text-warning">⚠️ {w}</p>
+            <p key={w} className="mt-2 text-xs text-warning"><WarnMark />{w}</p>
           ))}
         </>
       )}
@@ -843,7 +844,7 @@ function FootballField({ rows, price, active, onOpen }: { rows: FieldRow[]; pric
           >
             <div className="mb-1 flex justify-between gap-2">
               <span className={clsx(r.method === active && "font-semibold")}>
-                {r.label} {warn && <span title={r.explanation!.warnings.join("\n")}>⚠️</span>}
+                {r.label} {warn && <span title={r.explanation!.warnings.join("\n")}><WarnMark className="mr-0" /></span>}
               </span>
               <span className="tabular-nums">
                 {r.result != null && Number.isFinite(r.result) ? fmtNum(r.result) : "—"} <span className="text-primary">›</span>
@@ -1231,7 +1232,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
                       )),
                     )}
                   <td className="num font-medium" title={res?.rows[i]?.errors.join(" · ") || undefined}>
-                    {res?.rows[i]?.value == null && res?.rows[i]?.errors.length ? <span className="text-negative">⚠️</span> : fmtNum(res?.rows[i]?.value)}
+                    {res?.rows[i]?.value == null && res?.rows[i]?.errors.length ? <span className="text-negative"><WarnMark className="mr-0" /></span> : fmtNum(res?.rows[i]?.value)}
                   </td>
                   <td className={clsx("num", signClass(res?.rows[i]?.upside))}>{fmtPct(res?.rows[i]?.upside, 1)}</td>
                 </tr>
@@ -1247,7 +1248,7 @@ function ScenarioPanel({ a, model, onChange }: { a: DcfAssumptions; model: "fcff
                 ช่วง {fmtNum(res.low)} – {fmtNum(res.high)} · σ {fmtNum(res.stdev)}
               </span>
               {res.errors.map((e) => (
-                <span key={e} className="text-xs text-negative">⚠️ {e}</span>
+                <span key={e} className="text-xs text-negative"><WarnMark />{e}</span>
               ))}
             </div>
           )}

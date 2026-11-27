@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { explanationToText, formatValue, type Explanation } from "@/lib/valuation-explain";
 import { fmtNum, fmtPct, signClass } from "@/lib/format";
+import { WarnMark } from "./icons";
 
 /** Full step-by-step calculation of one valuation: assumptions, formulas with numbers, forecast table, warnings. */
 export function CalculationDetail({ e, compact }: { e: Explanation; compact?: boolean }) {
@@ -40,7 +41,7 @@ export function CalculationDetail({ e, compact }: { e: Explanation; compact?: bo
       {e.warnings.length > 0 && (
         <ul className="space-y-1 rounded-lg border border-negative/40 bg-negative/5 p-3 text-xs text-negative">
           {e.warnings.map((w) => (
-            <li key={w}>⚠️ {w}</li>
+            <li key={w}><WarnMark />{w}</li>
           ))}
         </ul>
       )}

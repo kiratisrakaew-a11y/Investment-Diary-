@@ -1,6 +1,7 @@
 import type { LedgerIssue, Reconciliation } from "@/lib/finance/portfolio";
 import type { XirrResult } from "@/lib/finance/returns";
 import { fmtPct, fmtThb } from "@/lib/format";
+import { WarnMark } from "./icons";
 
 export const XIRR_STATUS_LABEL: Record<XirrResult["status"], string> = {
   ok: "ACT/365",
@@ -27,7 +28,7 @@ export function DataQualityPanel({ issues = [], warnings = [], reconciliation }:
   return (
     <details className="card border-l-4 border-l-negative" open={errors.length > 0}>
       <summary className="cursor-pointer text-sm font-medium">
-        ⚠️ คุณภาพข้อมูล: {errors.length > 0 && `${errors.length} ข้อผิดพลาด · `}
+        <WarnMark />คุณภาพข้อมูล: {errors.length > 0 && `${errors.length} ข้อผิดพลาด · `}
         {warns.length + warnings.length} คำเตือน
         {reconciliation && reconciliation.inferredContributionsThb > 0 && ` · เงินฝากที่ระบบอนุมาน ${fmtThb(reconciliation.inferredContributionsThb)}`}
       </summary>

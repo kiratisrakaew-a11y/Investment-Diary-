@@ -9,6 +9,7 @@ import { compact } from "@/lib/explain-data";
 import { CardTitle } from "./ExplainButton";
 import { Badge } from "./ui";
 import { RiWaterfallChart, RoeKeChart } from "./charts";
+import { WarnMark } from "./icons";
 
 type Persist = ReturnType<typeof rimPersistenceSensitivity>;
 type Sens = ReturnType<typeof rimSensitivity>;
@@ -92,7 +93,7 @@ export function RimHorizonPanel({
                   {r.warnings.length > 0 && (
                     <ul className="mt-2 space-y-1 text-xs text-warning">
                       {r.warnings.map((w) => (
-                        <li key={w}>⚠️ {w}</li>
+                        <li key={w}><WarnMark />{w}</li>
                       ))}
                     </ul>
                   )}
@@ -417,7 +418,7 @@ function RimScenarioPanel({
                       </td>
                     ))}
                     <td className="num font-medium" title={[...(row?.errors ?? []), ...(row && "notes" in row ? (row.notes as string[]) : [])].join(" · ") || undefined}>
-                      {row?.value == null && row?.errors.length ? <span className="text-negative">⚠️</span> : fmtNum(row?.value)}
+                      {row?.value == null && row?.errors.length ? <span className="text-negative"><WarnMark className="mr-0" /></span> : fmtNum(row?.value)}
                     </td>
                     <td className={clsx("num", signClass(row?.upside))}>{fmtPct(row?.upside, 1)}</td>
                   </tr>
@@ -435,7 +436,7 @@ function RimScenarioPanel({
               </span>
               {res.errors.map((e) => (
                 <span key={e} className="text-xs text-negative">
-                  ⚠️ {e}
+                  <WarnMark />{e}
                 </span>
               ))}
             </div>

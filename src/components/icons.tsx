@@ -85,6 +85,14 @@ export function StatusIcon({ status, size = "sm", className }: { status: Status;
   return <AppIcon icon={s.icon} size={size} weight="fill" className={clsx(s.cls, className)} />;
 }
 
+/** Inline warning / info marks replacing emoji in messages. */
+export function WarnMark({ className }: { className?: string }) {
+  return <StatusIcon status="yellow" className={clsx("mr-1 inline align-text-bottom", className)} />;
+}
+export function InfoMark({ className }: { className?: string }) {
+  return <StatusIcon status="info" className={clsx("mr-1 inline align-text-bottom", className)} />;
+}
+
 /* ------------------------------------------------------------ empty state */
 /** 48–64px duotone illustration icon for empty states. */
 export function EmptyIcon({ icon: Glyph = Tray, size = 56 }: { icon?: PhosphorIcon; size?: 48 | 56 | 64 }) {

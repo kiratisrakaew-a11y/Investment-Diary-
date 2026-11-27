@@ -11,6 +11,7 @@ import { CalculationDetail } from "./CalculationDetail";
 import { ConfirmButton } from "./ConfirmButton";
 import { Badge } from "./ui";
 import { METHOD_LABEL, fmtNum, fmtPct, signClass } from "@/lib/format";
+import { WarnMark } from "./icons";
 
 export interface SavedValuationRow {
   id: number;
@@ -125,7 +126,7 @@ export function SavedValuationList({ rows, currentPrice }: { rows: SavedValuatio
                     <ConfirmButton onConfirm={deleteValuationAction.bind(null, v.id)} label="ลบ valuation นี้" />
                   </div>
                   {tsFlags.map((f) => (
-                    <p key={f} className="text-xs text-warning">⚠️ {f}</p>
+                    <p key={f} className="text-xs text-warning"><WarnMark />{f}</p>
                   ))}
                   {changed && (
                       <p className="rounded-lg bg-bg p-3 text-xs text-negative">

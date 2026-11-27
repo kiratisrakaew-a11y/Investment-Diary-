@@ -7,6 +7,7 @@ import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import type { RebalanceResult } from "@/lib/finance/rebalance";
 import { ExplainButton } from "./ExplainButton";
 import { compact } from "@/lib/explain-data";
+import { WarnMark } from "./icons";
 
 type Objective = "track" | "after_cost" | "min_cost" | "min_turnover";
 type Response = RebalanceResult & { disclaimer: string; costModel: { commissionPct: number; minCommission: number; vatPct: number; slippageBps: number; sellTaxPct: number } };
@@ -212,7 +213,7 @@ export function RebalancePanel({
             <p key={v} className="text-sm text-negative">✕ {v}</p>
           ))}
           {res.warnings.map((w) => (
-            <p key={w} className="text-xs text-text-muted">⚠️ {w}</p>
+            <p key={w} className="text-xs text-text-muted"><WarnMark />{w}</p>
           ))}
           <p className="text-xs font-medium text-negative">{res.disclaimer}</p>
         </div>

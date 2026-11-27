@@ -17,6 +17,7 @@ import {
 } from "@/lib/financials";
 import { deleteStatementYearAction, loadStatementsAction, saveStatementYearAction } from "@/app/(app)/valuation/actions";
 import { fmtNum, fmtPct } from "@/lib/format";
+import { StatusIcon } from "./icons";
 
 const MAX_BYTES = 4.5 * 1024 * 1024;
 const ACCEPT = ".pdf,.xlsx,.csv";
@@ -91,7 +92,7 @@ export function FinancialStatementsPanel({
         const yrs = (body.yearsFound as number[]).sort();
         setQueue((q) =>
           q.map((x) =>
-            x.id === id ? { ...x, status: "done", message: `ปี ${yrs.join(", ")} · หน่วย ${body.unit}${body.basis === "separate" ? " · ⚠️ งบเฉพาะกิจการ" : ""}` } : x,
+            x.id === id ? { ...x, status: "done", message: `ปี ${yrs.join(", ")} · หน่วย ${body.unit}${body.basis === "separate" ? " · งบเฉพาะกิจการ (ไม่ใช่งบรวม)" : ""}` } : x,
           ),
         );
         await refresh();
@@ -215,7 +216,7 @@ export function FinancialStatementsPanel({
               {queue.map((q) => (
                 <li key={q.id} className="flex flex-wrap items-center gap-2">
                   <span className={clsx("w-5 text-center", q.status === "reading" && "animate-pulse")}>
-                    {q.status === "done" ? "✅" : q.status === "error" ? "⚠️" : q.status === "reading" ? "⏳" : "•"}
+                    {q.status === "done" ? <StatusIcon status="green" /> : q.status === "error" ? <StatusIcon status="yellow" /> : q.status === "reading" ? "…" : "•"}
                   </span>
                   <span className="font-medium">{q.name}</span>
                   <span className="text-xs text-text-muted">{fmtNum(q.size / 1024 / 1024, 2)}MB</span>
