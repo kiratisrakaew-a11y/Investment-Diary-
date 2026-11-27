@@ -10,7 +10,11 @@ import { NoteCard } from "@/components/NoteCard";
 import { AddPriceForm, BondConventionFields } from "@/components/AssetForms";
 import { EditAssetForm } from "@/components/EditAssetForm";
 import { ActionForm } from "@/components/ActionForm";
-import { Empty, PageHeader, Section, Stat } from "@/components/ui";
+import { Card, EmptyState, KpiCard, PageHeader, Section } from "@/components/ui";
+import { Tabs } from "@/components/ui-client";
+import { AssetTxTable } from "@/components/AssetTxTable";
+import { ASSET_CLASS_CATEGORY, EmptyIcon, IconChip } from "@/components/icons";
+import { Notebook } from "@phosphor-icons/react/ssr";
 import { AssetProfileForm } from "@/components/AssetProfileForm";
 import { today } from "@/lib/validation";
 import { readBondTerms, riskFreeEligibility } from "@/lib/finance/bond-meta";
@@ -21,8 +25,6 @@ import { metricsOverview } from "@/server/services/asset-metrics";
 import { AssetMetricsPanel } from "@/components/AssetMetricsPanel";
 import {
   ASSET_CLASS_LABEL,
-  TX_TYPE_LABEL,
-  fmtNum,
   fmtPctRaw,
   fmtQty,
   fmtThb,
@@ -49,9 +51,10 @@ export default async function AssetPage({
   const deps = await assetDependencies(id);
   const terms = readBondTerms(asset.bondTerms);
   const eligibility = riskFreeEligibility(asset, terms);
+  const cat = ASSET_CLASS_CATEGORY[asset.assetClass];
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title={`${asset.symbol} · ${asset.name}${asset.archivedAt ? " (เก็บถาวร)" : asset.hiddenInHoldingsAt ? " (ซ่อนอยู่)" : ""}`}
         subtitle={`${ASSET_CLASS_LABEL[asset.assetClass]} · ${asset.currency} · ราคา: ${asset.priceSource}${asset.providerSymbol ? ` (${asset.providerSymbol})` : ""}${asset.couponRate ? ` · คูปอง ${asset.couponRate}%` : ""}${asset.maturityDate ? ` · ครบกำหนด ${asset.maturityDate}` : ""}`}
@@ -61,13 +64,13 @@ export default async function AssetPage({
               asset.assetClass === "us_stock") && (
               <Link
                 href={`/valuation/new?symbol=${asset.symbol}`}
-                className="btn-ghost"
+                className="btn"
               >
                 ประเมินมูลค่า
               </Link>
             )}
             {asset.assetClass === "bond" && (
-              <Link href="/bonds" className="btn-ghost">
+              <Link href="/bonds" className="btn">
                 คำนวณ YTM
               </Link>
             )}
@@ -84,33 +87,88 @@ export default async function AssetPage({
           </div>
         }
       />
-      {pos && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat
-            label="จำนวน"
-            value={fmtQty(pos.quantity)}
-            sub={`ต้นทุนเฉลี่ย ฿${fmtNum(pos.avgCostThb)}`}
-          />
-          <Stat
-            label="มูลค่าตลาด"
-            value={fmtThb(pos.marketValueThb)}
-            sub={`น้ำหนัก ${fmtPctRaw(pos.weightPct)}`}
-          />
-          <Stat
+      {pos ? (
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <KpiCard label="จำนวน" value={fmtQty(pos.quantity)} note={`ต้นทุนเฉลี่ย ${fmtThb(pos.avgCostThb)}`} icon={cat && <IconChip category={cat} label="จำนวนที่ถือ" />} />
+          <KpiCard label="มูลค่าตลาด" value={fmtThb(pos.marketValueThb)} note={`น้ำหนักในพอร์ต ${fmtPctRaw(pos.weightPct)}`} />
+          <KpiCard
             label="กำไรยังไม่รับรู้"
             value={fmtThb(pos.unrealizedPnlThb)}
-            tone={signClass(pos.unrealizedPnlThb)}
-            sub={fmtPctRaw(pos.unrealizedPnlPct)}
+            valueClassName={signClass(pos.unrealizedPnlThb)}
+            change={pos.unrealizedPnlPct == null ? null : pos.unrealizedPnlPct / 100}
+            changeLabel="เทียบต้นทุน"
           />
-          <Stat
-            label="รับรู้แล้ว + ปันผล"
-            value={fmtThb(pos.realizedPnlThb + pos.incomeThb)}
-            tone={signClass(pos.realizedPnlThb + pos.incomeThb)}
-          />
+          <KpiCard label="รับรู้แล้ว + ปันผล" value={fmtThb(pos.realizedPnlThb + pos.incomeThb)} valueClassName={signClass(pos.realizedPnlThb + pos.incomeThb)} />
         </div>
+      ) : (
+        <EmptyState title="ยังไม่ได้ถือสินทรัพย์นี้" description="เมื่อบันทึกการซื้อ ตัวเลขจำนวน มูลค่า และกำไรขาดทุนจะแสดงที่นี่" action={<Link href="/transactions" className="btn-ghost">บันทึกการซื้อ</Link>} />
       )}
-      {asset.assetClass === "bond" && (
-        <Section title="เงื่อนไขพันธบัตร (ใช้คำนวณ YTM / duration ในพอร์ต)">
+      <AssetPriceWithAbnormal
+        assetId={id}
+        symbol={asset.symbol}
+        isThaiStock={asset.assetClass === "thai_stock"}
+        prices={prices}
+        currency={asset.currency}
+        metrics={metricRows
+          .filter((m) => m.isActive)
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            unit: m.unit,
+            decimals: m.decimals,
+            chartColor: m.chartColor,
+            readings: m.observations.map((o) => ({
+              observedOn: o.observedOn,
+              value: o.value,
+              publishedOn: o.publishedOn,
+              status: o.status,
+            })),
+          }))}
+      >
+        <AddPriceForm assets={assets} symbol={asset.symbol} />
+      </AssetPriceWithAbnormal>
+      <Section title="รายการซื้อขาย" subtitle="เรียงตามวันที่ล่าสุดก่อน คลิกหัวคอลัมน์เพื่อเรียงใหม่">
+        <AssetTxTable rows={txs.map(({ tx }) => ({ id: tx.id, date: tx.date, type: tx.type, quantity: tx.quantity, price: tx.price }))} />
+      </Section>
+
+      <Card>
+        <Tabs
+          ariaLabel="รายละเอียดสินทรัพย์"
+          tabs={[
+            {
+              id: "metrics",
+              label: "Metrics ที่ติดตาม",
+              content: (
+        <AssetMetricsPanel
+          assetId={id}
+          metrics={metricRows.filter((m) => m.isActive)}
+          archived={metricRows.filter((m) => !m.isActive)}
+          today={today()}
+        />
+                    ),
+            },
+            {
+              id: "notes",
+              label: "บันทึกที่เกี่ยวข้อง",
+              badge: notes.length || undefined,
+              content: (
+                <div className="space-y-4">
+                  {notes.length ? (
+                    notes.map((n) => <NoteCard key={n.id} note={n} />)
+                  ) : (
+                    <EmptyState icon={<EmptyIcon icon={Notebook} />} title="ยังไม่มีบันทึกของสินทรัพย์นี้" description="จดเหตุผลที่ลงทุน หรือบทเรียนไว้ที่สมุดบันทึก" action={<Link href="/journal" className="btn-ghost">ไปที่บันทึก</Link>} />
+                  )}
+                </div>
+              ),
+            },
+            ...(asset.assetClass === "bond"
+              ? [
+                  {
+                    id: "bond",
+                    label: "เงื่อนไขพันธบัตร",
+                    content: (
+                      <div>
+                        <p className="mb-3 text-xs text-text-muted">ใช้คำนวณ YTM / duration ในพอร์ต</p>
           <ActionForm
             action={updateBondTermsAction.bind(null, id)}
             className="grid gap-3 sm:grid-cols-5"
@@ -281,9 +339,18 @@ export default async function AssetPage({
                 : `ยังไม่ผ่านเกณฑ์ตัวแทนปลอดความเสี่ยง: ${eligibility.reasons.join(" · ")}`}
             </p>
           </ActionForm>
-        </Section>
-      )}
-      <Section title="ข้อมูลสินทรัพย์ (แก้เมื่อกรอกผิด)">
+                              </div>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              id: "info",
+              label: "ข้อมูลสินทรัพย์",
+              content: (
+                <div className="space-y-6">
+                  <div>
+                    <p className="mb-3 text-xs text-text-muted">แก้เมื่อกรอกผิด</p>
         <EditAssetForm
           asset={{
             id,
@@ -296,8 +363,9 @@ export default async function AssetPage({
           }}
           hasHistory={!!deps && deps.transactions + deps.prices > 0}
         />
-      </Section>
-      <Section title="ผู้ออกและหมวด (ใช้กับข้อจำกัดความเสี่ยง)">
+                        </div>
+                  <div className="border-t border-border pt-4">
+                    <p className="mb-3 text-xs text-text-muted">ผู้ออกและหมวด (ใช้กับข้อจำกัดความเสี่ยง)</p>
         <AssetProfileForm
           symbol={asset.symbol}
           issuer={asset.issuer}
@@ -306,79 +374,13 @@ export default async function AssetPage({
           sectorAsOf={asset.sectorAsOf}
           today={today()}
         />
-      </Section>
-
-      <AssetPriceWithAbnormal
-        assetId={id}
-        symbol={asset.symbol}
-        isThaiStock={asset.assetClass === "thai_stock"}
-        prices={prices}
-        currency={asset.currency}
-        metrics={metricRows
-          .filter((m) => m.isActive)
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            unit: m.unit,
-            decimals: m.decimals,
-            chartColor: m.chartColor,
-            readings: m.observations.map((o) => ({
-              observedOn: o.observedOn,
-              value: o.value,
-              publishedOn: o.publishedOn,
-              status: o.status,
-            })),
-          }))}
-      >
-        <AddPriceForm assets={assets} symbol={asset.symbol} />
-      </AssetPriceWithAbnormal>
-      <Section title="Custom Metrics / ตัวชี้วัดที่ติดตาม" className="min-w-0">
-        <AssetMetricsPanel
-          assetId={id}
-          metrics={metricRows.filter((m) => m.isActive)}
-          archived={metricRows.filter((m) => !m.isActive)}
-          today={today()}
+                        </div>
+                </div>
+              ),
+            },
+          ]}
         />
-      </Section>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="รายการซื้อขาย">
-          {txs.length ? (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>วันที่</th>
-                  <th>ประเภท</th>
-                  <th className="num">จำนวน</th>
-                  <th className="num">ราคา</th>
-                </tr>
-              </thead>
-              <tbody>
-                {txs.map(({ tx }) => (
-                  <tr key={tx.id}>
-                    <td>{tx.date}</td>
-                    <td>{TX_TYPE_LABEL[tx.type]}</td>
-                    <td className="num">
-                      {tx.quantity ? fmtQty(tx.quantity) : "—"}
-                    </td>
-                    <td className="num">{fmtNum(tx.price)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <Empty>ยังไม่มีรายการ</Empty>
-          )}
-        </Section>
-        <Section title="บันทึกที่เกี่ยวข้อง">
-          <div className="space-y-4">
-            {notes.length ? (
-              notes.map((n) => <NoteCard key={n.id} note={n} />)
-            ) : (
-              <Empty>ยังไม่มีบันทึก</Empty>
-            )}
-          </div>
-        </Section>
-      </div>
-    </>
+      </Card>
+    </div>
   );
 }
