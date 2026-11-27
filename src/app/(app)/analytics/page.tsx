@@ -1,6 +1,8 @@
 import { getMptAnalysis, getPerformance, loadPortfolioData } from "@/server/services/portfolio";
 import { FrontierChart, GrowthChart } from "@/components/charts";
-import { Empty, PageHeader, Section } from "@/components/ui";
+import { EmptyState, ErrorState, KpiCard, PageHeader, Section } from "@/components/ui";
+import { IconChip } from "@/components/icons";
+import { ChartBar } from "@phosphor-icons/react/ssr";
 import { fmtPct, fmtRatio, signClass, fmtNum } from "@/lib/format";
 import { compact, downsample } from "@/lib/explain-data";
 import { DataQualityPanel, xirrNote, xirrText } from "@/components/DataQuality";
@@ -87,7 +89,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const b = perf.benchmark;
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="วิเคราะห์ผลการดำเนินงาน"
         subtitle={
@@ -99,8 +101,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       <div className="card space-y-2">
         <BasisBenchmarkPicker mode="query" value={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} note={PERF_BASIS_NOTE} />
-        {be && <p className="text-xs text-negative">{`${be.message} [${be.code}] — ${be.issue.suggestion} · แสดงผลกับดัชนีตามค่าเดิมแทน`}</p>}
+        {be && <ErrorState title="ใช้ดัชนีอ้างอิงนี้ไม่ได้" message={`${be.message} [${be.code}] — ${be.issue.suggestion} · แสดงผลกับดัชนีตามค่าเดิมแทน`} />}
         <BasisSummary priceBasis={perf.priceBasis} benchmark={perf.benchmark} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label={`TWR สะสม (${perf.periodDays} วัน)`} value={fmtPct(perf.cumulativeReturn)} valueClassName={signClass(perf.cumulativeReturn)} note={perf.annualizedReturn != null ? `ต่อปี ${fmtPct(perf.annualizedReturn)}` : `เทียบเท่าต่อปี ${fmtPct(perf.annualizedEquivalent)}`} icon={<IconChip category="metrics" icon={ChartBar} label="TWR" />} />
+        <KpiCard label="XIRR (MWR)" value={xirrText(perf.xirr)} valueClassName={signClass(perf.xirr.rate)} note={xirrNote(perf.xirr)} />
+        <KpiCard label="Sharpe ratio" value={fmtRatio(perf.sharpe)} note={`σ ${fmtPct(perf.volatility, 1)}`} />
+        <KpiCard label="Max drawdown" value={fmtPct(perf.maxDrawdown, 1)} valueClassName={signClass(perf.maxDrawdown)} note={`Rf ${fmtPct(perf.riskFreeRate, 1)}`} />
       </div>
 
       <p className="text-xs text-text-muted">
@@ -279,12 +288,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <CoverageTable rows={mpt.coverage} />
         </div>
         {!mpt.ok ? (
-          <Empty>
+          <EmptyState title="คำนวณ MPT ไม่ได้" description={<>
             {mpt.reason}
             {(mpt.priceBasis?.excluded.length ?? 0) > 0 && (
               <div className="mt-2 text-xs">{mpt.priceBasis!.excluded.map((x) => `${x.symbol}: ${x.reason}`).join(" · ")}</div>
             )}
-          </Empty>
+          </>} />
         ) : (
           <>
             <p className="mb-3 text-xs text-text-muted">
@@ -292,9 +301,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 ? "ประมาณจากผลตอบแทนรวม (บาท, ราคาปรับปันผล — ปันผลรวมอยู่ในผลตอบแทน)"
                 : "ประมาณจากผลตอบแทนด้านราคา (บาท, ไม่รวมปันผล — เลือกราคาปรับปันผลได้ที่หัวหน้า)"}{" "}
               {mpt.observations} งวด{mpt.frequency === "weekly" ? "รายสัปดาห์" : mpt.frequency === "monthly" ? "รายเดือน" : "รายวัน"}ที่ทุกสินทรัพย์มีราคา ({mpt.from} → {mpt.to}, ≈ {fmtNum(mpt.periodsPerYear, 0)} งวด/ปี) ของสินทรัพย์ที่ถืออยู่ · ช่วงข้อมูลตามหน้าตั้งค่า ({mpt.windowInfo?.requested.preset ?? "3y"}) · long-only, ลงทุนเต็มจำนวน
-              {mpt.covarianceWarnings.map((w) => ` · ⚠️ ${w}`)}
+              {mpt.covarianceWarnings.map((w) => ` · ${w}`)}
               {mpt.skipped.length > 0 && ` · ข้าม ${mpt.skipped.join(", ")} (ข้อมูลราคาหรือ USDTHB ไม่พอ)`}
-              {mpt.warnings.map((w) => ` · ⚠️ ${w}`)}
+              {mpt.warnings.map((w) => ` · ${w}`)}
             </p>
             <div className="mb-3">
               <BasisSummary priceBasis={mpt.priceBasis} />
@@ -351,7 +360,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               </table>
             </div>
             <p className="mt-2 text-xs text-text-muted">
-              ⚠️ ค่าคาดหวังจากข้อมูลในอดีตมีความคลาดเคลื่อนสูง (estimation error) — ใช้เป็นแนวทางประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
+              ค่าคาดหวังจากข้อมูลในอดีตมีความคลาดเคลื่อนสูง (estimation error) — ใช้เป็นแนวทางประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน
             </p>
           </>
         )}
@@ -434,6 +443,6 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <Section title="Stress test">
         <StressPanel initialBasis={{ basis: returnBasis, bench: benchmark }} benchmarks={benchmarks} initialWindow={winValue} />
       </Section>
-    </>
+    </div>
   );
 }

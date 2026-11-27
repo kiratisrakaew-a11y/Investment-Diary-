@@ -7,31 +7,26 @@ import { ActionForm } from "@/components/ActionForm";
 import { syncHistoryAction } from "../actions";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
 import { PriceImport } from "@/components/PriceImport";
-import { Empty, PageHeader, Section } from "@/components/ui";
+import { Card, EmptyState, KpiCard, PageHeader, Section } from "@/components/ui";
+import { Tabs } from "@/components/ui-client";
+import { HoldingsTable, type HoldingRow } from "@/components/HoldingsTable";
+import { EmptyIcon, IconChip } from "@/components/icons";
+import { Briefcase } from "@phosphor-icons/react/ssr";
 import { DataQualityPanel } from "@/components/DataQuality";
 import type { Position } from "@/lib/finance/portfolio";
-import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL, fmtNum, fmtPctRaw, fmtQty, fmtThb, signClass, formatChange } from "@/lib/format";
+import { fmtPct, fmtThb, signClass } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
 import { AssetActionsMenu } from "@/components/AssetActionsMenu";
 import { dependencyCounts } from "@/server/services/asset-lifecycle";
 
-function PriceBadges({ p }: { p: Position }) {
+function priceBadges(p: Position): string[] {
   const badges: string[] = [];
   if (p.priceStatus === "stale") badges.push(`ราคาเก่า ${p.priceAgeDays} วัน`);
   if (p.priceStatus === "tx_price_fallback") badges.push("ใช้ราคาซื้อขาย");
   if (p.priceStatus === "missing") badges.push("ไม่มีราคา");
   if (p.fxStatus === "stale") badges.push("FX เก่า");
   if (p.fxStatus === "tx_fallback") badges.push("FX ณ วันซื้อขาย");
-  if (!badges.length) return null;
-  return (
-    <div className="mt-1 flex flex-wrap justify-end gap-1">
-      {badges.map((b) => (
-        <span key={b} className="rounded-md bg-negative/10 px-1 text-xs text-negative">
-          {b}
-        </span>
-      ))}
-    </div>
-  );
+  return badges;
 }
 
 interface Chip {
@@ -82,9 +77,39 @@ export default async function HoldingsPage() {
   const never = untouched.map((a) => chip(a.id, a.symbol, ""));
   const isVisible = (x: Chip) => !x.hidden && !x.archived;
 
+  const rows: HoldingRow[] = open.map((p) => {
+    const v = vals.get(p.symbol);
+    return {
+      assetId: p.assetId,
+      symbol: p.symbol,
+      name: p.name,
+      assetClass: p.assetClass,
+      quantity: p.quantity,
+      avgCostThb: p.avgCostThb,
+      lastPrice: p.lastPrice,
+      currency: p.currency,
+      lastPriceDate: p.lastPriceDate,
+      badges: priceBadges(p),
+      marketValueThb: p.marketValueThb,
+      unrealizedPnlThb: p.unrealizedPnlThb,
+      unrealizedPnlPct: p.unrealizedPnlPct,
+      realizedIncomeThb: p.realizedPnlThb + p.incomeThb,
+      weightPct: p.weightPct,
+      valuation: v?.average != null ? { average: v.average, count: v.count } : null,
+    };
+  });
+  const pnlPct = summary.netContributedThb > 0 ? summary.totalPnlThb / summary.netContributedThb : null;
+
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title="สินทรัพย์ที่ถือ" subtitle="ต้นทุนเฉลี่ย, มูลค่าตลาด และกำไร/ขาดทุน (บาท)" action={<UpdatePricesButton />} />
+
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label="มูลค่าพอร์ต" value={fmtThb(summary.totalValueThb)} note={`เงินสด ${fmtThb(summary.cashThb)}`} icon={<IconChip category="stock" icon={Briefcase} label="มูลค่าพอร์ต" />} />
+        <KpiCard label="กำไร/ขาดทุนรวม" value={fmtThb(summary.totalPnlThb)} valueClassName={signClass(summary.totalPnlThb)} change={pnlPct} changeLabel="เทียบเงินลงทุน" />
+        <KpiCard label="สินทรัพย์ที่ถืออยู่" value={String(open.length)} note={closed.length ? `ขายหมดแล้ว ${closed.length}` : undefined} />
+        <KpiCard label="สัดส่วนที่ลงทุนอยู่" value={summary.totalValueThb > 0 ? fmtPct(1 - summary.cashThb / summary.totalValueThb, 0) : "—"} note="ส่วนที่เหลือเป็นเงินสด" />
+      </div>
 
       <DataQualityPanel issues={summary.issues} reconciliation={summary.reconciliation} />
 
@@ -96,72 +121,14 @@ export default async function HoldingsPage() {
         }}
       >
         {open.length === 0 ? (
-          <Empty>ยังไม่มีสินทรัพย์ในพอร์ต</Empty>
+          <EmptyState icon={<EmptyIcon icon={Briefcase} />} title="ยังไม่มีสินทรัพย์ในพอร์ต" description="เพิ่มสินทรัพย์ แล้วบันทึกการซื้อเพื่อเริ่มติดตามพอร์ต" action={<Link href="/transactions" className="btn">บันทึกการซื้อ</Link>} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>สินทรัพย์</th>
-                  <th>ประเภท</th>
-                  <th className="num">จำนวน</th>
-                  <th className="num">ต้นทุนเฉลี่ย (฿)</th>
-                  <th className="num">ราคาล่าสุด</th>
-                  <th className="num">มูลค่า</th>
-                  <th className="num">กำไรยังไม่รับรู้</th>
-                  <th className="num">รับรู้แล้ว + ปันผล</th>
-                  <th className="num">น้ำหนัก</th>
-                  <th className="num">มูลค่าที่เหมาะสม</th>
-                </tr>
-              </thead>
-              <tbody>
-                {open.map((p) => (
-                  <tr key={p.assetId}>
-                    <td>
-                      <Link href={`/holdings/${p.assetId}`} className="font-medium text-primary">{p.symbol}</Link>
-                      <div className="text-xs text-text-muted">{p.name}</div>
-                    </td>
-                    <td className="text-xs">
-                      <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: ASSET_CLASS_COLOR[p.assetClass] }} />
-                      {ASSET_CLASS_LABEL[p.assetClass]}
-                    </td>
-                    <td className="num">{fmtQty(p.quantity)}</td>
-                    <td className="num">{fmtNum(p.avgCostThb)}</td>
-                    <td className="num">
-                      {fmtNum(p.lastPrice)} <span className="text-xs text-text-muted">{p.currency}</span>
-                      <div className="text-xs text-text-muted">{p.lastPriceDate ?? "ราคาซื้อ"}</div>
-                      <PriceBadges p={p} />
-                    </td>
-                    <td className="num">{fmtThb(p.marketValueThb)}</td>
-                    <td className={`num ${signClass(p.unrealizedPnlThb)}`}>
-                      {fmtThb(p.unrealizedPnlThb)}
-                      <div className="text-xs">{fmtPctRaw(p.unrealizedPnlPct)}</div>
-                    </td>
-                    <td className={`num ${signClass(p.realizedPnlThb + p.incomeThb)}`}>{fmtThb(p.realizedPnlThb + p.incomeThb)}</td>
-                    <td className="num">{fmtPctRaw(p.weightPct)}</td>
-                    <td className="num">
-                      <ValuationCell v={vals.get(p.symbol)} price={p.lastPrice} symbol={p.symbol} cls={p.assetClass} />
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={5} className="text-text-muted">เงินสดในพอร์ต</td>
-                  <td className="num">{fmtThb(summary.cashThb)}</td>
-                  <td colSpan={2} />
-                  <td className="num">{fmtPctRaw(summary.totalValueThb ? (summary.cashThb / summary.totalValueThb) * 100 : 0)}</td>
-                  <td />
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr className="font-semibold">
-                  <td colSpan={5}>รวม</td>
-                  <td className="num">{fmtThb(summary.totalValueThb)}</td>
-                  <td className={`num ${signClass(summary.totalPnlThb)}`} colSpan={2}>P&amp;L รวม {fmtThb(summary.totalPnlThb)}</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <>
+            <HoldingsTable rows={rows} />
+            <p className="mt-3 text-xs text-text-muted">
+              เงินสดในพอร์ต {fmtThb(summary.cashThb)} · รวมทั้งพอร์ต {fmtThb(summary.totalValueThb)} · P&amp;L รวม <span className={signClass(summary.totalPnlThb)}>{fmtThb(summary.totalPnlThb)}</span>
+            </p>
+          </>
         )}
       </Section>
 
@@ -186,25 +153,19 @@ export default async function HoldingsPage() {
         </Section>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="เพิ่มสินทรัพย์">
-          <AddAssetForm />
-        </Section>
-        <Section title="บันทึกราคาเอง (พันธบัตร / กองทุน / ราคาที่ดึงไม่ได้)">
-          {assets.length ? <AddPriceForm assets={assets.filter((a) => !a.archivedAt)} /> : <Empty>เพิ่มสินทรัพย์ก่อน</Empty>}
-        </Section>
-      </div>
-
-      <Section title="นำเข้าราคาจากไฟล์ (CSV / Excel)">
-        <PriceImport />
+      <Card>
+        <Tabs
+          ariaLabel="เพิ่มและนำเข้าข้อมูล"
+          tabs={[
+            { id: "add", label: "เพิ่มสินทรัพย์", content: <AddAssetForm /> },
+            { id: "price", label: "บันทึกราคาเอง", content: (<div className="space-y-3"><p className="text-xs text-text-muted">พันธบัตร / กองทุน / ราคาที่ดึงไม่ได้</p>{assets.length ? <AddPriceForm assets={assets.filter((a) => !a.archivedAt)} /> : <EmptyState title="เพิ่มสินทรัพย์ก่อน" description="ต้องมีสินทรัพย์อย่างน้อยหนึ่งตัวจึงจะบันทึกราคาเองได้" />}</div>) },
+            { id: "import", label: "นำเข้าจากไฟล์", content: (<div><PriceImport />
         <p className="mt-2 text-xs text-text-muted">
           รองรับ 3 แบบ: (1) symbol, date, close[, adj close] (2) date แล้วคอลัมน์ละหุ้น เช่น date, PTT, BBL (3) ไฟล์ราคาหุ้นตัวเดียวจาก Yahoo / Investing / SETSMART (ใส่สัญลักษณ์) ·
           วันที่แบบ 2026-01-05, 05/01/2026 (วัน/เดือน), ปี พ.ศ. หรือวันที่ของ Excel · สูงสุด 50,000 แถว · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ import_prices ได้
         </p>
-      </Section>
-
-      <Section title="ดึงราคาย้อนหลัง (Historical sync)">
-        <ActionForm action={syncHistoryAction} className="grid gap-3 sm:grid-cols-6" resetOnSuccess={false} submitLabel="ดึงราคา">
+      </div>) },
+            { id: "sync", label: "ดึงราคาย้อนหลัง", content: (<div><ActionForm action={syncHistoryAction} className="grid gap-3 sm:grid-cols-6" resetOnSuccess={false} submitLabel="ดึงราคา">
           <div className="sm:col-span-3">
             <label className="label">สัญลักษณ์ (คั่นด้วยจุลภาค) — ต้องเพิ่มเป็นสินทรัพย์แล้ว</label>
             <input name="symbols" className="input" placeholder="BBL, AP" defaultValue={assets.filter((a) => a.priceSource !== "manual").map((a) => a.symbol).join(", ")} />
@@ -236,23 +197,10 @@ export default async function HoldingsPage() {
         <p className="mt-2 text-xs text-text-muted">
           ดึงจาก Yahoo (หุ้น/ทอง/ดัชนี/USDTHB) และ ก.ล.ต. (NAV กองทุน ≤ {400} วัน) · ไม่เขียนทับราคาเดิมถ้าไม่เลือก · สัญลักษณ์ที่ยังไม่มีในรายการจะถูกรายงาน ไม่สร้างให้ · Claude/ChatGPT ใช้เครื่องมือ sync_historical_prices ได้เหมือนกัน
         </p>
-      </Section>
-    </>
+      </div>) },
+          ]}
+        />
+      </Card>
+    </div>
   );
-}
-
-function ValuationCell({ v, price, symbol, cls }: { v?: { average: number | null; count: number }; price: number | null; symbol: string; cls: string }) {
-  if (v?.average != null) {
-    const up = price ? v.average / price - 1 : null;
-    return (
-      <Link href={`/valuation/stock/${symbol}`} className="hover:underline" title={`เฉลี่ยจาก ${v.count} valuation`}>
-        {fmtNum(v.average)}
-        <div className={`text-xs ${formatChange(up).className}`}>{up != null ? formatChange(up).text : ""}</div>
-      </Link>
-    );
-  }
-  if (cls === "thai_stock" || cls === "us_stock")
-    return <Link href={`/valuation/new?symbol=${symbol}`} className="text-xs text-primary">ประเมิน →</Link>;
-  if (cls === "bond") return <Link href="/bonds" className="text-xs text-primary">YTM →</Link>;
-  return <span className="text-text-muted">—</span>;
 }

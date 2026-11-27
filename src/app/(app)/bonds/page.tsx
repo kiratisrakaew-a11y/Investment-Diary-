@@ -2,7 +2,9 @@ import { BondLadderPanel } from "@/components/BondLadderPanel";
 import Link from "next/link";
 import { bondHoldings } from "@/server/services/bonds";
 import { BondCalculator } from "@/components/BondCalculator";
-import { Badge, Empty, PageHeader, Section, Stat } from "@/components/ui";
+import { Badge, EmptyState, KpiCard, PageHeader, Section } from "@/components/ui";
+import { EmptyIcon } from "@/components/icons";
+import { Certificate } from "@phosphor-icons/react/ssr";
 import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
 import { CreditProfileForm } from "@/components/CreditProfileForm";
 import { listAssets } from "@/server/services/assets";
@@ -19,20 +21,20 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
   const [{ settlement, bonds, portfolio }, assets] = await Promise.all([bondHoldings(), listAssets()]);
   const assetBySymbol = new Map(assets.map((a) => [a.symbol, a]));
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title="พันธบัตรและหุ้นกู้" subtitle="ราคา ↔ YTM / YTC / YTW, accrued interest ตาม day count ของตราสาร, duration, convexity, Z-spread และ horizon return" />
 
       <Section title="พันธบัตรในพอร์ต" explain={{ data: compact({ settlement, พอร์ตพันธบัตร: portfolio, รายตัว: bonds.map((b) => ({ symbol: b.symbol, ราคา: b.lastPrice, analytics: b.analytics ? { ...b.analytics, cashflows: undefined } : null })) }), hint: "YTM = ผลตอบแทนต่อปีถ้าถือจนครบกำหนด; modified duration = ราคาลดลงประมาณ D% เมื่อดอกเบี้ยขึ้น 1%" }}>
         {portfolio && (
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="มูลค่ารวม" value={fmtThb(portfolio.marketValueThb)} />
-            <Stat label="YTM ถัวเฉลี่ย" value={fmtPct(portfolio.ytm)} />
-            <Stat label="Modified duration" value={fmtNum(portfolio.modifiedDuration)} sub="ราคาเปลี่ยน ≈ −D × Δy" />
-            <Stat label="Convexity" value={fmtNum(portfolio.convexity, 1)} />
+          <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
+            <KpiCard label="มูลค่ารวม" value={fmtThb(portfolio.marketValueThb)} />
+            <KpiCard label="YTM ถัวเฉลี่ย" value={fmtPct(portfolio.ytm)} />
+            <KpiCard label="Modified duration" value={fmtNum(portfolio.modifiedDuration)} note="ราคาเปลี่ยน ≈ −D × Δy" />
+            <KpiCard label="Convexity" value={fmtNum(portfolio.convexity, 1)} />
           </div>
         )}
         {bonds.length === 0 ? (
-          <Empty>ยังไม่มีสินทรัพย์ประเภทพันธบัตร — เพิ่มในหน้าสินทรัพย์พร้อมอัตราคูปอง วันครบกำหนด และมูลค่าที่ตราไว้</Empty>
+          <EmptyState icon={<EmptyIcon icon={Certificate} />} title="ยังไม่มีพันธบัตรในพอร์ต" description="เพิ่มสินทรัพย์ประเภทพันธบัตรพร้อมอัตราคูปอง วันครบกำหนด และมูลค่าที่ตราไว้ในหน้าสินทรัพย์" action={<Link href="/holdings" className="btn">ไปที่หน้าสินทรัพย์</Link>} />
         ) : (
           <div className="overflow-x-auto">
             <table className="table">
@@ -137,13 +139,13 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                   {c ? (
                     <div className="mt-3 space-y-3 text-sm">
                       {c.status === "ok" && c.term && c.oneYear ? (
-                        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                          <Stat label="PD 1 ปี" value={fmtPct(c.oneYear.pd, 3)} />
-                          <Stat label="LGD" value={fmtPct(c.oneYear.lgd, 1)} />
-                          <Stat label="EL 1 ปี (ต่อ 100)" value={fmtNum(c.oneYear.expectedLoss, 3)} sub={`EAD ${fmtNum(c.oneYear.ead, 2)}`} />
-                          <Stat label="PD ตลอดอายุ" value={fmtPct(c.term.lifetimePd, 2)} />
-                          <Stat label="PV(EL) ตลอดอายุ" value={fmtNum(c.term.pvExpectedLoss, 3)} sub={`มูลค่าตามสัญญา ${fmtNum(c.term.contractualPv, 2)}`} />
-                          <Stat label="มูลค่าหลังหักความเสี่ยงเครดิต" value={fmtNum(c.term.creditAdjustedValue, 2)} sub="คาดหวัง (ไม่ใช่ราคาตลาด)" />
+                        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+                          <KpiCard label="PD 1 ปี" value={fmtPct(c.oneYear.pd, 3)} />
+                          <KpiCard label="LGD" value={fmtPct(c.oneYear.lgd, 1)} />
+                          <KpiCard label="EL 1 ปี (ต่อ 100)" value={fmtNum(c.oneYear.expectedLoss, 3)} note={`EAD ${fmtNum(c.oneYear.ead, 2)}`} />
+                          <KpiCard label="PD ตลอดอายุ" value={fmtPct(c.term.lifetimePd, 2)} />
+                          <KpiCard label="PV(EL) ตลอดอายุ" value={fmtNum(c.term.pvExpectedLoss, 3)} note={`มูลค่าตามสัญญา ${fmtNum(c.term.contractualPv, 2)}`} />
+                          <KpiCard label="มูลค่าหลังหักความเสี่ยงเครดิต" value={fmtNum(c.term.creditAdjustedValue, 2)} note="คาดหวัง (ไม่ใช่ราคาตลาด)" />
                         </div>
                       ) : (
                         <p className="text-xs text-negative">{c.status === "invalid" ? c.issues.map((i) => i.message).join(" · ") : `ไม่มีข้อมูล: ${c.required.join(", ")}`}</p>
@@ -156,7 +158,7 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
                       {c.status === "ok" && (
                         <p className="text-xs text-text-muted">
                           {c.oneYear?.basis} · ส่วนลด: {c.term?.discount} · PD: {c.provenance.pdType} ({c.provenance.pdSource}, {c.provenance.pdAsOf}) · LGD: {c.provenance.lgdSource} ({c.provenance.lgdAsOf})
-                          {c.issues.length > 0 && ` · ⚠️ ${c.issues.map((i) => i.message).join(" · ")}`}
+                          {c.issues.length > 0 && ` · ${c.issues.map((i) => i.message).join(" · ")}`}
                         </p>
                       )}
                       <CreditProfileForm symbol={b.symbol} issuer={a?.issuer ?? null} profile={(a?.credit as never) ?? null} today={today()} />
@@ -186,6 +188,6 @@ export default async function BondsPage({ searchParams }: { searchParams: SP }) 
       <Section title="บันไดพันธบัตร (Bond ladder)" subtitle="แบ่งเงินให้ครบกำหนดทยอยทุกปี · ใช้ engine ราคาและเครดิตเดิม · เป็นสถานการณ์ล่วงหน้า ไม่ใช่ผลในอดีต">
         <BondLadderPanel />
       </Section>
-    </>
+    </div>
   );
 }

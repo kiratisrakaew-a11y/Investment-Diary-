@@ -2,21 +2,35 @@ import { listTransactions } from "@/server/services/transactions";
 import { listAssets } from "@/server/services/assets";
 import { listNotes } from "@/server/services/notes";
 import { ActionForm } from "@/components/ActionForm";
-import { ConfirmButton } from "@/components/ConfirmButton";
-import { Badge, Empty, PageHeader, Section } from "@/components/ui";
+import { Collapsible, EmptyState, KpiCard, PageHeader, Section } from "@/components/ui";
+import { TxHistoryTable } from "@/components/TxHistoryTable";
+import { OpenDetailsLink } from "@/components/OpenDetailsLink";
+import { EmptyIcon, IconChip } from "@/components/icons";
+import { ArrowsLeftRight } from "@phosphor-icons/react/ssr";
 import { addTransactionAction, deleteTransactionAction } from "../actions";
 import { SplitForm } from "@/components/SplitForm";
-import { TX_TYPE_LABEL, fmtNum, fmtQty, fmtThb } from "@/lib/format";
+import { TX_TYPE_LABEL, fmtThb } from "@/lib/format";
 import { today } from "@/lib/validation";
 
 export default async function TransactionsPage() {
   const [txs, assets, notes] = await Promise.all([listTransactions(), listAssets(), listNotes({ limit: 50 })]);
 
-  return (
-    <>
-      <PageHeader title="รายการซื้อขาย" subtitle="ซื้อ/ขาย, ปันผล, ดอกเบี้ยพันธบัตร, ฝาก/ถอนเงิน" />
+  const sum = (types: string[]) => txs.filter(({ tx }) => types.includes(tx.type)).reduce((a, { tx }) => a + (tx.type === "buy" || tx.type === "sell" ? tx.quantity * tx.price : tx.price) * tx.fxRate, 0);
 
-      <Section title="บันทึกรายการใหม่">
+  return (
+    <div className="space-y-6">
+      <PageHeader title="รายการซื้อขาย" subtitle="ซื้อ/ขาย, ปันผล, ดอกเบี้ยพันธบัตร, ฝาก/ถอนเงิน" action={<OpenDetailsLink targetId="new-tx">+ บันทึกรายการ</OpenDetailsLink>} />
+
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label="รายการทั้งหมด" value={String(txs.length)} icon={<IconChip category="stock" icon={ArrowsLeftRight} label="รายการ" />} />
+        <KpiCard label="ซื้อรวม" value={fmtThb(sum(["buy"]))} note="บาท ตามอัตราแลกเปลี่ยนวันนั้น" />
+        <KpiCard label="ขายรวม" value={fmtThb(sum(["sell"]))} />
+        <KpiCard label="ปันผล + ดอกเบี้ย" value={fmtThb(sum(["dividend", "coupon"]))} />
+      </div>
+
+      <details id="new-tx" className="card">
+        <summary className="cursor-pointer font-medium">บันทึกรายการใหม่</summary>
+        <div className="mt-4">
         <ActionForm action={addTransactionAction} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-4">
             <div>
@@ -75,63 +89,26 @@ export default async function TransactionsPage() {
             <input name="memo" className="input" />
           </div>
         </ActionForm>
+        </div>
+      </details>
+
+      <Section title="ประวัติรายการ">
+        {txs.length === 0 ? (
+          <EmptyState icon={<EmptyIcon icon={ArrowsLeftRight} />} title="ยังไม่มีรายการ" description="บันทึกการซื้อ ขาย ปันผล หรือฝาก/ถอนเงินรายการแรก" action={<OpenDetailsLink targetId="new-tx">+ บันทึกรายการ</OpenDetailsLink>} />
+        ) : (
+          <TxHistoryTable
+            deleteAction={deleteTransactionAction}
+            rows={txs.map(({ tx, symbol, currency }) => ({ id: tx.id, date: tx.date, type: tx.type, symbol: symbol ?? null, quantity: tx.quantity, price: tx.price, currency: currency ?? null, fee: tx.fee ?? null, valueThb: (tx.type === "buy" || tx.type === "sell" ? tx.quantity * tx.price : tx.price) * tx.fxRate, source: tx.source, memo: tx.memo ?? null }))}
+          />
+        )}
       </Section>
 
-      <Section title="แตกพาร์ / รวมพาร์ (stock split)">
+      <Collapsible title="แตกพาร์ / รวมพาร์ (stock split)">
         {assets.length ? <SplitForm symbols={assets.filter((a) => a.assetClass !== "cash").map((a) => a.symbol)} today={today()} /> : null}
         <p className="mt-2 text-xs text-text-muted">
           จำนวนหุ้นคูณตามอัตรา ต้นทุนรวมเท่าเดิม (ต้นทุนเฉลี่ยหาร) ไม่กระทบเงินสดและกำไรขาดทุน · รายการซื้อขายเก่าไม่ถูกแก้ · เศษหุ้นที่ได้เป็นเงินสด ให้บันทึกเป็น &quot;ขาย&quot; แยก
         </p>
-      </Section>
-
-      <Section title="ประวัติรายการ">
-        {txs.length === 0 ? (
-          <Empty>ยังไม่มีรายการ</Empty>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>วันที่</th>
-                  <th>ประเภท</th>
-                  <th>สินทรัพย์</th>
-                  <th className="num">จำนวน</th>
-                  <th className="num">ราคา/จำนวนเงิน</th>
-                  <th className="num">ค่าธรรมเนียม</th>
-                  <th className="num">มูลค่า (฿)</th>
-                  <th>หมายเหตุ</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {txs.map(({ tx, symbol, currency }) => {
-                  const gross = tx.type === "buy" || tx.type === "sell" ? tx.quantity * tx.price : tx.price;
-                  return (
-                    <tr key={tx.id}>
-                      <td>{tx.date}</td>
-                      <td>{TX_TYPE_LABEL[tx.type]}</td>
-                      <td className="font-medium">{symbol ?? "เงินสด"}</td>
-                      <td className="num">{tx.type === "split" ? `×${fmtQty(tx.quantity)}` : tx.quantity ? fmtQty(tx.quantity) : "—"}</td>
-                      <td className="num">
-                        {fmtNum(tx.price)} <span className="text-xs text-text-muted">{currency ?? "THB"}</span>
-                      </td>
-                      <td className="num">{tx.fee ? fmtNum(tx.fee) : "—"}</td>
-                      <td className="num">{fmtThb(gross * tx.fxRate)}</td>
-                      <td className="max-w-48 truncate text-xs text-text-muted">
-                        {tx.source !== "web" && <Badge className="mr-1">{tx.source}</Badge>}
-                        {tx.memo}
-                      </td>
-                      <td>
-                        <ConfirmButton onConfirm={deleteTransactionAction.bind(null, tx.id)} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-    </>
+      </Collapsible>
+    </div>
   );
 }

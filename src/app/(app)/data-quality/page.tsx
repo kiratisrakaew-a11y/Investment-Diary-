@@ -1,26 +1,35 @@
 import Link from "next/link";
 import { dataQualityReport } from "@/server/services/data-quality";
-import { PageHeader, Section } from "@/components/ui";
+import { KpiCard, PageHeader, Section } from "@/components/ui";
+import { IconChip, StatusIcon, type Status } from "@/components/icons";
+import { ShieldCheck } from "@phosphor-icons/react/ssr";
 import { compact } from "@/lib/explain-data";
 import { BENCHMARK_KIND_LABEL, RETURN_BASIS_SHORT } from "@/lib/finance/price-basis";
 import { fmtPct } from "@/lib/format";
 
-const ICON = { ok: "✅", warn: "⚠️", error: "❌" } as const;
+const ICON: Record<"ok" | "warn" | "error", Status> = { ok: "green", warn: "yellow", error: "red" };
 
 export default async function DataQualityPage() {
   const r = await dataQualityReport();
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="คุณภาพข้อมูลและสมมติฐาน"
         subtitle={`สถานะรวม: ${r.status === "ok" ? "ครบถ้วน" : r.status === "warnings" ? "มีคำเตือน" : "มีข้อผิดพลาด"} · สูตรเวอร์ชัน ${r.modelVersion}`}
       />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label="รายการตรวจสอบ" value={String(r.checks.length)} icon={<IconChip category="metrics" icon={ShieldCheck} label="การตรวจสอบ" />} />
+        <KpiCard label="ปกติ" value={String(r.checks.filter((c) => c.status === "ok").length)} valueClassName="text-positive" />
+        <KpiCard label="คำเตือน" value={String(r.checks.filter((c) => c.status === "warn").length)} valueClassName={r.checks.some((c) => c.status === "warn") ? "text-warning" : undefined} />
+        <KpiCard label="ข้อผิดพลาด" value={String(r.checks.filter((c) => c.status === "error").length)} valueClassName={r.checks.some((c) => c.status === "error") ? "text-negative" : undefined} />
+      </div>
       <Section title="รายการตรวจสอบ" explain={{ data: compact(r), hint: "อธิบายว่าแต่ละรายการตรวจสอบหมายถึงอะไร กระทบตัวเลขไหน และควรแก้อย่างไร" }}>
         <ul className="divide-y divide-border">
           {r.checks.map((c) => (
             <li key={c.area} className="flex flex-wrap items-start justify-between gap-2 py-3 text-sm">
               <span className="w-32 shrink-0 font-medium">
-                {ICON[c.status]} {c.area}
+                <StatusIcon status={ICON[c.status]} className="mr-2 inline align-text-bottom" />
+                {c.area}
               </span>
               <span className={`min-w-0 flex-1 ${c.status === "ok" ? "text-text-muted" : ""}`}>{c.message}</span>
               {c.href && c.status !== "ok" && (
@@ -91,6 +100,6 @@ export default async function DataQualityPage() {
           </p>
         </Section>
       </div>
-    </>
+    </div>
   );
 }

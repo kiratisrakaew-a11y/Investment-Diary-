@@ -14,7 +14,7 @@ export interface TxRow {
 }
 
 const COLUMNS: Column<TxRow>[] = [
-  { key: "date", header: "วันที่", sortValue: (r) => r.date, render: (r) => r.date },
+  { key: "date", header: "วันที่", className: "whitespace-nowrap", sortValue: (r) => r.date, render: (r) => r.date },
   { key: "type", header: "ประเภท", sortValue: (r) => TX_TYPE_LABEL[r.type] ?? r.type, render: (r) => TX_TYPE_LABEL[r.type] ?? r.type },
   { key: "qty", header: "จำนวน", numeric: true, sortValue: (r) => r.quantity, render: (r) => (r.quantity ? fmtQty(r.quantity) : "—") },
   { key: "price", header: "ราคา", unit: "ต่อหน่วย", numeric: true, sortValue: (r) => r.price, render: (r) => formatNumber(r.price, 2) },

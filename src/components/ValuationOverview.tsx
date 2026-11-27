@@ -102,6 +102,7 @@ export function ValuationOverview({ rows, staleAfterDays }: { rows: OverviewRow[
     {
       key: "price",
       header: "ราคา",
+      className: "whitespace-nowrap",
       numeric: true,
       sortValue: (g) => g.price,
       render: (g) => {

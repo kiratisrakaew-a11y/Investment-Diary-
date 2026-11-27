@@ -7,7 +7,7 @@ export default async function AdvisorPage({ searchParams }: { searchParams: Prom
   const [threads, thread] = await Promise.all([listThreads(), sp.thread ? getThread(Number(sp.thread)) : null]);
   const configured = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title="AI ที่ปรึกษาการลงทุน" subtitle="ขับเคลื่อนด้วย Claude — วิเคราะห์จากข้อมูลพอร์ตจริงและเครื่องมือคำนวณทางการเงินของแอป" />
       {!configured && (
         <p className="rounded-lg border border-negative/40 p-3 text-sm text-negative">
@@ -15,6 +15,6 @@ export default async function AdvisorPage({ searchParams }: { searchParams: Prom
         </p>
       )}
       <AdvisorChat key={thread?.id ?? "new"} threadId={thread?.id ?? null} initial={thread?.messages ?? []} threads={threads} />
-    </>
+    </div>
   );
 }

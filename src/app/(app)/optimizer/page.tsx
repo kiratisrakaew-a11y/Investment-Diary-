@@ -2,7 +2,8 @@ import { loadUniverse, universeYears } from "@/server/services/optimizer";
 import { OptimizerClient } from "@/components/OptimizerClient";
 import { OptimizerTabs } from "@/components/OptimizerTabs";
 import { ModelComparisonClient } from "@/components/ModelComparisonClient";
-import { Empty, PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
+import { StatusIcon } from "@/components/icons";
 import { BasisBenchmarkPicker, BasisSummary } from "@/components/BasisBenchmarkPicker";
 import { listBenchmarks } from "@/server/services/benchmarks";
 import { getSettings } from "@/server/services/settings";
@@ -86,7 +87,7 @@ export default async function OptimizerPage({
     </div>
   );
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="จัดพอร์ตตาม Modern Portfolio Theory"
         subtitle="Efficient frontier, tangency portfolio, น้ำหนักที่แนะนำ และการเปรียบเทียบโมเดลแบบ Out-of-Sample"
@@ -95,7 +96,10 @@ export default async function OptimizerPage({
         <>
           {picker}
           <section className="card space-y-2 border-l-4 border-l-negative" data-testid="window-insufficient">
-            <h2 className="text-base font-semibold text-negative">ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้</h2>
+            <h2 className="text-base font-semibold text-negative">
+              <StatusIcon status="red" className="mr-2 inline align-text-bottom" />
+              ข้อมูลไม่พอสำหรับจำนวนสินทรัพย์นี้
+            </h2>
             <p className="text-sm">
               มีเพียง {fmtNum(u!.windowInfo!.obsPerAsset, 1)} งวดต่อสินทรัพย์ (ควร ≥ {settings.minObsPerAsset}) — Σ และน้ำหนักที่ได้ไม่น่าเชื่อถือ
               {u!.windowInfo!.limitedBy.length ? ` · ช่วงถูกจำกัดโดย ${u!.windowInfo!.limitedBy.map((l) => `${l.symbol} (เริ่ม ${l.firstDate})`).join(", ")}` : ""}
@@ -113,15 +117,23 @@ export default async function OptimizerPage({
       ) : !u || !u.ok ? (
         <>
           {picker}
-          <Empty>
-            {benchError ?? (selected.length === 0 ? "ยังไม่ได้เลือกสินทรัพย์ — เลือกอย่างน้อย 2 ตัวเพื่อคำนวณ" : u?.reason)}
-            {u && u.skipped.length > 0 && <div className="mt-2 text-xs">{u.skipped.map((s) => `${s.symbol}: ${s.reason}`).join(" · ")}</div>}
-          </Empty>
+          <EmptyState
+            title={benchError ? "ใช้ดัชนีอ้างอิงนี้ไม่ได้" : selected.length === 0 ? "ยังไม่ได้เลือกสินทรัพย์" : "คำนวณไม่ได้"}
+            description={
+              <>
+                {benchError ?? (selected.length === 0 ? "เลือกอย่างน้อย 2 ตัวเพื่อคำนวณ" : u?.reason)}
+                {u && u.skipped.length > 0 && <span className="mt-2 block text-xs">{u.skipped.map((s) => `${s.symbol}: ${s.reason}`).join(" · ")}</span>}
+              </>
+            }
+          />
         </>
       ) : (
         <>
           {u.covarianceWarnings.map((w) => (
-            <p key={w} className="text-xs text-warning">⚠️ {w}</p>
+            <p key={w} className="text-xs text-warning">
+              <StatusIcon status="yellow" className="mr-1 inline align-text-bottom" />
+              {w}
+            </p>
           ))}
           {u.skipped.length > 0 && (
             <p className="text-xs text-text-muted">ไม่รวม: {u.skipped.map((s) => `${s.symbol} (${s.reason})`).join(", ")}</p>
@@ -146,6 +158,6 @@ export default async function OptimizerPage({
           />
         </>
       )}
-    </>
+    </div>
   );
 }

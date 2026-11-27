@@ -4,16 +4,13 @@ import { getDividendIncome } from "@/server/services/strategies";
 import { IncomeChart } from "@/components/charts";
 import { DividendStrategyPanel } from "@/components/DividendStrategyPanel";
 import { DividendEventsPanel } from "@/components/DividendEventsPanel";
-import { Badge, PageHeader, Section, Stat } from "@/components/ui";
-import { fmtNum, fmtPct, fmtThb } from "@/lib/format";
+import { Card, KpiCard, PageHeader, Section } from "@/components/ui";
+import { Tabs } from "@/components/ui-client";
+import { DividendIncomeTable } from "@/components/DividendIncomeTable";
+import { IconChip } from "@/components/icons";
+import { Coins } from "@phosphor-icons/react/ssr";
+import { fmtThb } from "@/lib/format";
 import { compact } from "@/lib/explain-data";
-
-const STATUS: Record<string, { label: string; cls: string }> = {
-  received: { label: "ได้รับแล้ว", cls: "border-positive/40 text-positive" },
-  missing_confirmation: { label: "ถึงกำหนด ยังไม่บันทึก", cls: "border-warning/40 text-warning" },
-  announced: { label: "ประกาศแล้ว", cls: "border-info/40 text-info" },
-  estimated: { label: "ประมาณการ", cls: "" },
-};
 
 export default async function DividendsPage() {
   const [assets, events, income] = await Promise.all([listAssets(), listDividendEvents(), getDividendIncome()]);
@@ -28,18 +25,18 @@ export default async function DividendsPage() {
   const estimated = sum("estimated", false);
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="ลงทุนเน้นปันผล"
         subtitle="คัดกรองหุ้นปันผล 3 แบบ · ปฏิทินรายได้ปันผล (แยกประกาศแล้ว / ประมาณการ / ได้รับจริง) · เหตุการณ์ปันผลของบริษัท — ใช้ข้อมูล ณ วันที่ตัดสินใจเท่านั้น"
         explain={{ topic: "ภาพรวมรายได้ปันผล", data: compact({ ได้รับแล้ว12เดือน: received, ถึงกำหนดยังไม่บันทึก: missing, ประกาศแล้วข้างหน้า: announced, ประมาณการข้างหน้า: estimated, รายปี: income.byYear }) }}
       />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label="ได้รับแล้ว (12 เดือน)" value={fmtThb(received)} sub="จากรายการ dividend ในบัญชี" color="green" />
-        <Stat label="ถึงกำหนด ยังไม่บันทึก" value={fmtThb(missing)} sub="ตรวจว่าได้รับเงินแล้วหรือยัง" color="yellow" />
-        <Stat label="ประกาศแล้ว (ข้างหน้า)" value={fmtThb(announced)} sub="สุทธิหลังภาษี (สมมติฐาน)" color="blue" />
-        <Stat label="ประมาณการ (12 เดือน)" value={fmtThb(estimated)} sub="จากปันผลปกติปีก่อน — ไม่ใช่การประกาศ" color="purple" />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiCard label="ได้รับแล้ว (12 เดือน)" value={fmtThb(received)} note="จากรายการ dividend ในบัญชี" icon={<IconChip category="stock" icon={Coins} label="ปันผลที่ได้รับ" />} />
+        <KpiCard label="ถึงกำหนด ยังไม่บันทึก" value={fmtThb(missing)} valueClassName={missing > 0 ? "text-warning" : undefined} note="ตรวจว่าได้รับเงินแล้วหรือยัง" />
+        <KpiCard label="ประกาศแล้ว (ข้างหน้า)" value={fmtThb(announced)} note="สุทธิหลังภาษี (สมมติฐาน)" />
+        <KpiCard label="ประมาณการ (12 เดือน)" value={fmtThb(estimated)} note="จากปันผลปกติปีก่อน — ไม่ใช่การประกาศ" />
       </div>
 
       <Section
@@ -52,46 +49,9 @@ export default async function DividendsPage() {
       </Section>
 
       <Section title="รายการปันผลที่คาดว่าจะได้รับ / ได้รับแล้ว" subtitle={income.note}>
-        <div className="max-h-[28rem] overflow-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>เดือน</th>
-                <th>หุ้น</th>
-                <th>สถานะ</th>
-                <th>ex-date</th>
-                <th>วันจ่าย</th>
-                <th className="num">หุ้นที่มีสิทธิ์</th>
-                <th className="num">ต่อหุ้น</th>
-                <th className="num">ก่อนภาษี</th>
-                <th className="num">ภาษี</th>
-                <th className="num">สุทธิ (บาท)</th>
-                <th className="num">รับจริง (บาท)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {income.rows.map((r, i) => (
-                <tr key={i} title={r.notes.join(" · ")}>
-                  <td>{r.month}</td>
-                  <td className="font-medium">{r.symbol}</td>
-                  <td>
-                    <Badge className={STATUS[r.status].cls}>{STATUS[r.status].label}</Badge>
-                  </td>
-                  <td>{r.exDate}</td>
-                  <td>{r.paymentDate ?? <span className="text-text-muted">ไม่ทราบ</span>}</td>
-                  <td className="num">{fmtNum(r.units, 0)}</td>
-                  <td className="num">
-                    {fmtNum(r.dpsLatestBasis, 4)} {r.currency !== "THB" && r.currency}
-                  </td>
-                  <td className="num">{fmtNum(r.gross, 2)}</td>
-                  <td className="num text-text-muted">{fmtPct(r.withholdingRate, 0)}</td>
-                  <td className="num">{r.netThb == null ? "—" : fmtThb(r.netThb)}</td>
-                  <td className="num">{r.receivedThb == null ? "" : fmtThb(r.receivedThb)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DividendIncomeTable
+          rows={income.rows.map((r) => ({ month: r.month, symbol: r.symbol, status: r.status as "received" | "missing_confirmation" | "announced" | "estimated", exDate: r.exDate, paymentDate: r.paymentDate ?? null, units: r.units, dps: r.dpsLatestBasis, currency: r.currency, gross: r.gross, withholdingRate: r.withholdingRate, netThb: r.netThb ?? null, receivedThb: r.receivedThb ?? null, notes: r.notes }))}
+        />
         <ul className="mt-3 space-y-1 text-xs text-text-muted">
           {income.methodology.map((m) => (
             <li key={m}>• {m}</li>
@@ -99,14 +59,24 @@ export default async function DividendsPage() {
         </ul>
       </Section>
 
-      <DividendStrategyPanel symbols={stocks} />
-
-      <Section title="เหตุการณ์ปันผลของบริษัท" subtitle="ข้อมูลผู้ออกหลักทรัพย์ (ไม่ใช่เงินที่ได้รับ)">
-        <DividendEventsPanel
-          events={events.map((e) => ({ ...e, revisions: e.revisions ?? [] }))}
-          symbols={stocks}
+      <Card>
+        <Tabs
+          ariaLabel="เครื่องมือปันผล"
+          tabs={[
+            { id: "screen", label: "คัดกรองหุ้นปันผล", content: <DividendStrategyPanel symbols={stocks} /> },
+            {
+              id: "events",
+              label: "เหตุการณ์ปันผลของบริษัท",
+              content: (
+                <div className="space-y-3">
+                  <p className="text-xs text-text-muted">ข้อมูลผู้ออกหลักทรัพย์ (ไม่ใช่เงินที่ได้รับ)</p>
+                  <DividendEventsPanel events={events.map((e) => ({ ...e, revisions: e.revisions ?? [] }))} symbols={stocks} />
+                </div>
+              ),
+            },
+          ]}
         />
-      </Section>
-    </>
+      </Card>
+    </div>
   );
 }

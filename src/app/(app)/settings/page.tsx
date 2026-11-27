@@ -51,7 +51,7 @@ export default async function SettingsPage() {
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader title="ตั้งค่า" />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -618,6 +618,6 @@ export default async function SettingsPage() {
           <CopyBlock label="Instructions" text={GPT_INSTRUCTIONS} />
         </div>
       </Section>
-    </>
+    </div>
   );
 }

@@ -14,19 +14,19 @@ export function CoverageTable({
         <table className="w-full">
           <thead>
             <tr className="text-left text-text-muted">
-              <th className="py-1">สินทรัพย์</th>
-              <th>ราคาวันแรก</th>
-              <th className="text-right">งวดในช่วง</th>
-              <th>สถานะ</th>
+              <th className="px-2 py-1">สินทรัพย์</th>
+              <th className="px-2">ราคาวันแรก</th>
+              <th className="px-2 text-right">งวดในช่วง</th>
+              <th className="px-4">สถานะ</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.symbol} className="border-t border-border">
-                <td className="py-1 font-medium">{r.symbol}</td>
-                <td className="tabular-nums">{r.firstDate ?? "—"}</td>
-                <td className="text-right tabular-nums">{r.observations}</td>
-                <td className={tone[r.status]} title={r.reason}>
+                <td className="px-2 py-1 font-medium">{r.symbol}</td>
+                <td className="px-2 tabular-nums">{r.firstDate ?? "—"}</td>
+                <td className="px-2 text-right tabular-nums">{r.observations}</td>
+                <td className={`px-4 ${tone[r.status]}`} title={r.reason}>
                   {label[r.status]}
                   {r.reason && r.status === "dropped" ? <span className="block text-text-muted">{r.reason}</span> : null}
                 </td>
